@@ -1,0 +1,5 @@
+comment = 'pgdmn: DMN (Decision Model and Notation) support for PostgreSQL'
+default_version = '@CARGO_VERSION@'
+module_pathname = '$libdir/pgdmn'
+relocatable = false
+superuser = false
