@@ -17,8 +17,8 @@ src/
   types/
     dmn_model.rs    — custom DmnModel PG type (InOutFuncs: XML in, namespace::name out)
   functions/
-    feel.rs         — feel_eval (JSONB) + 6 typed variants (numeric, bool, text, date, timestamp, interval)
-    dmn.rs          — dmn_load, dmn_eval
+    feel.rs         — feel_eval (JSONB), feel_record_eval (record), + 6 typed variants (numeric, bool, text, date, timestamp, interval)
+    dmn.rs          — dmn_load, dmn_eval, dmn_record_eval
     introspection.rs — dmn_invocables, dmn_info, dmn_xml, dmn_name, dmn_namespace
 ```
 
@@ -48,6 +48,10 @@ Check compilation:
 ```sh
 docker run --rm -e USER=pgdmn -v "$(pwd)":/pgdmn -w /pgdmn pgdmn-test cargo check
 ```
+
+## README.md
+
+The README.md contains a quick start guide and an example for every SQL function. **Always** update README.md when adding, removing, renaming, or changing the signature of any SQL function. Keep examples accurate and working.
 
 ## Key Conventions
 

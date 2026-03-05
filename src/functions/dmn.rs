@@ -33,7 +33,7 @@ pub fn dmn_eval(
 
 /// Evaluate a named invocable from a DMN model using a composite-type record as input.
 #[pg_extern(immutable, parallel_safe)]
-pub fn dmn_eval_record(
+pub fn dmn_record_eval(
     model: DmnModel,
     invocable: &str,
     input: default!(Option<pgrx::composite_type!("record")>, "NULL"),

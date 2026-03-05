@@ -735,13 +735,13 @@ mod tests {
         )
         .expect("PG plain risk warmup failed");
         Spi::run(&format!(
-            "SELECT dmn_eval_record(dmn_load('{escaped_concat}'), 'FullName', \
+            "SELECT dmn_record_eval(dmn_load('{escaped_concat}'), 'FullName', \
              ROW(first_name, last_name)::concat_input) \
              FROM bench_names LIMIT 1"
         ))
         .expect("DMN record concat warmup failed");
         Spi::run(&format!(
-            "SELECT dmn_eval_record(dmn_load('{escaped_risk}'), 'RiskScore', \
+            "SELECT dmn_record_eval(dmn_load('{escaped_risk}'), 'RiskScore', \
              ROW(age, income, credit_score, employment_status, years_employed)::risk_input) \
              FROM bench_names LIMIT 1"
         ))
@@ -773,7 +773,7 @@ mod tests {
 
         let dmn_record_concat_start = std::time::Instant::now();
         Spi::run(&format!(
-            "SELECT dmn_eval_record(dmn_load('{escaped_concat}'), 'FullName', \
+            "SELECT dmn_record_eval(dmn_load('{escaped_concat}'), 'FullName', \
              ROW(first_name, last_name)::concat_input) \
              FROM bench_names"
         ))
@@ -838,7 +838,7 @@ mod tests {
 
         let dmn_record_risk_start = std::time::Instant::now();
         Spi::run(&format!(
-            "SELECT dmn_eval_record(dmn_load('{escaped_risk}'), 'RiskScore', \
+            "SELECT dmn_record_eval(dmn_load('{escaped_risk}'), 'RiskScore', \
              ROW(age, income, credit_score, employment_status, years_employed)::risk_input) \
              FROM bench_names"
         ))
@@ -904,30 +904,30 @@ mod tests {
     // --- Record-based evaluation tests ---
 
     #[pg_test]
-    fn test_feel_eval_record_basic() {
+    fn test_feel_record_eval_basic() {
         Spi::run("CREATE TYPE feel_rec_basic AS (x int, y int)").expect("CREATE TYPE failed");
         let result = Spi::get_one::<pgrx::JsonB>(
-            "SELECT feel_eval_record('x + y', ROW(3, 4)::feel_rec_basic)",
+            "SELECT feel_record_eval('x + y', ROW(3, 4)::feel_rec_basic)",
         )
         .expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!(7));
     }
 
     #[pg_test]
-    fn test_feel_eval_record_text() {
+    fn test_feel_record_eval_text() {
         Spi::run("CREATE TYPE feel_rec_text AS (greeting text)").expect("CREATE TYPE failed");
         let result = Spi::get_one::<pgrx::JsonB>(
-            r#"SELECT feel_eval_record('greeting + " world"', ROW('hello')::feel_rec_text)"#,
+            r#"SELECT feel_record_eval('greeting + " world"', ROW('hello')::feel_rec_text)"#,
         )
         .expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!("hello world"));
     }
 
     #[pg_test]
-    fn test_feel_eval_record_numeric() {
+    fn test_feel_record_eval_numeric() {
         Spi::run("CREATE TYPE feel_rec_num AS (val numeric)").expect("CREATE TYPE failed");
         let result = Spi::get_one::<pgrx::JsonB>(
-            "SELECT feel_eval_record('val * 3', ROW(1234567890.123456789::numeric)::feel_rec_num)",
+            "SELECT feel_record_eval('val * 3', ROW(1234567890.123456789::numeric)::feel_rec_num)",
         )
         .expect("SPI failed");
         let v = result.unwrap().0;
@@ -936,12 +936,12 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_dmn_eval_record_decision_table() {
+    fn test_dmn_record_eval_decision_table() {
         let escaped = DECISION_TABLE_DMN.replace('\'', "''");
         Spi::run("CREATE TYPE loan_input AS (\"Age\" int, \"Income\" numeric)")
             .expect("CREATE TYPE failed");
         let query = format!(
-            "SELECT dmn_eval_record(dmn_load('{escaped}'), 'Eligibility', \
+            "SELECT dmn_record_eval(dmn_load('{escaped}'), 'Eligibility', \
              ROW(30, 75000::numeric)::loan_input)"
         );
         let result = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
@@ -949,22 +949,22 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_dmn_eval_record_null_input() {
+    fn test_dmn_record_eval_null_input() {
         let escaped = SIMPLE_DMN.replace('\'', "''");
         let query = format!(
-            "SELECT dmn_eval_record(dmn_load('{escaped}'), 'Greeting', NULL)"
+            "SELECT dmn_record_eval(dmn_load('{escaped}'), 'Greeting', NULL)"
         );
         let result = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!("Hello, World!"));
     }
 
     #[pg_test]
-    fn test_dmn_eval_record_multi_decision() {
+    fn test_dmn_record_eval_multi_decision() {
         let escaped = MULTI_DECISION_DMN.replace('\'', "''");
         Spi::run("CREATE TYPE multi_input AS (\"Base Price\" numeric, \"Tax Rate\" numeric)")
             .expect("CREATE TYPE failed");
         let query = format!(
-            "SELECT dmn_eval_record(dmn_load('{escaped}'), 'Total Price', \
+            "SELECT dmn_record_eval(dmn_load('{escaped}'), 'Total Price', \
              ROW(100::numeric, 0.2::numeric)::multi_input)"
         );
         let result = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
@@ -972,20 +972,20 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_feel_eval_record_date() {
+    fn test_feel_record_eval_date() {
         Spi::run("CREATE TYPE feel_rec_date AS (d date)").expect("CREATE TYPE failed");
         let result = Spi::get_one::<pgrx::JsonB>(
-            "SELECT feel_eval_record('d', ROW('2024-03-15'::date)::feel_rec_date)",
+            "SELECT feel_record_eval('d', ROW('2024-03-15'::date)::feel_rec_date)",
         )
         .expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!("2024-03-15"));
     }
 
     #[pg_test]
-    fn test_feel_eval_record_timestamp() {
+    fn test_feel_record_eval_timestamp() {
         Spi::run("CREATE TYPE feel_rec_ts AS (ts timestamp)").expect("CREATE TYPE failed");
         let result = Spi::get_one::<pgrx::JsonB>(
-            "SELECT feel_eval_record('ts', ROW('2024-03-15 10:30:00'::timestamp)::feel_rec_ts)",
+            "SELECT feel_record_eval('ts', ROW('2024-03-15 10:30:00'::timestamp)::feel_rec_ts)",
         )
         .expect("SPI failed");
         let s = result.unwrap().0.as_str().unwrap().to_string();
@@ -993,10 +993,10 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_feel_eval_record_interval_days() {
+    fn test_feel_record_eval_interval_days() {
         Spi::run("CREATE TYPE feel_rec_iv_days AS (iv interval)").expect("CREATE TYPE failed");
         let result = Spi::get_one::<pgrx::JsonB>(
-            "SELECT feel_eval_record('iv', ROW('2 days 3 hours'::interval)::feel_rec_iv_days)",
+            "SELECT feel_record_eval('iv', ROW('2 days 3 hours'::interval)::feel_rec_iv_days)",
         )
         .expect("SPI failed");
         let s = result.unwrap().0.as_str().unwrap().to_string();
@@ -1004,10 +1004,10 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_feel_eval_record_interval_months() {
+    fn test_feel_record_eval_interval_months() {
         Spi::run("CREATE TYPE feel_rec_iv_months AS (iv interval)").expect("CREATE TYPE failed");
         let result = Spi::get_one::<pgrx::JsonB>(
-            "SELECT feel_eval_record('iv', ROW('3 months'::interval)::feel_rec_iv_months)",
+            "SELECT feel_record_eval('iv', ROW('3 months'::interval)::feel_rec_iv_months)",
         )
         .expect("SPI failed");
         let s = result.unwrap().0.as_str().unwrap().to_string();
@@ -1015,10 +1015,10 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_feel_eval_record_interval_negative() {
+    fn test_feel_record_eval_interval_negative() {
         Spi::run("CREATE TYPE feel_rec_iv_neg AS (iv interval)").expect("CREATE TYPE failed");
         let result = Spi::get_one::<pgrx::JsonB>(
-            "SELECT feel_eval_record('iv', ROW('-1.5 seconds'::interval)::feel_rec_iv_neg)",
+            "SELECT feel_record_eval('iv', ROW('-1.5 seconds'::interval)::feel_rec_iv_neg)",
         )
         .expect("SPI failed");
         let s = result.unwrap().0.as_str().unwrap().to_string();
@@ -1027,10 +1027,10 @@ mod tests {
 
     #[pg_test]
     #[should_panic(expected = "FEEL does not support mixed intervals")]
-    fn test_feel_eval_record_interval_mixed_error() {
+    fn test_feel_record_eval_interval_mixed_error() {
         Spi::run("CREATE TYPE feel_rec_iv_mixed AS (iv interval)").expect("CREATE TYPE failed");
         Spi::run(
-            "SELECT feel_eval_record('iv', ROW('1 month 2 days'::interval)::feel_rec_iv_mixed)",
+            "SELECT feel_record_eval('iv', ROW('1 month 2 days'::interval)::feel_rec_iv_mixed)",
         )
         .unwrap();
     }
