@@ -606,6 +606,10 @@ mod tests {
 
     #[pg_test]
     fn bench_dmn_eval_vs_pg_concat() {
+        if std::env::var("PGDMN_BENCH").ok().as_deref() != Some("1") {
+            return;
+        }
+
         let escaped_concat = CONCAT_DMN.replace('\'', "''");
         let escaped_risk = RISK_DMN.replace('\'', "''");
 
