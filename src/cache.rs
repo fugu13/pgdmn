@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -11,7 +10,7 @@ thread_local! {
 }
 
 fn hash_xml(xml: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = rapidhash::RapidInlineHasher::default();
     xml.hash(&mut hasher);
     hasher.finish()
 }

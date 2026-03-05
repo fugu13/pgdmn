@@ -29,6 +29,7 @@ dsntk-feel = "0.2"
 dsntk-feel-parser = "0.2"
 dsntk-feel-evaluator = "0.2"
 dsntk-model-evaluator = "0.2"
+rapidhash = "1"
 
 [dev-dependencies]
 pgrx-tests = "0.16"
