@@ -8,7 +8,7 @@
 
 ### FEAT-001: `dmn_create_input_type` helper
 
-A convenience function that inspects a DMN model's input requirements for a given invocable and creates a matching PostgreSQL composite type automatically. This would eliminate the manual `CREATE TYPE` step when using `dmn_eval_record`.
+A convenience function that inspects a DMN model's input requirements for a given invocable and creates a matching PostgreSQL composite type automatically. This would eliminate the manual `CREATE TYPE` step when using `dmn_record_eval`.
 
 Example usage:
 ```

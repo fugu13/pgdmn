@@ -38,7 +38,7 @@ pub fn feel_eval(
 
 /// Evaluate a FEEL expression with a composite-type record as context.
 #[pg_extern(immutable, parallel_safe)]
-pub fn feel_eval_record(
+pub fn feel_record_eval(
     expression: &str,
     context: default!(Option<pgrx::composite_type!("record")>, "NULL"),
 ) -> pgrx::JsonB {

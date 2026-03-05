@@ -36,7 +36,7 @@ Status key: NOT STARTED | INVESTIGATING | VIABLE | NOT VIABLE | NEEDS PROTOTYPE
 
 **Status: IMPLEMENTED**
 
-Implemented as `dmn_eval_record` and `feel_eval_record` functions that accept `composite_type!("record")`. Conversion logic is in `convert.rs` via `pg_datum_to_feel` and `tuple_to_context`. Supported PG types: bool, int2/4/8, float4/8, numeric, text, varchar, date, timestamp, interval. Mixed intervals (both months and days/micros) error. Callers must cast via a named type for meaningful field names.
+Implemented as `dmn_record_eval` and `feel_record_eval` functions that accept `composite_type!("record")`. Conversion logic is in `convert.rs` via `pg_datum_to_feel` and `tuple_to_context`. Supported PG types: bool, int2/4/8, float4/8, numeric, text, varchar, date, timestamp, interval. Mixed intervals (both months and days/micros) error. Callers must cast via a named type for meaningful field names.
 
 ### Concept
 
@@ -44,13 +44,13 @@ Accept a PostgreSQL composite type or anonymous `RECORD` as the input parameter 
 
 Caller usage would look like:
 
-    SELECT dmn_eval_record(model, 'Eligibility',
+    SELECT dmn_record_eval(model, 'Eligibility',
         ROW(age, income)::applicant_input)
     FROM applicants;
 
 Or with an anonymous record:
 
-    SELECT dmn_eval_record(model, 'Eligibility',
+    SELECT dmn_record_eval(model, 'Eligibility',
         ROW(age, income))
     FROM applicants;
 
@@ -180,7 +180,7 @@ fn tuple_to_context(
 
 /// Evaluate a DMN invocable using a composite-type record as input.
 #[pg_extern(immutable, parallel_safe)]
-fn dmn_eval_record(
+fn dmn_record_eval(
     model: DmnModel,
     invocable: &str,
     input: Option<pgrx::composite_type!("record")>,
@@ -482,7 +482,7 @@ fn dmn_eval_params(
 fn dmn_create_function(model: DmnModel, invocable: &str) -> String {
     // Read the DMN model's input data requirements
     // Generate CREATE FUNCTION SQL with typed parameters
-    // The body calls dmn_eval_record or dmn_eval internally
+    // The body calls dmn_record_eval or dmn_eval internally
     let sql = format!(
         "CREATE OR REPLACE FUNCTION dmn_{invocable}(age integer, income numeric)
          RETURNS jsonb AS $$
@@ -667,7 +667,7 @@ CREATE OR REPLACE FUNCTION evaluate_eligibility(
     "Income" numeric
 ) RETURNS jsonb
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
-    SELECT dmn_eval_record(
+    SELECT dmn_record_eval(
         dmn_load('...'),
         'Eligibility',
         ROW("Age", "Income")::eligibility_input
@@ -701,12 +701,12 @@ Viable as a convenience layer built on top of approaches A or B. Does not indepe
 
 ### Near-term (smallest change, biggest win)
 
-Implement **approach A** (composite type via PgHeapTuple) as `dmn_eval_record`. This eliminates all three serialization hops and provides the foundation for other optimizations. The main deliverable is:
+Implement **approach A** (composite type via PgHeapTuple) as `dmn_record_eval`. This eliminates all three serialization hops and provides the foundation for other optimizations. The main deliverable is:
 
 1. A `pg_datum_to_feel(tuple, attno, type_oid) -> Value` conversion function
 2. A `tuple_to_context(tuple) -> FeelContext` iterator
-3. A `dmn_eval_record(model, invocable, record)` pg_extern function
-4. Same pattern for `feel_eval_record(expression, record)`
+3. A `dmn_record_eval(model, invocable, record)` pg_extern function
+4. Same pattern for `feel_record_eval(expression, record)`
 
 ### Medium-term (incremental optimization)
 
