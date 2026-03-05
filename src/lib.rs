@@ -972,6 +972,70 @@ mod tests {
     }
 
     #[pg_test]
+    fn test_feel_eval_record_date() {
+        Spi::run("CREATE TYPE feel_rec_date AS (d date)").expect("CREATE TYPE failed");
+        let result = Spi::get_one::<pgrx::JsonB>(
+            "SELECT feel_eval_record('d', ROW('2024-03-15'::date)::feel_rec_date)",
+        )
+        .expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!("2024-03-15"));
+    }
+
+    #[pg_test]
+    fn test_feel_eval_record_timestamp() {
+        Spi::run("CREATE TYPE feel_rec_ts AS (ts timestamp)").expect("CREATE TYPE failed");
+        let result = Spi::get_one::<pgrx::JsonB>(
+            "SELECT feel_eval_record('ts', ROW('2024-03-15 10:30:00'::timestamp)::feel_rec_ts)",
+        )
+        .expect("SPI failed");
+        let s = result.unwrap().0.as_str().unwrap().to_string();
+        assert!(s.starts_with("2024-03-15T10:30:00"), "unexpected timestamp: {s}");
+    }
+
+    #[pg_test]
+    fn test_feel_eval_record_interval_days() {
+        Spi::run("CREATE TYPE feel_rec_iv_days AS (iv interval)").expect("CREATE TYPE failed");
+        let result = Spi::get_one::<pgrx::JsonB>(
+            "SELECT feel_eval_record('iv', ROW('2 days 3 hours'::interval)::feel_rec_iv_days)",
+        )
+        .expect("SPI failed");
+        let s = result.unwrap().0.as_str().unwrap().to_string();
+        assert!(s.contains("P2DT3H"), "unexpected day-time duration: {s}");
+    }
+
+    #[pg_test]
+    fn test_feel_eval_record_interval_months() {
+        Spi::run("CREATE TYPE feel_rec_iv_months AS (iv interval)").expect("CREATE TYPE failed");
+        let result = Spi::get_one::<pgrx::JsonB>(
+            "SELECT feel_eval_record('iv', ROW('3 months'::interval)::feel_rec_iv_months)",
+        )
+        .expect("SPI failed");
+        let s = result.unwrap().0.as_str().unwrap().to_string();
+        assert!(s.contains("P3M"), "unexpected year-month duration: {s}");
+    }
+
+    #[pg_test]
+    fn test_feel_eval_record_interval_negative() {
+        Spi::run("CREATE TYPE feel_rec_iv_neg AS (iv interval)").expect("CREATE TYPE failed");
+        let result = Spi::get_one::<pgrx::JsonB>(
+            "SELECT feel_eval_record('iv', ROW('-1.5 seconds'::interval)::feel_rec_iv_neg)",
+        )
+        .expect("SPI failed");
+        let s = result.unwrap().0.as_str().unwrap().to_string();
+        assert!(s.contains("P"), "unexpected negative duration: {s}");
+    }
+
+    #[pg_test]
+    #[should_panic(expected = "FEEL does not support mixed intervals")]
+    fn test_feel_eval_record_interval_mixed_error() {
+        Spi::run("CREATE TYPE feel_rec_iv_mixed AS (iv interval)").expect("CREATE TYPE failed");
+        Spi::run(
+            "SELECT feel_eval_record('iv', ROW('1 month 2 days'::interval)::feel_rec_iv_mixed)",
+        )
+        .unwrap();
+    }
+
+    #[pg_test]
     fn test_cache_different_models_independent() {
         let model_a = SIMPLE_DMN;
         let model_b = SIMPLE_DMN

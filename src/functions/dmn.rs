@@ -36,7 +36,7 @@ pub fn dmn_eval(
 pub fn dmn_eval_record(
     model: DmnModel,
     invocable: &str,
-    input: Option<pgrx::composite_type!("record")>,
+    input: default!(Option<pgrx::composite_type!("record")>, "NULL"),
 ) -> pgrx::JsonB {
     let evaluator =
         get_or_build_evaluator(&model.xml).unwrap_or_else(|e| pgrx::error!("{}", e));

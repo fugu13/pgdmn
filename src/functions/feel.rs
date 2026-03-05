@@ -40,7 +40,7 @@ pub fn feel_eval(
 #[pg_extern(immutable, parallel_safe)]
 pub fn feel_eval_record(
     expression: &str,
-    context: Option<pgrx::composite_type!("record")>,
+    context: default!(Option<pgrx::composite_type!("record")>, "NULL"),
 ) -> pgrx::JsonB {
     let ctx = match context {
         Some(ref tuple) => tuple_to_context(tuple),

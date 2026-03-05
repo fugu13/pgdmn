@@ -188,8 +188,10 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
                 if has_months {
                     Value::YearsAndMonthsDuration(FeelYearsAndMonthsDuration::from_m(months as i64))
                 } else {
-                    let total_secs = (days as i64) * 86400 + micros / 1_000_000;
-                    let nanos = (micros % 1_000_000) * 1000;
+                    let secs_from_micros = micros.div_euclid(1_000_000);
+                    let micros_remainder = micros.rem_euclid(1_000_000);
+                    let total_secs = (days as i64) * 86400 + secs_from_micros;
+                    let nanos = micros_remainder * 1000;
                     Value::DaysAndTimeDuration(FeelDaysAndTimeDuration::from_sn(total_secs, nanos))
                 }
             }
