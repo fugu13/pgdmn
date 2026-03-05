@@ -675,7 +675,9 @@ mod tests {
              FROM (SELECT jsonb_build_object('first_name', first_name, 'last_name', last_name) AS j \
                    FROM bench_names LIMIT 1) t"
         )
-        .expect("PG concat warmup failed");
+        .expect("PG jsonb concat warmup failed");
+        Spi::run("SELECT first_name || ' ' || last_name FROM bench_names LIMIT 1")
+            .expect("PG plain concat warmup failed");
         Spi::run(&format!(
             "SELECT dmn_eval(dmn_load('{escaped_risk}'), 'RiskScore', \
              jsonb_build_object('age', age, 'income', income, 'credit_score', credit_score, \
@@ -703,9 +705,27 @@ mod tests {
                           'employment_status', employment_status, 'years_employed', years_employed) AS j \
                    FROM bench_names LIMIT 1) t"
         )
-        .expect("PG risk warmup failed");
+        .expect("PG jsonb risk warmup failed");
+        Spi::run(
+            "SELECT CASE \
+               WHEN age < 18 THEN 0 \
+               WHEN credit_score >= 750 AND income >= 80000 \
+                    AND employment_status = 'employed' AND years_employed >= 3 \
+                 THEN credit_score * 0.5 + income / 1000 + years_employed * 10 \
+               WHEN credit_score >= 650 AND credit_score < 750 \
+                    AND income >= 50000 \
+                    AND employment_status IN ('employed','self-employed') AND years_employed >= 1 \
+                 THEN credit_score * 0.3 + income / 2000 + years_employed * 5 \
+               WHEN credit_score >= 650 AND credit_score < 750 \
+                    AND income < 50000 \
+                 THEN credit_score * 0.1 + income / 5000 \
+               WHEN credit_score < 650 THEN credit_score * 0.05 \
+               ELSE credit_score * 0.3 + income / 2000 + years_employed * 5 \
+             END FROM bench_names LIMIT 1"
+        )
+        .expect("PG plain risk warmup failed");
 
-        // --- Benchmark 1: simple DMN concat vs PG concat ---
+        // --- Benchmark 1: simple concat ---
         let dmn_concat_start = std::time::Instant::now();
         Spi::run(&format!(
             "SELECT dmn_eval(dmn_load('{escaped_concat}'), 'FullName', \
@@ -715,16 +735,21 @@ mod tests {
         .expect("DMN concat query failed");
         let dmn_concat_dur = dmn_concat_start.elapsed();
 
-        let pg_concat_start = std::time::Instant::now();
+        let pg_jsonb_concat_start = std::time::Instant::now();
         Spi::run(
             "SELECT (j->>'first_name') || ' ' || (j->>'last_name') \
              FROM (SELECT jsonb_build_object('first_name', first_name, 'last_name', last_name) AS j \
                    FROM bench_names) t",
         )
-        .expect("PG concat query failed");
-        let pg_concat_dur = pg_concat_start.elapsed();
+        .expect("PG jsonb concat query failed");
+        let pg_jsonb_concat_dur = pg_jsonb_concat_start.elapsed();
 
-        // --- Benchmark 2: complex DMN risk score vs PG CASE expression ---
+        let pg_plain_concat_start = std::time::Instant::now();
+        Spi::run("SELECT first_name || ' ' || last_name FROM bench_names")
+            .expect("PG plain concat query failed");
+        let pg_plain_concat_dur = pg_plain_concat_start.elapsed();
+
+        // --- Benchmark 2: complex risk score ---
         let dmn_risk_start = std::time::Instant::now();
         Spi::run(&format!(
             "SELECT dmn_eval(dmn_load('{escaped_risk}'), 'RiskScore', \
@@ -735,7 +760,7 @@ mod tests {
         .expect("DMN risk query failed");
         let dmn_risk_dur = dmn_risk_start.elapsed();
 
-        let pg_risk_start = std::time::Instant::now();
+        let pg_jsonb_risk_start = std::time::Instant::now();
         Spi::run(
             "SELECT CASE \
                WHEN (j->>'age')::int < 18 THEN 0 \
@@ -756,34 +781,62 @@ mod tests {
                           'employment_status', employment_status, 'years_employed', years_employed) AS j \
                    FROM bench_names) t"
         )
-        .expect("PG risk query failed");
-        let pg_risk_dur = pg_risk_start.elapsed();
+        .expect("PG jsonb risk query failed");
+        let pg_jsonb_risk_dur = pg_jsonb_risk_start.elapsed();
 
-        let concat_ratio = dmn_concat_dur.as_secs_f64() / pg_concat_dur.as_secs_f64();
-        let risk_ratio = dmn_risk_dur.as_secs_f64() / pg_risk_dur.as_secs_f64();
-        let complexity_ratio = dmn_risk_dur.as_secs_f64() / dmn_concat_dur.as_secs_f64();
+        let pg_plain_risk_start = std::time::Instant::now();
+        Spi::run(
+            "SELECT CASE \
+               WHEN age < 18 THEN 0 \
+               WHEN credit_score >= 750 AND income >= 80000 \
+                    AND employment_status = 'employed' AND years_employed >= 3 \
+                 THEN credit_score * 0.5 + income / 1000 + years_employed * 10 \
+               WHEN credit_score >= 650 AND credit_score < 750 \
+                    AND income >= 50000 \
+                    AND employment_status IN ('employed','self-employed') AND years_employed >= 1 \
+                 THEN credit_score * 0.3 + income / 2000 + years_employed * 5 \
+               WHEN credit_score >= 650 AND credit_score < 750 \
+                    AND income < 50000 \
+                 THEN credit_score * 0.1 + income / 5000 \
+               WHEN credit_score < 650 THEN credit_score * 0.05 \
+               ELSE credit_score * 0.3 + income / 2000 + years_employed * 5 \
+             END FROM bench_names"
+        )
+        .expect("PG plain risk query failed");
+        let pg_plain_risk_dur = pg_plain_risk_start.elapsed();
+
         let rc = row_count as f64;
 
         // Report results
         let report = format!(
             "Benchmark: {row_count} rows, {distinct_count} distinct input combos\n\
              \n\
-             Simple DMN (concat):      {:.1} us/row ({:?} total)\n\
-             PG jsonb->concat:          {:.1} us/row ({:?} total)\n\
-             Ratio:                     {:.1}x\n\
+             --- Simple (concat) ---\n\
+             DMN eval:        {:.1} us/row ({:?})\n\
+             PG via jsonb:    {:.1} us/row ({:?})\n\
+             PG plain SQL:    {:.1} us/row ({:?})\n\
+             DMN/jsonb:       {:.1}x | DMN/plain: {:.1}x | jsonb overhead: {:.1}x\n\
              \n\
-             Complex DMN (risk):        {:.1} us/row ({:?} total)\n\
-             PG jsonb->CASE expression: {:.1} us/row ({:?} total)\n\
-             Ratio:                {:.1}x\n\
+             --- Complex (risk score) ---\n\
+             DMN eval:        {:.1} us/row ({:?})\n\
+             PG via jsonb:    {:.1} us/row ({:?})\n\
+             PG plain SQL:    {:.1} us/row ({:?})\n\
+             DMN/jsonb:       {:.1}x | DMN/plain: {:.1}x | jsonb overhead: {:.1}x\n\
              \n\
-             Complex/Simple DMN:   {:.1}x",
+             Complex/Simple DMN: {:.1}x",
             dmn_concat_dur.as_micros() as f64 / rc, dmn_concat_dur,
-            pg_concat_dur.as_micros() as f64 / rc, pg_concat_dur,
-            concat_ratio,
+            pg_jsonb_concat_dur.as_micros() as f64 / rc, pg_jsonb_concat_dur,
+            pg_plain_concat_dur.as_micros() as f64 / rc, pg_plain_concat_dur,
+            dmn_concat_dur.as_secs_f64() / pg_jsonb_concat_dur.as_secs_f64(),
+            dmn_concat_dur.as_secs_f64() / pg_plain_concat_dur.as_secs_f64(),
+            pg_jsonb_concat_dur.as_secs_f64() / pg_plain_concat_dur.as_secs_f64(),
             dmn_risk_dur.as_micros() as f64 / rc, dmn_risk_dur,
-            pg_risk_dur.as_micros() as f64 / rc, pg_risk_dur,
-            risk_ratio,
-            complexity_ratio,
+            pg_jsonb_risk_dur.as_micros() as f64 / rc, pg_jsonb_risk_dur,
+            pg_plain_risk_dur.as_micros() as f64 / rc, pg_plain_risk_dur,
+            dmn_risk_dur.as_secs_f64() / pg_jsonb_risk_dur.as_secs_f64(),
+            dmn_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
+            pg_jsonb_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
+            dmn_risk_dur.as_secs_f64() / dmn_concat_dur.as_secs_f64(),
         );
         if let Err(e) = std::fs::write("/pgdmn/benchmark_results.txt", &report) {
             pgrx::warning!("Failed to write benchmark_results.txt: {}", e);
