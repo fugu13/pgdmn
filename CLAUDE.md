@@ -17,8 +17,8 @@ src/
   types/
     dmn_model.rs    — custom DmnModel PG type (InOutFuncs: XML in, namespace::name out)
   functions/
-    feel.rs         — feel_eval (JSONB) + 6 typed variants (numeric, bool, text, date, timestamp, interval)
-    dmn.rs          — dmn_load, dmn_eval
+    feel.rs         — feel_eval (JSONB), feel_record_eval (record), + 6 typed variants (numeric, bool, text, date, timestamp, interval)
+    dmn.rs          — dmn_load, dmn_eval, dmn_record_eval
     introspection.rs — dmn_invocables, dmn_info, dmn_xml, dmn_name, dmn_namespace
 ```
 

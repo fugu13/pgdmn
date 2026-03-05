@@ -20,6 +20,125 @@ SELECT dmn_eval(
 );
 ```
 
+## DMN Functions
+
+### dmn_load(xml) -> DmnModel
+
+Parse DMN XML into a `DmnModel` value. This is the entry point for all DMN operations.
+
+```sql
+SELECT dmn_load('<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             namespace="https://example.com/greeting"
+             name="greeting-model">
+  <decision id="greeting" name="Greeting">
+    <literalExpression>
+      <text>"Hello, " + name</text>
+    </literalExpression>
+  </decision>
+</definitions>');
+-- https://example.com/greeting::greeting-model
+```
+
+The display format is `namespace::name`. The model can be stored in a column for reuse:
+
+```sql
+CREATE TABLE models (model DmnModel);
+INSERT INTO models VALUES (dmn_load('<your DMN XML>'));
+```
+
+### dmn_eval(model, invocable, input?) -> jsonb
+
+Evaluate a named invocable (decision, BKM, or decision service) from a DMN model.
+
+```sql
+-- Simple decision with no inputs
+SELECT dmn_eval(dmn_load('...'), 'Greeting');
+
+-- Decision table with JSONB inputs
+SELECT dmn_eval(
+  dmn_load('...'),
+  'Eligibility',
+  '{"Age": 30, "Income": 75000}'::jsonb
+);
+-- "Approved"
+
+-- Chained decisions (dependencies resolved automatically)
+SELECT dmn_eval(
+  dmn_load('...'),
+  'Total Price',
+  '{"Base Price": 100, "Tax Rate": 0.1}'::jsonb
+);
+-- 110
+```
+
+### dmn_record_eval(model, invocable, input?) -> jsonb
+
+Same as `dmn_eval`, but accepts a composite-type record instead of JSONB for the input.
+
+```sql
+CREATE TYPE loan_input AS ("Age" int, "Income" numeric);
+
+SELECT dmn_record_eval(
+  dmn_load('...'),
+  'Eligibility',
+  ROW(30, 75000)::loan_input
+);
+-- "Approved"
+```
+
+## Introspection Functions
+
+### dmn_invocables(model) -> setof (name text, kind text)
+
+List all invocable elements in a DMN model as a table.
+
+```sql
+SELECT * FROM dmn_invocables(dmn_load('...'));
+--     name     |   kind
+-- -------------+----------
+--  Tax Amount  | decision
+--  Total Price | decision
+```
+
+### dmn_info(model) -> jsonb
+
+Return model metadata as JSONB, including counts of each element type and invocable names.
+
+```sql
+SELECT dmn_info(dmn_load('...'));
+-- {"name": "greeting-model", "namespace": "https://example.com/greeting",
+--  "decisions": 1, "business_knowledge_models": 0,
+--  "decision_services": 0, "invocables": ["Greeting"]}
+```
+
+### dmn_xml(model) -> text
+
+Extract the raw XML source from a `DmnModel`.
+
+```sql
+SELECT dmn_xml(dmn_load('<definitions ...>...</definitions>'));
+-- Returns the original XML
+```
+
+### dmn_name(model) -> text
+
+Get the model name.
+
+```sql
+SELECT dmn_name(dmn_load('...'));
+-- greeting-model
+```
+
+### dmn_namespace(model) -> text
+
+Get the model namespace.
+
+```sql
+SELECT dmn_namespace(dmn_load('...'));
+-- https://example.com/greeting
+```
+
 ## FEEL Functions
 
 ### feel_eval(expression, context?) -> jsonb
@@ -44,14 +163,14 @@ SELECT feel_eval('"Hello " + name', '{"name": "World"}'::jsonb);
 -- "Hello World"
 ```
 
-### feel_eval_record(expression, context?) -> jsonb
+### feel_record_eval(expression, context?) -> jsonb
 
 Same as `feel_eval`, but accepts a composite-type record instead of JSONB for the context. Columns map directly to FEEL variables.
 
 ```sql
 CREATE TYPE calc_input AS (x numeric, y numeric);
 
-SELECT feel_eval_record('x + y', ROW(3, 4)::calc_input);
+SELECT feel_record_eval('x + y', ROW(3, 4)::calc_input);
 -- 7
 ```
 
@@ -113,125 +232,6 @@ SELECT feel_eval_interval('duration("P2Y3M")');
 
 SELECT feel_eval_interval('duration("PT4H30M")');
 -- 04:30:00
-```
-
-## DMN Functions
-
-### dmn_load(xml) -> DmnModel
-
-Parse DMN XML into a `DmnModel` value. This is the entry point for all DMN operations.
-
-```sql
-SELECT dmn_load('<?xml version="1.0" encoding="UTF-8"?>
-<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
-             namespace="https://example.com/greeting"
-             name="greeting-model">
-  <decision id="greeting" name="Greeting">
-    <literalExpression>
-      <text>"Hello, " + name</text>
-    </literalExpression>
-  </decision>
-</definitions>');
--- https://example.com/greeting::greeting-model
-```
-
-The display format is `namespace::name`. The model can be stored in a column for reuse:
-
-```sql
-CREATE TABLE models (model DmnModel);
-INSERT INTO models VALUES (dmn_load('<your DMN XML>'));
-```
-
-### dmn_eval(model, invocable, input?) -> jsonb
-
-Evaluate a named invocable (decision, BKM, or decision service) from a DMN model.
-
-```sql
--- Simple decision with no inputs
-SELECT dmn_eval(dmn_load('...'), 'Greeting');
-
--- Decision table with JSONB inputs
-SELECT dmn_eval(
-  dmn_load('...'),
-  'Eligibility',
-  '{"Age": 30, "Income": 75000}'::jsonb
-);
--- "Approved"
-
--- Chained decisions (dependencies resolved automatically)
-SELECT dmn_eval(
-  dmn_load('...'),
-  'Total Price',
-  '{"Base Price": 100, "Tax Rate": 0.1}'::jsonb
-);
--- 110
-```
-
-### dmn_eval_record(model, invocable, input?) -> jsonb
-
-Same as `dmn_eval`, but accepts a composite-type record instead of JSONB for the input.
-
-```sql
-CREATE TYPE loan_input AS ("Age" int, "Income" numeric);
-
-SELECT dmn_eval_record(
-  dmn_load('...'),
-  'Eligibility',
-  ROW(30, 75000)::loan_input
-);
--- "Approved"
-```
-
-## Introspection Functions
-
-### dmn_invocables(model) -> setof (name text, kind text)
-
-List all invocable elements in a DMN model as a table.
-
-```sql
-SELECT * FROM dmn_invocables(dmn_load('...'));
---     name     |   kind
--- -------------+----------
---  Tax Amount  | decision
---  Total Price | decision
-```
-
-### dmn_info(model) -> jsonb
-
-Return model metadata as JSONB, including counts of each element type and invocable names.
-
-```sql
-SELECT dmn_info(dmn_load('...'));
--- {"name": "greeting-model", "namespace": "https://example.com/greeting",
---  "decisions": 1, "business_knowledge_models": 0,
---  "decision_services": 0, "invocables": ["Greeting"]}
-```
-
-### dmn_xml(model) -> text
-
-Extract the raw XML source from a `DmnModel`.
-
-```sql
-SELECT dmn_xml(dmn_load('<definitions ...>...</definitions>'));
--- Returns the original XML
-```
-
-### dmn_name(model) -> text
-
-Get the model name.
-
-```sql
-SELECT dmn_name(dmn_load('...'));
--- greeting-model
-```
-
-### dmn_namespace(model) -> text
-
-Get the model namespace.
-
-```sql
-SELECT dmn_namespace(dmn_load('...'));
--- https://example.com/greeting
 ```
 
 ## Build & Test
