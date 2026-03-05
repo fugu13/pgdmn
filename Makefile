@@ -8,16 +8,16 @@ base-image:
 
 # Build the test image (adds non-root user required by initdb)
 test-image: base-image
-	printf 'FROM pgdmn-base\nRUN useradd -ms /bin/bash pgdmn\nUSER pgdmn\n' | docker build -t pgdmn-test --build-arg BASE=pgdmn-base -f - .
+	printf 'FROM pgdmn-base\nRUN useradd -ms /bin/bash pgdmn\nUSER pgdmn\n' | docker build -t pgdmn-test -f - .
 
 # Run cargo check (fast compilation check, no tests)
-check:
+check: test-image
 	$(DOCKER_RUN) cargo check
 
 # Run the pgrx test suite against PG17
-test:
+test: test-image
 	$(DOCKER_RUN) cargo pgrx test pg17
 
 # Remove build artifacts
 clean:
-	cargo clean
+	rm -rf target/
