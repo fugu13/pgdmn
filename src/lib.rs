@@ -1035,6 +1035,326 @@ mod tests {
         .unwrap();
     }
 
+    // --- Example file tests ---
+    // Tests exercising the DMN example files in examples/
+
+    const EXAMPLE_SIMPLE_APPROVAL: &str = include_str!("../examples/simple-approval.dmn");
+    const EXAMPLE_MULTI_OUTPUT: &str = include_str!("../examples/multi-output-approval.dmn");
+    const EXAMPLE_LOAN_PAYMENT: &str = include_str!("../examples/loan-payment.dmn");
+    const EXAMPLE_MONTHLY_PAYMENT_BKM: &str = include_str!("../examples/monthly-payment-bkm.dmn");
+    const EXAMPLE_VACATION_DAYS: &str = include_str!("../examples/vacation-days.dmn");
+    const EXAMPLE_LENDING: &str = include_str!("../examples/lending.dmn");
+    const EXAMPLE_LOAN_COMPARISON: &str = include_str!("../examples/loan-comparison.dmn");
+
+    fn eval_example(xml: &str, invocable: &str, input_json: &str) -> serde_json::Value {
+        let escaped_xml = xml.replace('\'', "''");
+        let escaped_json = input_json.replace('\'', "''");
+        let query = format!(
+            "SELECT dmn_eval(dmn_load('{escaped_xml}'), '{invocable}', '{escaped_json}'::jsonb)"
+        );
+        Spi::get_one::<pgrx::JsonB>(&query)
+            .expect("SPI failed")
+            .expect("dmn_eval returned NULL")
+            .0
+    }
+
+    // -- Simple Approval: UNIQUE hit policy, outputs "Approved" or "Declined" --
+
+    #[pg_test]
+    fn test_example_simple_approval_approved() {
+        let result = eval_example(
+            EXAMPLE_SIMPLE_APPROVAL,
+            "Approval Status",
+            r#"{"Age": 25, "RiskCategory": "Medium", "isAffordable": true}"#,
+        );
+        assert_eq!(result, serde_json::json!("Approved"));
+    }
+
+    #[pg_test]
+    fn test_example_simple_approval_declined_underage() {
+        let result = eval_example(
+            EXAMPLE_SIMPLE_APPROVAL,
+            "Approval Status",
+            r#"{"Age": 17, "RiskCategory": "Low", "isAffordable": true}"#,
+        );
+        assert_eq!(result, serde_json::json!("Declined"));
+    }
+
+    #[pg_test]
+    fn test_example_simple_approval_declined_high_risk() {
+        let result = eval_example(
+            EXAMPLE_SIMPLE_APPROVAL,
+            "Approval Status",
+            r#"{"Age": 30, "RiskCategory": "High", "isAffordable": true}"#,
+        );
+        assert_eq!(result, serde_json::json!("Declined"));
+    }
+
+    #[pg_test]
+    fn test_example_simple_approval_declined_not_affordable() {
+        let result = eval_example(
+            EXAMPLE_SIMPLE_APPROVAL,
+            "Approval Status",
+            r#"{"Age": 30, "RiskCategory": "Low", "isAffordable": false}"#,
+        );
+        assert_eq!(result, serde_json::json!("Declined"));
+    }
+
+    // -- Multi-Output Approval: outputs (Status, Rate) pairs --
+
+    #[pg_test]
+    fn test_example_multi_output_approved_best() {
+        let result = eval_example(
+            EXAMPLE_MULTI_OUTPUT,
+            "Approval",
+            r#"{"Age": 25, "RiskCategory": "Low", "isAffordable": true}"#,
+        );
+        assert_eq!(result["Status"], serde_json::json!("Approved"));
+        assert_eq!(result["Rate"], serde_json::json!("Best"));
+    }
+
+    #[pg_test]
+    fn test_example_multi_output_approved_standard() {
+        let result = eval_example(
+            EXAMPLE_MULTI_OUTPUT,
+            "Approval",
+            r#"{"Age": 25, "RiskCategory": "Medium", "isAffordable": true}"#,
+        );
+        assert_eq!(result["Status"], serde_json::json!("Approved"));
+        assert_eq!(result["Rate"], serde_json::json!("Standard"));
+    }
+
+    #[pg_test]
+    fn test_example_multi_output_declined() {
+        let result = eval_example(
+            EXAMPLE_MULTI_OUTPUT,
+            "Approval",
+            r#"{"Age": 25, "RiskCategory": "High", "isAffordable": true}"#,
+        );
+        assert_eq!(result["Status"], serde_json::json!("Declined"));
+        assert_eq!(result["Rate"], serde_json::json!("Standard"));
+    }
+
+    // -- Loan Payment: FEEL literal expression computing amortization --
+
+    #[pg_test]
+    fn test_example_loan_payment() {
+        let result = eval_example(
+            EXAMPLE_LOAN_PAYMENT,
+            "payment",
+            r#"{"loan": {"principal": 600000, "rate": 0.0375, "termMonths": 360}}"#,
+        );
+        let payment = result.as_f64().expect("expected numeric result");
+        assert!(payment > 2000.0 && payment < 3500.0, "unexpected payment: {payment}");
+    }
+
+    // -- Monthly Payment with BKM: reusable PMT function + fee --
+
+    #[pg_test]
+    fn test_example_monthly_payment_bkm() {
+        let result = eval_example(
+            EXAMPLE_MONTHLY_PAYMENT_BKM,
+            "MonthlyPayment",
+            r#"{"Loan": {"amount": 600000, "rate": 0.0375, "term": 360}, "fee": 100}"#,
+        );
+        let payment = result.as_f64().expect("expected numeric result");
+        // Should be PMT + 100 fee, so > 100
+        assert!(payment > 2000.0 && payment < 3600.0, "unexpected payment: {payment}");
+    }
+
+    // -- Vacation Days: COLLECT/MAX hit policy, sub-decisions --
+
+    #[pg_test]
+    fn test_example_vacation_days_young() {
+        // Age 16 (< 18) gets 5 extra days from case 1
+        let result = eval_example(
+            EXAMPLE_VACATION_DAYS,
+            "Total Vacation Days",
+            r#"{"Age": 16, "Years of Service": 1}"#,
+        );
+        assert_eq!(result, serde_json::json!(27));
+    }
+
+    #[pg_test]
+    fn test_example_vacation_days_midcareer() {
+        // Age 25, 5 years: no extra days
+        let result = eval_example(
+            EXAMPLE_VACATION_DAYS,
+            "Total Vacation Days",
+            r#"{"Age": 25, "Years of Service": 5}"#,
+        );
+        assert_eq!(result, serde_json::json!(22));
+    }
+
+    #[pg_test]
+    fn test_example_vacation_days_senior() {
+        // Age 44, 30 years: max extra days from multiple rules
+        let result = eval_example(
+            EXAMPLE_VACATION_DAYS,
+            "Total Vacation Days",
+            r#"{"Age": 44, "Years of Service": 30}"#,
+        );
+        assert_eq!(result, serde_json::json!(30));
+    }
+
+    // -- Lending: complex DRG with Strategy and Routing decisions --
+
+    // Strategy: DECLINE (existing customer with risk score < 80 → DECLINE risk → INELIGIBLE)
+    #[pg_test]
+    fn test_example_lending_strategy_decline() {
+        // Age 25, Single, Unemployed, ExistingCustomer=true
+        // AppRiskScore = 35 + 25 + 15 = 75 → existing customer < 80 → DECLINE risk
+        let result = eval_example(
+            EXAMPLE_LENDING,
+            "Strategy",
+            r#"{
+                "ApplicantData": {
+                    "Age": 25, "MaritalStatus": "S", "EmploymentStatus": "UNEMPLOYED",
+                    "ExistingCustomer": true,
+                    "Monthly": {"Income": 2000, "Expenses": 1000, "Repayments": 0}
+                },
+                "RequestedProduct": {
+                    "ProductType": "STANDARD LOAN", "Amount": 10000, "Rate": 0.10, "Term": 36
+                },
+                "BureauData": {"CreditScore": 600, "Bankrupt": false}
+            }"#,
+        );
+        assert_eq!(result, serde_json::json!("DECLINE"));
+    }
+
+    // Strategy: BUREAU (eligible but needs bureau call due to HIGH pre-bureau risk)
+    #[pg_test]
+    fn test_example_lending_strategy_bureau() {
+        // Age 20, Single, Student → AppRiskScore = 32+25+18 = 75 → pre-bureau HIGH → FULL
+        let result = eval_example(
+            EXAMPLE_LENDING,
+            "Strategy",
+            r#"{
+                "ApplicantData": {
+                    "Age": 20, "MaritalStatus": "S", "EmploymentStatus": "STUDENT",
+                    "ExistingCustomer": false,
+                    "Monthly": {"Income": 5000, "Expenses": 1000, "Repayments": 0}
+                },
+                "RequestedProduct": {
+                    "ProductType": "STANDARD LOAN", "Amount": 50000, "Rate": 0.10, "Term": 36
+                },
+                "BureauData": {"CreditScore": 600, "Bankrupt": false}
+            }"#,
+        );
+        assert_eq!(result, serde_json::json!("BUREAU"));
+    }
+
+    // Strategy: THROUGH (eligible, very low risk, no bureau call)
+    #[pg_test]
+    fn test_example_lending_strategy_through() {
+        // Age 51, Married, Employed → AppRiskScore = 48+45+45 = 138 → VERY LOW → NONE
+        let result = eval_example(
+            EXAMPLE_LENDING,
+            "Strategy",
+            r#"{
+                "ApplicantData": {
+                    "Age": 51, "MaritalStatus": "M", "EmploymentStatus": "EMPLOYED",
+                    "ExistingCustomer": false,
+                    "Monthly": {"Income": 10000, "Expenses": 3000, "Repayments": 0}
+                },
+                "RequestedProduct": {
+                    "ProductType": "STANDARD LOAN", "Amount": 100000, "Rate": 0.06, "Term": 36
+                },
+                "BureauData": {"CreditScore": 700, "Bankrupt": false}
+            }"#,
+        );
+        assert_eq!(result, serde_json::json!("THROUGH"));
+    }
+
+    // Routing: DECLINE (bankrupt applicant)
+    #[pg_test]
+    fn test_example_lending_routing_decline() {
+        let result = eval_example(
+            EXAMPLE_LENDING,
+            "Routing",
+            r#"{
+                "ApplicantData": {
+                    "Age": 51, "MaritalStatus": "M", "EmploymentStatus": "EMPLOYED",
+                    "ExistingCustomer": false,
+                    "Monthly": {"Income": 10000, "Expenses": 3000, "Repayments": 0}
+                },
+                "RequestedProduct": {
+                    "ProductType": "STANDARD LOAN", "Amount": 100000, "Rate": 0.06, "Term": 36
+                },
+                "BureauData": {"CreditScore": 700, "Bankrupt": true}
+            }"#,
+        );
+        assert_eq!(result, serde_json::json!("DECLINE"));
+    }
+
+    // Routing: REFER (high post-bureau risk)
+    #[pg_test]
+    fn test_example_lending_routing_refer() {
+        // Low credit score + low app risk score → post-bureau HIGH → REFER
+        let result = eval_example(
+            EXAMPLE_LENDING,
+            "Routing",
+            r#"{
+                "ApplicantData": {
+                    "Age": 20, "MaritalStatus": "S", "EmploymentStatus": "STUDENT",
+                    "ExistingCustomer": false,
+                    "Monthly": {"Income": 5000, "Expenses": 1000, "Repayments": 0}
+                },
+                "RequestedProduct": {
+                    "ProductType": "STANDARD LOAN", "Amount": 10000, "Rate": 0.10, "Term": 36
+                },
+                "BureauData": {"CreditScore": 500, "Bankrupt": false}
+            }"#,
+        );
+        assert_eq!(result, serde_json::json!("REFER"));
+    }
+
+    // Routing: ACCEPT (good applicant)
+    #[pg_test]
+    fn test_example_lending_routing_accept() {
+        let result = eval_example(
+            EXAMPLE_LENDING,
+            "Routing",
+            r#"{
+                "ApplicantData": {
+                    "Age": 51, "MaritalStatus": "M", "EmploymentStatus": "EMPLOYED",
+                    "ExistingCustomer": false,
+                    "Monthly": {"Income": 10000, "Expenses": 3000, "Repayments": 0}
+                },
+                "RequestedProduct": {
+                    "ProductType": "STANDARD LOAN", "Amount": 100000, "Rate": 0.06, "Term": 36
+                },
+                "BureauData": {"CreditScore": 700, "Bankrupt": false}
+            }"#,
+        );
+        assert_eq!(result, serde_json::json!("ACCEPT"));
+    }
+
+    // -- Loan Comparison: iteration, sorting, embedded data, BKMs --
+
+    #[pg_test]
+    fn test_example_loan_comparison() {
+        let result = eval_example(
+            EXAMPLE_LOAN_COMPARISON,
+            "RankedProducts",
+            r#"{"RequestedAmt": 330000}"#,
+        );
+        // Should contain metricsTable with 10 lender entries
+        let metrics = result["metricsTable"].as_array().expect("metricsTable should be an array");
+        assert_eq!(metrics.len(), 10, "expected 10 loan products in metricsTable");
+
+        // Each ranking should also have 10 entries
+        for key in ["rankByRate", "rankByDownPmt", "rankByMonthlyPmt", "rankByEquityPct"] {
+            let ranked = result[key].as_array().unwrap_or_else(|| panic!("{key} should be an array"));
+            assert_eq!(ranked.len(), 10, "{key} should have 10 entries");
+        }
+
+        // First in rankByRate should have the lowest rate
+        let best_rate = result["rankByRate"][0]["rate"].as_f64().expect("rate should be a number");
+        let worst_rate = result["rankByRate"][9]["rate"].as_f64().expect("rate should be a number");
+        assert!(best_rate <= worst_rate, "rankByRate should be ascending");
+    }
+
     #[pg_test]
     fn test_cache_different_models_independent() {
         let model_a = SIMPLE_DMN;
