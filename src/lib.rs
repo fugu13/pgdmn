@@ -188,14 +188,19 @@ mod tests {
 
         // Cold call: first evaluation parses XML and builds evaluator
         let cold_start = std::time::Instant::now();
-        let _ = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+        let cold_result = Spi::get_one::<pgrx::JsonB>(&query)
+            .expect("SPI failed")
+            .expect("dmn_eval returned NULL on cold run");
         let cold_duration = cold_start.elapsed();
+        assert_eq!(cold_result.0, serde_json::json!("Hello, World!"));
 
         // Warm calls: subsequent evaluations use cached evaluator
         let iterations = 100;
         let warm_start = std::time::Instant::now();
         for _ in 0..iterations {
-            let _ = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+            Spi::get_one::<pgrx::JsonB>(&query)
+                .expect("SPI failed")
+                .expect("dmn_eval returned NULL on warm run");
         }
         let warm_duration = warm_start.elapsed();
         let warm_avg = warm_duration / iterations;
@@ -210,45 +215,55 @@ mod tests {
     #[pg_test]
     fn test_cache_different_models_independent() {
         let model_a = SIMPLE_DMN;
-        let model_b = SIMPLE_DMN.replace("SimpleDecisions", "OtherModel")
-            .replace("https://example.org/simple", "https://example.org/other");
+        let model_b = SIMPLE_DMN
+            .replace("SimpleDecisions", "OtherModel")
+            .replace("https://example.org/simple", "https://example.org/other")
+            .replace("Hello", "Goodbye");
 
         let escaped_a = model_a.replace('\'', "''");
         let escaped_b = model_b.replace('\'', "''");
 
+        let query_a = format!(
+            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_a
+        );
+        let query_b = format!(
+            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_b
+        );
+
         // Load model A (cold)
         let cold_a_start = std::time::Instant::now();
-        let _ = Spi::get_one::<pgrx::JsonB>(&format!(
-            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_a
-        )).expect("SPI failed");
+        let result_a = Spi::get_one::<pgrx::JsonB>(&query_a)
+            .expect("SPI failed")
+            .expect("model A returned NULL");
         let cold_a = cold_a_start.elapsed();
 
         // Load model B (cold — different XML, not cached)
-        let cold_b_start = std::time::Instant::now();
-        let _ = Spi::get_one::<pgrx::JsonB>(&format!(
-            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_b
-        )).expect("SPI failed");
-        let cold_b = cold_b_start.elapsed();
+        let result_b = Spi::get_one::<pgrx::JsonB>(&query_b)
+            .expect("SPI failed")
+            .expect("model B returned NULL");
+
+        // Models produce different output — a false cache hit would fail here
+        assert_eq!(result_a.0, serde_json::json!("Hello, World!"));
+        assert_eq!(result_b.0, serde_json::json!("Goodbye, World!"));
+        assert_ne!(
+            result_a.0, result_b.0,
+            "Models A and B returned the same result; cache keying may not distinguish them"
+        );
 
         // Model A again (warm — should be cached)
         let warm_a_start = std::time::Instant::now();
-        let _ = Spi::get_one::<pgrx::JsonB>(&format!(
-            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_a
-        )).expect("SPI failed");
+        let result_a_warm = Spi::get_one::<pgrx::JsonB>(&query_a)
+            .expect("SPI failed")
+            .expect("model A returned NULL on warm run");
         let warm_a = warm_a_start.elapsed();
+
+        // Cached result matches original
+        assert_eq!(result_a.0, result_a_warm.0);
 
         // Warm A should be significantly faster than cold A
         assert!(
             warm_a < cold_a / 2,
             "Model A was not faster on second call: cold={cold_a:?}, warm={warm_a:?}"
-        );
-
-        // Cold B should be comparable to cold A (both require parsing),
-        // not dramatically faster (which would indicate false cache hit)
-        // We just check B also took non-trivial time relative to warm A
-        assert!(
-            cold_b > warm_a,
-            "Model B first call was suspiciously fast — may be a false cache hit: cold_b={cold_b:?}, warm_a={warm_a:?}"
         );
     }
 }
