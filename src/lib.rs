@@ -476,6 +476,391 @@ mod tests {
         );
     }
 
+    // DMN model that concatenates first_name and last_name with a space
+    const CONCAT_DMN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="concat_decision"
+             name="ConcatDecision"
+             namespace="https://example.org/concat">
+    <decision id="FullName" name="FullName">
+        <variable name="FullName" typeRef="string"/>
+        <informationRequirement>
+            <requiredInput href="#input_first_name"/>
+        </informationRequirement>
+        <informationRequirement>
+            <requiredInput href="#input_last_name"/>
+        </informationRequirement>
+        <literalExpression>
+            <text>first_name + " " + last_name</text>
+        </literalExpression>
+    </decision>
+    <inputData id="input_first_name" name="first_name">
+        <variable name="first_name" typeRef="string"/>
+    </inputData>
+    <inputData id="input_last_name" name="last_name">
+        <variable name="last_name" typeRef="string"/>
+    </inputData>
+</definitions>"##;
+
+    // Complex DMN: risk assessment with a decision table (6 rules), a derived
+    // risk score literal expression, and a chained final decision. Uses 5 inputs.
+    const RISK_DMN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="risk_assessment"
+             name="RiskAssessment"
+             namespace="https://example.org/risk">
+    <inputData id="input_age" name="age">
+        <variable name="age" typeRef="number"/>
+    </inputData>
+    <inputData id="input_income" name="income">
+        <variable name="income" typeRef="number"/>
+    </inputData>
+    <inputData id="input_credit_score" name="credit_score">
+        <variable name="credit_score" typeRef="number"/>
+    </inputData>
+    <inputData id="input_employment" name="employment_status">
+        <variable name="employment_status" typeRef="string"/>
+    </inputData>
+    <inputData id="input_years" name="years_employed">
+        <variable name="years_employed" typeRef="number"/>
+    </inputData>
+    <decision id="RiskCategory" name="RiskCategory">
+        <variable name="RiskCategory" typeRef="string"/>
+        <informationRequirement><requiredInput href="#input_age"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_income"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_credit_score"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_employment"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_years"/></informationRequirement>
+        <decisionTable hitPolicy="FIRST">
+            <input><inputExpression typeRef="number"><text>age</text></inputExpression></input>
+            <input><inputExpression typeRef="number"><text>credit_score</text></inputExpression></input>
+            <input><inputExpression typeRef="number"><text>income</text></inputExpression></input>
+            <input><inputExpression typeRef="string"><text>employment_status</text></inputExpression></input>
+            <input><inputExpression typeRef="number"><text>years_employed</text></inputExpression></input>
+            <output name="RiskCategory" typeRef="string"/>
+            <rule>
+                <inputEntry><text>&lt; 18</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"ineligible"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>&gt;= 750</text></inputEntry>
+                <inputEntry><text>&gt;= 80000</text></inputEntry>
+                <inputEntry><text>"employed"</text></inputEntry>
+                <inputEntry><text>&gt;= 3</text></inputEntry>
+                <outputEntry><text>"low"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>[650..750)</text></inputEntry>
+                <inputEntry><text>&gt;= 50000</text></inputEntry>
+                <inputEntry><text>"employed","self-employed"</text></inputEntry>
+                <inputEntry><text>&gt;= 1</text></inputEntry>
+                <outputEntry><text>"medium"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>[650..750)</text></inputEntry>
+                <inputEntry><text>&lt; 50000</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"high"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>&lt; 650</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"very high"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>&gt;= 750</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"medium"</text></outputEntry>
+            </rule>
+        </decisionTable>
+    </decision>
+    <decision id="RiskScore" name="RiskScore">
+        <variable name="RiskScore" typeRef="number"/>
+        <informationRequirement><requiredDecision href="#RiskCategory"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_credit_score"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_income"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_years"/></informationRequirement>
+        <literalExpression>
+            <text>if RiskCategory = "ineligible" then 0
+            else if RiskCategory = "low" then credit_score * 0.5 + income / 1000 + years_employed * 10
+            else if RiskCategory = "medium" then credit_score * 0.3 + income / 2000 + years_employed * 5
+            else if RiskCategory = "high" then credit_score * 0.1 + income / 5000
+            else credit_score * 0.05</text>
+        </literalExpression>
+    </decision>
+</definitions>"##;
+
+    #[pg_test]
+    fn bench_dmn_eval_vs_pg_concat() {
+        if std::env::var("PGDMN_BENCH").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let escaped_concat = CONCAT_DMN.replace('\'', "''");
+        let escaped_risk = RISK_DMN.replace('\'', "''");
+
+        // Create a table with skewed duplication: 10,000 unique rows,
+        // then 100 of those get extra copies (1000, 500, 250, 125, and 50 each)
+        Spi::run(
+            "CREATE TABLE bench_names (\
+             first_name TEXT NOT NULL, last_name TEXT NOT NULL, \
+             age INT NOT NULL, income NUMERIC NOT NULL, credit_score INT NOT NULL, \
+             employment_status TEXT NOT NULL, years_employed INT NOT NULL)",
+        )
+        .expect("CREATE TABLE failed");
+
+        // Generate 10,000 unique rows (100 x 100) with varied extra columns
+        Spi::run(
+            "INSERT INTO bench_names (first_name, last_name, age, income, credit_score, employment_status, years_employed)
+             SELECT 'First_' || lpad(f.n::text, 3, '0'),
+                    'Last_' || lpad(l.n::text, 3, '0'),
+                    18 + ((f.n * 7 + l.n * 3) % 50),
+                    25000 + ((f.n * 13 + l.n * 17) % 100) * 1000,
+                    500 + ((f.n * 11 + l.n * 7) % 350),
+                    (ARRAY['employed','self-employed','unemployed','retired'])[1 + ((f.n + l.n) % 4)],
+                    ((f.n * 3 + l.n * 5) % 20)
+             FROM generate_series(1, 100) AS f(n)
+             CROSS JOIN generate_series(1, 100) AS l(n)",
+        )
+        .expect("base INSERT failed");
+
+        // Add skewed duplicates for the first 100 rows (first_name=First_001):
+        // row 1: 1000 copies, row 2: 500, row 3: 250, row 4: 125, rows 5-100: 50 each
+        for (last_n, copies) in [(1, 1000), (2, 500), (3, 250), (4, 125)] {
+            Spi::run(&format!(
+                "INSERT INTO bench_names (first_name, last_name, age, income, credit_score, employment_status, years_employed)
+                 SELECT b.first_name, b.last_name, b.age, b.income, b.credit_score, b.employment_status, b.years_employed
+                 FROM bench_names b, generate_series(1, {copies})
+                 WHERE b.first_name = 'First_001' AND b.last_name = 'Last_{last_n:03}'"
+            ))
+            .expect("skewed INSERT failed");
+        }
+        Spi::run(
+            "INSERT INTO bench_names (first_name, last_name, age, income, credit_score, employment_status, years_employed)
+             SELECT b.first_name, b.last_name, b.age, b.income, b.credit_score, b.employment_status, b.years_employed
+             FROM bench_names b, generate_series(5, 100) AS s(n), generate_series(1, 50)
+             WHERE b.first_name = 'First_001'
+               AND b.last_name = 'Last_' || lpad(s.n::text, 3, '0')",
+        )
+        .expect("bulk skewed INSERT failed");
+
+        let row_count = Spi::get_one::<i64>("SELECT count(*) FROM bench_names")
+            .expect("SPI failed")
+            .unwrap();
+        let distinct_count = Spi::get_one::<i64>(
+            "SELECT count(DISTINCT (first_name, last_name)) FROM bench_names",
+        )
+        .expect("SPI failed")
+        .unwrap();
+
+        // Warm all query paths before timing
+        Spi::run(&format!(
+            "SELECT dmn_eval(dmn_load('{escaped_concat}'), 'FullName', \
+             jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+             FROM bench_names LIMIT 1"
+        ))
+        .expect("DMN concat warmup failed");
+        Spi::run(
+            "SELECT (j->>'first_name') || ' ' || (j->>'last_name') \
+             FROM (SELECT jsonb_build_object('first_name', first_name, 'last_name', last_name) AS j \
+                   FROM bench_names LIMIT 1) t"
+        )
+        .expect("PG jsonb concat warmup failed");
+        Spi::run("SELECT first_name || ' ' || last_name FROM bench_names LIMIT 1")
+            .expect("PG plain concat warmup failed");
+        Spi::run(&format!(
+            "SELECT dmn_eval(dmn_load('{escaped_risk}'), 'RiskScore', \
+             jsonb_build_object('age', age, 'income', income, 'credit_score', credit_score, \
+             'employment_status', employment_status, 'years_employed', years_employed)) \
+             FROM bench_names LIMIT 1"
+        ))
+        .expect("DMN risk warmup failed");
+        Spi::run(
+            "SELECT CASE \
+               WHEN (j->>'age')::int < 18 THEN 0 \
+               WHEN (j->>'credit_score')::int >= 750 AND (j->>'income')::numeric >= 80000 \
+                    AND j->>'employment_status' = 'employed' AND (j->>'years_employed')::int >= 3 \
+                 THEN (j->>'credit_score')::int * 0.5 + (j->>'income')::numeric / 1000 + (j->>'years_employed')::int * 10 \
+               WHEN (j->>'credit_score')::int >= 650 AND (j->>'credit_score')::int < 750 \
+                    AND (j->>'income')::numeric >= 50000 \
+                    AND j->>'employment_status' IN ('employed','self-employed') AND (j->>'years_employed')::int >= 1 \
+                 THEN (j->>'credit_score')::int * 0.3 + (j->>'income')::numeric / 2000 + (j->>'years_employed')::int * 5 \
+               WHEN (j->>'credit_score')::int >= 650 AND (j->>'credit_score')::int < 750 \
+                    AND (j->>'income')::numeric < 50000 \
+                 THEN (j->>'credit_score')::int * 0.1 + (j->>'income')::numeric / 5000 \
+               WHEN (j->>'credit_score')::int < 650 THEN (j->>'credit_score')::int * 0.05 \
+               ELSE (j->>'credit_score')::int * 0.3 + (j->>'income')::numeric / 2000 + (j->>'years_employed')::int * 5 \
+             END \
+             FROM (SELECT jsonb_build_object('age', age, 'income', income, 'credit_score', credit_score, \
+                          'employment_status', employment_status, 'years_employed', years_employed) AS j \
+                   FROM bench_names LIMIT 1) t"
+        )
+        .expect("PG jsonb risk warmup failed");
+        Spi::run(
+            "SELECT CASE \
+               WHEN age < 18 THEN 0 \
+               WHEN credit_score >= 750 AND income >= 80000 \
+                    AND employment_status = 'employed' AND years_employed >= 3 \
+                 THEN credit_score * 0.5 + income / 1000 + years_employed * 10 \
+               WHEN credit_score >= 650 AND credit_score < 750 \
+                    AND income >= 50000 \
+                    AND employment_status IN ('employed','self-employed') AND years_employed >= 1 \
+                 THEN credit_score * 0.3 + income / 2000 + years_employed * 5 \
+               WHEN credit_score >= 650 AND credit_score < 750 \
+                    AND income < 50000 \
+                 THEN credit_score * 0.1 + income / 5000 \
+               WHEN credit_score < 650 THEN credit_score * 0.05 \
+               ELSE credit_score * 0.3 + income / 2000 + years_employed * 5 \
+             END FROM bench_names LIMIT 1"
+        )
+        .expect("PG plain risk warmup failed");
+
+        // --- Benchmark 1: simple concat ---
+        let dmn_concat_start = std::time::Instant::now();
+        Spi::run(&format!(
+            "SELECT dmn_eval(dmn_load('{escaped_concat}'), 'FullName', \
+             jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+             FROM bench_names"
+        ))
+        .expect("DMN concat query failed");
+        let dmn_concat_dur = dmn_concat_start.elapsed();
+
+        let pg_jsonb_concat_start = std::time::Instant::now();
+        Spi::run(
+            "SELECT (j->>'first_name') || ' ' || (j->>'last_name') \
+             FROM (SELECT jsonb_build_object('first_name', first_name, 'last_name', last_name) AS j \
+                   FROM bench_names) t",
+        )
+        .expect("PG jsonb concat query failed");
+        let pg_jsonb_concat_dur = pg_jsonb_concat_start.elapsed();
+
+        let pg_plain_concat_start = std::time::Instant::now();
+        Spi::run("SELECT first_name || ' ' || last_name FROM bench_names")
+            .expect("PG plain concat query failed");
+        let pg_plain_concat_dur = pg_plain_concat_start.elapsed();
+
+        // --- Benchmark 2: complex risk score ---
+        let dmn_risk_start = std::time::Instant::now();
+        Spi::run(&format!(
+            "SELECT dmn_eval(dmn_load('{escaped_risk}'), 'RiskScore', \
+             jsonb_build_object('age', age, 'income', income, 'credit_score', credit_score, \
+             'employment_status', employment_status, 'years_employed', years_employed)) \
+             FROM bench_names"
+        ))
+        .expect("DMN risk query failed");
+        let dmn_risk_dur = dmn_risk_start.elapsed();
+
+        let pg_jsonb_risk_start = std::time::Instant::now();
+        Spi::run(
+            "SELECT CASE \
+               WHEN (j->>'age')::int < 18 THEN 0 \
+               WHEN (j->>'credit_score')::int >= 750 AND (j->>'income')::numeric >= 80000 \
+                    AND j->>'employment_status' = 'employed' AND (j->>'years_employed')::int >= 3 \
+                 THEN (j->>'credit_score')::int * 0.5 + (j->>'income')::numeric / 1000 + (j->>'years_employed')::int * 10 \
+               WHEN (j->>'credit_score')::int >= 650 AND (j->>'credit_score')::int < 750 \
+                    AND (j->>'income')::numeric >= 50000 \
+                    AND j->>'employment_status' IN ('employed','self-employed') AND (j->>'years_employed')::int >= 1 \
+                 THEN (j->>'credit_score')::int * 0.3 + (j->>'income')::numeric / 2000 + (j->>'years_employed')::int * 5 \
+               WHEN (j->>'credit_score')::int >= 650 AND (j->>'credit_score')::int < 750 \
+                    AND (j->>'income')::numeric < 50000 \
+                 THEN (j->>'credit_score')::int * 0.1 + (j->>'income')::numeric / 5000 \
+               WHEN (j->>'credit_score')::int < 650 THEN (j->>'credit_score')::int * 0.05 \
+               ELSE (j->>'credit_score')::int * 0.3 + (j->>'income')::numeric / 2000 + (j->>'years_employed')::int * 5 \
+             END \
+             FROM (SELECT jsonb_build_object('age', age, 'income', income, 'credit_score', credit_score, \
+                          'employment_status', employment_status, 'years_employed', years_employed) AS j \
+                   FROM bench_names) t"
+        )
+        .expect("PG jsonb risk query failed");
+        let pg_jsonb_risk_dur = pg_jsonb_risk_start.elapsed();
+
+        let pg_plain_risk_start = std::time::Instant::now();
+        Spi::run(
+            "SELECT CASE \
+               WHEN age < 18 THEN 0 \
+               WHEN credit_score >= 750 AND income >= 80000 \
+                    AND employment_status = 'employed' AND years_employed >= 3 \
+                 THEN credit_score * 0.5 + income / 1000 + years_employed * 10 \
+               WHEN credit_score >= 650 AND credit_score < 750 \
+                    AND income >= 50000 \
+                    AND employment_status IN ('employed','self-employed') AND years_employed >= 1 \
+                 THEN credit_score * 0.3 + income / 2000 + years_employed * 5 \
+               WHEN credit_score >= 650 AND credit_score < 750 \
+                    AND income < 50000 \
+                 THEN credit_score * 0.1 + income / 5000 \
+               WHEN credit_score < 650 THEN credit_score * 0.05 \
+               ELSE credit_score * 0.3 + income / 2000 + years_employed * 5 \
+             END FROM bench_names"
+        )
+        .expect("PG plain risk query failed");
+        let pg_plain_risk_dur = pg_plain_risk_start.elapsed();
+
+        let rc = row_count as f64;
+
+        // Report results
+        let report = format!(
+            "Benchmark: {row_count} rows, {distinct_count} distinct input combos\n\
+             \n\
+             --- Simple (concat) ---\n\
+             DMN eval:        {:.1} us/row ({:?})\n\
+             PG via jsonb:    {:.1} us/row ({:?})\n\
+             PG plain SQL:    {:.1} us/row ({:?})\n\
+             DMN/jsonb:       {:.1}x | DMN/plain: {:.1}x | jsonb overhead: {:.1}x\n\
+             \n\
+             --- Complex (risk score) ---\n\
+             DMN eval:        {:.1} us/row ({:?})\n\
+             PG via jsonb:    {:.1} us/row ({:?})\n\
+             PG plain SQL:    {:.1} us/row ({:?})\n\
+             DMN/jsonb:       {:.1}x | DMN/plain: {:.1}x | jsonb overhead: {:.1}x\n\
+             \n\
+             Complex/Simple DMN: {:.1}x",
+            dmn_concat_dur.as_micros() as f64 / rc, dmn_concat_dur,
+            pg_jsonb_concat_dur.as_micros() as f64 / rc, pg_jsonb_concat_dur,
+            pg_plain_concat_dur.as_micros() as f64 / rc, pg_plain_concat_dur,
+            dmn_concat_dur.as_secs_f64() / pg_jsonb_concat_dur.as_secs_f64(),
+            dmn_concat_dur.as_secs_f64() / pg_plain_concat_dur.as_secs_f64(),
+            pg_jsonb_concat_dur.as_secs_f64() / pg_plain_concat_dur.as_secs_f64(),
+            dmn_risk_dur.as_micros() as f64 / rc, dmn_risk_dur,
+            pg_jsonb_risk_dur.as_micros() as f64 / rc, pg_jsonb_risk_dur,
+            pg_plain_risk_dur.as_micros() as f64 / rc, pg_plain_risk_dur,
+            dmn_risk_dur.as_secs_f64() / pg_jsonb_risk_dur.as_secs_f64(),
+            dmn_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
+            pg_jsonb_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
+            dmn_risk_dur.as_secs_f64() / dmn_concat_dur.as_secs_f64(),
+        );
+        if let Err(e) = std::fs::write("/pgdmn/benchmark_results.txt", &report) {
+            pgrx::warning!("Failed to write benchmark_results.txt: {}", e);
+        }
+        pgrx::warning!("{}", report);
+
+        // Sanity check: concat produces matching results
+        let mismatches = Spi::get_one::<i64>(&format!(
+            "SELECT count(*) FROM bench_names \
+             WHERE (dmn_eval(dmn_load('{escaped_concat}'), 'FullName', \
+                    jsonb_build_object('first_name', first_name, 'last_name', last_name))) #>> '{{}}' \
+                   <> (jsonb_build_object('first_name', first_name, 'last_name', last_name)->>'first_name') \
+                      || ' ' || \
+                      (jsonb_build_object('first_name', first_name, 'last_name', last_name)->>'last_name')"
+        ))
+        .expect("SPI failed")
+        .unwrap();
+        assert_eq!(mismatches, 0, "DMN and PG concat produced different results");
+    }
+
     #[pg_test]
     fn test_cache_different_models_independent() {
         let model_a = SIMPLE_DMN;
