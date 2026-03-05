@@ -22,9 +22,9 @@ SELECT dmn_eval(
 
 ## DMN Functions
 
-### dmn_load(xml) -> DmnModel
+### dmn_load(xml) -> dmnmodel
 
-Parse DMN XML into a `DmnModel` value. This is the entry point for all DMN operations.
+Parse DMN XML into a `dmnmodel` value. This is the entry point for all DMN operations.
 
 ```sql
 SELECT dmn_load('<?xml version="1.0" encoding="UTF-8"?>
@@ -43,7 +43,7 @@ SELECT dmn_load('<?xml version="1.0" encoding="UTF-8"?>
 The display format is `namespace::name`. The model can be stored in a column for reuse:
 
 ```sql
-CREATE TABLE models (model DmnModel);
+CREATE TABLE models (model dmnmodel);
 INSERT INTO models VALUES (dmn_load('<your DMN XML>'));
 ```
 
@@ -114,7 +114,7 @@ SELECT dmn_info(dmn_load('...'));
 
 ### dmn_xml(model) -> text
 
-Extract the raw XML source from a `DmnModel`.
+Extract the raw XML source from a DMN model.
 
 ```sql
 SELECT dmn_xml(dmn_load('<definitions ...>...</definitions>'));
