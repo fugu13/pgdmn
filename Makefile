@@ -1,4 +1,4 @@
-.PHONY: base-image test-image check test clean
+.PHONY: base-image test-image check test bench clean
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -17,6 +17,11 @@ check: test-image
 # Run the pgrx test suite against PG17
 test: test-image
 	$(DOCKER_RUN) cargo pgrx test pg17
+
+# Run DMN eval benchmark and print results
+bench: test-image
+	$(DOCKER_RUN) cargo pgrx test pg17 -- bench_dmn_eval_vs_pg_concat
+	@cat benchmark_results.txt 2>/dev/null
 
 # Remove build artifacts
 clean:

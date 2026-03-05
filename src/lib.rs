@@ -212,6 +212,115 @@ mod tests {
         );
     }
 
+    // DMN model that concatenates first_name and last_name with a space
+    const CONCAT_DMN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="concat_decision"
+             name="ConcatDecision"
+             namespace="https://example.org/concat">
+    <decision id="FullName" name="FullName">
+        <variable name="FullName" typeRef="string"/>
+        <informationRequirement>
+            <requiredInput href="#input_first_name"/>
+        </informationRequirement>
+        <informationRequirement>
+            <requiredInput href="#input_last_name"/>
+        </informationRequirement>
+        <literalExpression>
+            <text>first_name + " " + last_name</text>
+        </literalExpression>
+    </decision>
+    <inputData id="input_first_name" name="first_name">
+        <variable name="first_name" typeRef="string"/>
+    </inputData>
+    <inputData id="input_last_name" name="last_name">
+        <variable name="last_name" typeRef="string"/>
+    </inputData>
+</definitions>"##;
+
+    #[pg_test]
+    fn bench_dmn_eval_vs_pg_concat() {
+        let escaped = CONCAT_DMN.replace('\'', "''");
+
+        // Create a table with a mix of repeated and unique values
+        Spi::run(
+            "CREATE TABLE bench_names (first_name TEXT NOT NULL, last_name TEXT NOT NULL)",
+        )
+        .expect("CREATE TABLE failed");
+
+        // Insert 1000 rows: 10 distinct first names x 10 distinct last names = 100 combos,
+        // each repeated 10 times, giving a realistic mix of cache hits
+        Spi::run(
+            "INSERT INTO bench_names (first_name, last_name)
+             SELECT first_names.n, last_names.n
+             FROM unnest(ARRAY['Alice','Bob','Carol','Dave','Eve',
+                               'Frank','Grace','Heidi','Ivan','Judy']) AS first_names(n)
+             CROSS JOIN unnest(ARRAY['Smith','Jones','Brown','Davis','Miller',
+                                     'Wilson','Moore','Taylor','Anderson','Thomas']) AS last_names(n)
+             CROSS JOIN generate_series(1, 10)",
+        )
+        .expect("INSERT failed");
+
+        let row_count = Spi::get_one::<i64>("SELECT count(*) FROM bench_names")
+            .expect("SPI failed")
+            .unwrap();
+        assert_eq!(row_count, 1000);
+
+        // Warm the cache with one call
+        Spi::run(&format!(
+            "SELECT dmn_eval(dmn_load('{escaped}'), 'FullName', \
+             jsonb_build_object('first_name', 'warmup', 'last_name', 'warmup'))"
+        ))
+        .expect("warmup failed");
+
+        // Benchmark: DMN evaluation over the table
+        let dmn_start = std::time::Instant::now();
+        Spi::run(&format!(
+            "SELECT dmn_eval(dmn_load('{escaped}'), 'FullName', \
+             jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+             FROM bench_names"
+        ))
+        .expect("DMN eval query failed");
+        let dmn_duration = dmn_start.elapsed();
+
+        // Benchmark: equivalent PostgreSQL concat expression
+        let pg_start = std::time::Instant::now();
+        Spi::run(
+            "SELECT first_name || ' ' || last_name FROM bench_names",
+        )
+        .expect("PG concat query failed");
+        let pg_duration = pg_start.elapsed();
+
+        let ratio = dmn_duration.as_secs_f64() / pg_duration.as_secs_f64();
+
+        // Report results
+        let report = format!(
+            "Benchmark: 1000 rows, 100 distinct input combos\n\
+             DMN eval:  {:.1} us/row ({:?} total)\n\
+             PG concat: {:.1} us/row ({:?} total)\n\
+             Ratio:     {:.1}x",
+            dmn_duration.as_micros() as f64 / row_count as f64,
+            dmn_duration,
+            pg_duration.as_micros() as f64 / row_count as f64,
+            pg_duration,
+            ratio,
+        );
+        // Write to mounted volume so results are visible on the host
+        std::fs::write("/pgdmn/benchmark_results.txt", &report).ok();
+        pgrx::warning!("{}", report);
+
+        // Sanity check: both approaches produce the same results
+        let mismatches = Spi::get_one::<i64>(&format!(
+            "SELECT count(*) FROM bench_names \
+             WHERE (dmn_eval(dmn_load('{escaped}'), 'FullName', \
+                    jsonb_build_object('first_name', first_name, 'last_name', last_name)))->>0 \
+                   <> first_name || ' ' || last_name"
+        ))
+        .expect("SPI failed")
+        .unwrap();
+        assert_eq!(mismatches, 0, "DMN and PG concat produced different results");
+    }
+
     #[pg_test]
     fn test_cache_different_models_independent() {
         let model_a = SIMPLE_DMN;
