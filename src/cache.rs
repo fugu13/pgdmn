@@ -1,29 +1,22 @@
 use std::cell::RefCell;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use dsntk_model_evaluator::ModelEvaluator;
 
-thread_local! {
-    static EVALUATOR_CACHE: RefCell<HashMap<u64, Arc<ModelEvaluator>>> = RefCell::new(HashMap::new());
-}
+type RapidBuildHasher = std::hash::BuildHasherDefault<rapidhash::RapidInlineHasher>;
 
-fn hash_xml(xml: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    xml.hash(&mut hasher);
-    hasher.finish()
+thread_local! {
+    static EVALUATOR_CACHE: RefCell<HashMap<String, Arc<ModelEvaluator>, RapidBuildHasher>> =
+        RefCell::new(HashMap::with_hasher(RapidBuildHasher::default()));
 }
 
 /// Get or create a ModelEvaluator for the given XML content.
 pub fn get_or_build_evaluator(
     xml: &str,
 ) -> Result<Arc<ModelEvaluator>, String> {
-    let key = hash_xml(xml);
-
     // Check cache first
-    let cached = EVALUATOR_CACHE.with(|cache| cache.borrow().get(&key).cloned());
+    let cached = EVALUATOR_CACHE.with(|cache| cache.borrow().get(xml).cloned());
     if let Some(evaluator) = cached {
         return Ok(evaluator);
     }
@@ -36,7 +29,7 @@ pub fn get_or_build_evaluator(
 
     // Cache it
     EVALUATOR_CACHE.with(|cache| {
-        cache.borrow_mut().insert(key, Arc::clone(&evaluator));
+        cache.borrow_mut().insert(xml.to_owned(), Arc::clone(&evaluator));
     });
 
     Ok(evaluator)
