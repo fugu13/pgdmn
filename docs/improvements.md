@@ -22,7 +22,7 @@ Status key: NOT STARTED | INVESTIGATING | VIABLE | NOT VIABLE | NEEDS PROTOTYPE
 
 | ID | Approach | Status | Plausibility |
 |----|----------|--------|-------------|
-| A  | Composite type (RECORD) via PgHeapTuple | INVESTIGATING | High |
+| A  | Composite type (RECORD) via PgHeapTuple | IMPLEMENTED | High |
 | B  | Direct Datum-to-FEEL conversion (keep JSONB, skip serde_json) | NOT STARTED | High |
 | C  | SPI batch table function | NOT STARTED | Medium |
 | D  | Individual typed parameters with codegen | NOT STARTED | Medium |
@@ -34,7 +34,9 @@ Status key: NOT STARTED | INVESTIGATING | VIABLE | NOT VIABLE | NEEDS PROTOTYPE
 
 ## Investigation A: Composite Type (RECORD) via PgHeapTuple
 
-**Status: VIABLE**
+**Status: IMPLEMENTED**
+
+Implemented as `dmn_eval_record` and `feel_eval_record` functions that accept `composite_type!("record")`. Conversion logic is in `convert.rs` via `pg_datum_to_feel` and `tuple_to_context`. Supported PG types: bool, int2/4/8, float4/8, numeric, text, varchar, date, timestamp, interval. Mixed intervals (both months and days/micros) error. Callers must cast via a named type for meaningful field names.
 
 ### Concept
 

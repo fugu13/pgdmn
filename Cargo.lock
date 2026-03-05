@@ -1354,6 +1354,7 @@ dependencies = [
  "dsntk-feel",
  "dsntk-feel-evaluator",
  "dsntk-feel-parser",
+ "dsntk-feel-temporal",
  "dsntk-model",
  "dsntk-model-evaluator",
  "pgrx",

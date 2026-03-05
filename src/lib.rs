@@ -667,6 +667,12 @@ mod tests {
         .expect("SPI failed")
         .unwrap();
 
+        // Create composite types for record-based evaluation
+        Spi::run("CREATE TYPE concat_input AS (first_name text, last_name text)")
+            .expect("CREATE TYPE concat_input failed");
+        Spi::run("CREATE TYPE risk_input AS (age int, income numeric, credit_score int, employment_status text, years_employed int)")
+            .expect("CREATE TYPE risk_input failed");
+
         // Warm all query paths before timing
         Spi::run(&format!(
             "SELECT dmn_eval(dmn_load('{escaped_concat}'), 'FullName', \
@@ -728,6 +734,18 @@ mod tests {
              END FROM bench_names LIMIT 1"
         )
         .expect("PG plain risk warmup failed");
+        Spi::run(&format!(
+            "SELECT dmn_eval_record(dmn_load('{escaped_concat}'), 'FullName', \
+             ROW(first_name, last_name)::concat_input) \
+             FROM bench_names LIMIT 1"
+        ))
+        .expect("DMN record concat warmup failed");
+        Spi::run(&format!(
+            "SELECT dmn_eval_record(dmn_load('{escaped_risk}'), 'RiskScore', \
+             ROW(age, income, credit_score, employment_status, years_employed)::risk_input) \
+             FROM bench_names LIMIT 1"
+        ))
+        .expect("DMN record risk warmup failed");
 
         // --- Benchmark 1: simple concat ---
         let dmn_concat_start = std::time::Instant::now();
@@ -752,6 +770,15 @@ mod tests {
         Spi::run("SELECT first_name || ' ' || last_name FROM bench_names")
             .expect("PG plain concat query failed");
         let pg_plain_concat_dur = pg_plain_concat_start.elapsed();
+
+        let dmn_record_concat_start = std::time::Instant::now();
+        Spi::run(&format!(
+            "SELECT dmn_eval_record(dmn_load('{escaped_concat}'), 'FullName', \
+             ROW(first_name, last_name)::concat_input) \
+             FROM bench_names"
+        ))
+        .expect("DMN record concat query failed");
+        let dmn_record_concat_dur = dmn_record_concat_start.elapsed();
 
         // --- Benchmark 2: complex risk score ---
         let dmn_risk_start = std::time::Instant::now();
@@ -809,6 +836,15 @@ mod tests {
         .expect("PG plain risk query failed");
         let pg_plain_risk_dur = pg_plain_risk_start.elapsed();
 
+        let dmn_record_risk_start = std::time::Instant::now();
+        Spi::run(&format!(
+            "SELECT dmn_eval_record(dmn_load('{escaped_risk}'), 'RiskScore', \
+             ROW(age, income, credit_score, employment_status, years_employed)::risk_input) \
+             FROM bench_names"
+        ))
+        .expect("DMN record risk query failed");
+        let dmn_record_risk_dur = dmn_record_risk_start.elapsed();
+
         let rc = row_count as f64;
 
         // Report results
@@ -816,30 +852,34 @@ mod tests {
             "Benchmark: {row_count} rows, {distinct_count} distinct input combos\n\
              \n\
              --- Simple (concat) ---\n\
-             DMN eval:        {:.1} us/row ({:?})\n\
+             DMN jsonb:       {:.1} us/row ({:?})\n\
+             DMN record:      {:.1} us/row ({:?})\n\
              PG via jsonb:    {:.1} us/row ({:?})\n\
              PG plain SQL:    {:.1} us/row ({:?})\n\
-             DMN/jsonb:       {:.1}x | DMN/plain: {:.1}x | jsonb overhead: {:.1}x\n\
+             record/jsonb:    {:.2}x | DMN jsonb/plain: {:.1}x | DMN record/plain: {:.1}x\n\
              \n\
              --- Complex (risk score) ---\n\
-             DMN eval:        {:.1} us/row ({:?})\n\
+             DMN jsonb:       {:.1} us/row ({:?})\n\
+             DMN record:      {:.1} us/row ({:?})\n\
              PG via jsonb:    {:.1} us/row ({:?})\n\
              PG plain SQL:    {:.1} us/row ({:?})\n\
-             DMN/jsonb:       {:.1}x | DMN/plain: {:.1}x | jsonb overhead: {:.1}x\n\
+             record/jsonb:    {:.2}x | DMN jsonb/plain: {:.1}x | DMN record/plain: {:.1}x\n\
              \n\
              Complex/Simple DMN: {:.1}x",
             dmn_concat_dur.as_micros() as f64 / rc, dmn_concat_dur,
+            dmn_record_concat_dur.as_micros() as f64 / rc, dmn_record_concat_dur,
             pg_jsonb_concat_dur.as_micros() as f64 / rc, pg_jsonb_concat_dur,
             pg_plain_concat_dur.as_micros() as f64 / rc, pg_plain_concat_dur,
-            dmn_concat_dur.as_secs_f64() / pg_jsonb_concat_dur.as_secs_f64(),
+            dmn_record_concat_dur.as_secs_f64() / dmn_concat_dur.as_secs_f64(),
             dmn_concat_dur.as_secs_f64() / pg_plain_concat_dur.as_secs_f64(),
-            pg_jsonb_concat_dur.as_secs_f64() / pg_plain_concat_dur.as_secs_f64(),
+            dmn_record_concat_dur.as_secs_f64() / pg_plain_concat_dur.as_secs_f64(),
             dmn_risk_dur.as_micros() as f64 / rc, dmn_risk_dur,
+            dmn_record_risk_dur.as_micros() as f64 / rc, dmn_record_risk_dur,
             pg_jsonb_risk_dur.as_micros() as f64 / rc, pg_jsonb_risk_dur,
             pg_plain_risk_dur.as_micros() as f64 / rc, pg_plain_risk_dur,
-            dmn_risk_dur.as_secs_f64() / pg_jsonb_risk_dur.as_secs_f64(),
+            dmn_record_risk_dur.as_secs_f64() / dmn_risk_dur.as_secs_f64(),
             dmn_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
-            pg_jsonb_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
+            dmn_record_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
             dmn_risk_dur.as_secs_f64() / dmn_concat_dur.as_secs_f64(),
         );
         if let Err(e) = std::fs::write("/pgdmn/benchmark_results.txt", &report) {
@@ -859,6 +899,76 @@ mod tests {
         .expect("SPI failed")
         .unwrap();
         assert_eq!(mismatches, 0, "DMN and PG concat produced different results");
+    }
+
+    // --- Record-based evaluation tests ---
+
+    #[pg_test]
+    fn test_feel_eval_record_basic() {
+        Spi::run("CREATE TYPE feel_rec_basic AS (x int, y int)").expect("CREATE TYPE failed");
+        let result = Spi::get_one::<pgrx::JsonB>(
+            "SELECT feel_eval_record('x + y', ROW(3, 4)::feel_rec_basic)",
+        )
+        .expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!(7));
+    }
+
+    #[pg_test]
+    fn test_feel_eval_record_text() {
+        Spi::run("CREATE TYPE feel_rec_text AS (greeting text)").expect("CREATE TYPE failed");
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"SELECT feel_eval_record('greeting + " world"', ROW('hello')::feel_rec_text)"#,
+        )
+        .expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!("hello world"));
+    }
+
+    #[pg_test]
+    fn test_feel_eval_record_numeric() {
+        Spi::run("CREATE TYPE feel_rec_num AS (val numeric)").expect("CREATE TYPE failed");
+        let result = Spi::get_one::<pgrx::JsonB>(
+            "SELECT feel_eval_record('val * 3', ROW(1234567890.123456789::numeric)::feel_rec_num)",
+        )
+        .expect("SPI failed");
+        let v = result.unwrap().0;
+        let s = v.to_string();
+        assert!(s.starts_with("3703703670.3703"), "unexpected numeric result: {s}");
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_record_decision_table() {
+        let escaped = DECISION_TABLE_DMN.replace('\'', "''");
+        Spi::run("CREATE TYPE loan_input AS (\"Age\" int, \"Income\" numeric)")
+            .expect("CREATE TYPE failed");
+        let query = format!(
+            "SELECT dmn_eval_record(dmn_load('{escaped}'), 'Eligibility', \
+             ROW(30, 75000::numeric)::loan_input)"
+        );
+        let result = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!("Approved"));
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_record_null_input() {
+        let escaped = SIMPLE_DMN.replace('\'', "''");
+        let query = format!(
+            "SELECT dmn_eval_record(dmn_load('{escaped}'), 'Greeting', NULL)"
+        );
+        let result = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!("Hello, World!"));
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_record_multi_decision() {
+        let escaped = MULTI_DECISION_DMN.replace('\'', "''");
+        Spi::run("CREATE TYPE multi_input AS (\"Base Price\" numeric, \"Tax Rate\" numeric)")
+            .expect("CREATE TYPE failed");
+        let query = format!(
+            "SELECT dmn_eval_record(dmn_load('{escaped}'), 'Total Price', \
+             ROW(100::numeric, 0.2::numeric)::multi_input)"
+        );
+        let result = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!(120));
     }
 
     #[pg_test]
