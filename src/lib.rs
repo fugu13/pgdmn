@@ -177,6 +177,80 @@ mod tests {
         assert_eq!(info["name"], "SimpleDecisions");
         assert_eq!(info["decisions"], 1);
     }
+
+    #[pg_test]
+    fn test_cache_speeds_up_repeated_eval() {
+        let escaped = SIMPLE_DMN.replace('\'', "''");
+        let query = format!(
+            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')",
+            escaped
+        );
+
+        // Cold call: first evaluation parses XML and builds evaluator
+        let cold_start = std::time::Instant::now();
+        let _ = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+        let cold_duration = cold_start.elapsed();
+
+        // Warm calls: subsequent evaluations use cached evaluator
+        let iterations = 100;
+        let warm_start = std::time::Instant::now();
+        for _ in 0..iterations {
+            let _ = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+        }
+        let warm_duration = warm_start.elapsed();
+        let warm_avg = warm_duration / iterations;
+
+        // Cached evaluation should be at least 2x faster than cold
+        assert!(
+            warm_avg < cold_duration / 2,
+            "Cache did not provide expected speedup: cold={cold_duration:?}, warm_avg={warm_avg:?}"
+        );
+    }
+
+    #[pg_test]
+    fn test_cache_different_models_independent() {
+        let model_a = SIMPLE_DMN;
+        let model_b = SIMPLE_DMN.replace("SimpleDecisions", "OtherModel")
+            .replace("https://example.org/simple", "https://example.org/other");
+
+        let escaped_a = model_a.replace('\'', "''");
+        let escaped_b = model_b.replace('\'', "''");
+
+        // Load model A (cold)
+        let cold_a_start = std::time::Instant::now();
+        let _ = Spi::get_one::<pgrx::JsonB>(&format!(
+            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_a
+        )).expect("SPI failed");
+        let cold_a = cold_a_start.elapsed();
+
+        // Load model B (cold — different XML, not cached)
+        let cold_b_start = std::time::Instant::now();
+        let _ = Spi::get_one::<pgrx::JsonB>(&format!(
+            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_b
+        )).expect("SPI failed");
+        let cold_b = cold_b_start.elapsed();
+
+        // Model A again (warm — should be cached)
+        let warm_a_start = std::time::Instant::now();
+        let _ = Spi::get_one::<pgrx::JsonB>(&format!(
+            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_a
+        )).expect("SPI failed");
+        let warm_a = warm_a_start.elapsed();
+
+        // Warm A should be significantly faster than cold A
+        assert!(
+            warm_a < cold_a / 2,
+            "Model A was not faster on second call: cold={cold_a:?}, warm={warm_a:?}"
+        );
+
+        // Cold B should be comparable to cold A (both require parsing),
+        // not dramatically faster (which would indicate false cache hit)
+        // We just check B also took non-trivial time relative to warm A
+        assert!(
+            cold_b > warm_a,
+            "Model B first call was suspiciously fast — may be a false cache hit: cold_b={cold_b:?}, warm_a={warm_a:?}"
+        );
+    }
 }
 
 #[cfg(test)]
