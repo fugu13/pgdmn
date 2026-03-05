@@ -506,36 +506,59 @@ mod tests {
     fn bench_dmn_eval_vs_pg_concat() {
         let escaped = CONCAT_DMN.replace('\'', "''");
 
-        // Create a table with a mix of repeated and unique values
+        // Create a table with skewed duplication: 10,000 unique rows,
+        // then 100 of those get extra copies (1000, 500, 250, 125, and 50 each)
         Spi::run(
             "CREATE TABLE bench_names (first_name TEXT NOT NULL, last_name TEXT NOT NULL)",
         )
         .expect("CREATE TABLE failed");
 
-        // Insert 1000 rows: 10 distinct first names x 10 distinct last names = 100 combos,
-        // each repeated 10 times, giving a realistic mix of cache hits
+        // Generate 10,000 unique name pairs (100 x 100)
         Spi::run(
             "INSERT INTO bench_names (first_name, last_name)
-             SELECT first_names.n, last_names.n
-             FROM unnest(ARRAY['Alice','Bob','Carol','Dave','Eve',
-                               'Frank','Grace','Heidi','Ivan','Judy']) AS first_names(n)
-             CROSS JOIN unnest(ARRAY['Smith','Jones','Brown','Davis','Miller',
-                                     'Wilson','Moore','Taylor','Anderson','Thomas']) AS last_names(n)
-             CROSS JOIN generate_series(1, 10)",
+             SELECT 'First_' || lpad(f.n::text, 3, '0'),
+                    'Last_' || lpad(l.n::text, 3, '0')
+             FROM generate_series(1, 100) AS f(n)
+             CROSS JOIN generate_series(1, 100) AS l(n)",
         )
-        .expect("INSERT failed");
+        .expect("base INSERT failed");
+
+        // Add skewed duplicates for the first 100 rows (first_name=First_001):
+        // row 1: 1000 copies, row 2: 500, row 3: 250, row 4: 125, rows 5-100: 50 each
+        for (last_n, copies) in [(1, 1000), (2, 500), (3, 250), (4, 125)] {
+            Spi::run(&format!(
+                "INSERT INTO bench_names (first_name, last_name)
+                 SELECT 'First_001', 'Last_{last_n:03}'
+                 FROM generate_series(1, {copies})"
+            ))
+            .expect("skewed INSERT failed");
+        }
+        Spi::run(
+            "INSERT INTO bench_names (first_name, last_name)
+             SELECT 'First_001', 'Last_' || lpad(n::text, 3, '0')
+             FROM generate_series(5, 100) AS s(n)
+             CROSS JOIN generate_series(1, 50)",
+        )
+        .expect("bulk skewed INSERT failed");
 
         let row_count = Spi::get_one::<i64>("SELECT count(*) FROM bench_names")
             .expect("SPI failed")
             .unwrap();
-        assert_eq!(row_count, 1000);
+        let distinct_count = Spi::get_one::<i64>(
+            "SELECT count(DISTINCT (first_name, last_name)) FROM bench_names",
+        )
+        .expect("SPI failed")
+        .unwrap();
 
-        // Warm the cache with one call
+        // Warm both query paths before timing
         Spi::run(&format!(
             "SELECT dmn_eval(dmn_load('{escaped}'), 'FullName', \
-             jsonb_build_object('first_name', 'warmup', 'last_name', 'warmup'))"
+             jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+             FROM bench_names LIMIT 1"
         ))
-        .expect("warmup failed");
+        .expect("DMN warmup failed");
+        Spi::run("SELECT first_name || ' ' || last_name FROM bench_names LIMIT 1")
+            .expect("PG warmup failed");
 
         // Benchmark: DMN evaluation over the table
         let dmn_start = std::time::Instant::now();
@@ -559,7 +582,7 @@ mod tests {
 
         // Report results
         let report = format!(
-            "Benchmark: 1000 rows, 100 distinct input combos\n\
+            "Benchmark: {row_count} rows, {distinct_count} distinct input combos\n\
              DMN eval:  {:.1} us/row ({:?} total)\n\
              PG concat: {:.1} us/row ({:?} total)\n\
              Ratio:     {:.1}x",
@@ -569,15 +592,16 @@ mod tests {
             pg_duration,
             ratio,
         );
-        // Write to mounted volume so results are visible on the host
-        std::fs::write("/pgdmn/benchmark_results.txt", &report).ok();
+        if let Err(e) = std::fs::write("/pgdmn/benchmark_results.txt", &report) {
+            pgrx::warning!("Failed to write benchmark_results.txt: {}", e);
+        }
         pgrx::warning!("{}", report);
 
         // Sanity check: both approaches produce the same results
         let mismatches = Spi::get_one::<i64>(&format!(
             "SELECT count(*) FROM bench_names \
              WHERE (dmn_eval(dmn_load('{escaped}'), 'FullName', \
-                    jsonb_build_object('first_name', first_name, 'last_name', last_name)))->>0 \
+                    jsonb_build_object('first_name', first_name, 'last_name', last_name))) #>> '{{}}' \
                    <> first_name || ' ' || last_name"
         ))
         .expect("SPI failed")
