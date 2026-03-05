@@ -16,7 +16,7 @@ pub fn get_or_build_evaluator(
     xml: &str,
 ) -> Result<Arc<ModelEvaluator>, String> {
     // Check cache first
-    let cached = EVALUATOR_CACHE.with(|cache| cache.borrow().get(xml).cloned());
+    let cached = EVALUATOR_CACHE.with_borrow(|cache| cache.get(xml).cloned());
     if let Some(evaluator) = cached {
         return Ok(evaluator);
     }
@@ -28,8 +28,8 @@ pub fn get_or_build_evaluator(
         .map_err(|e| format!("failed to build model evaluator: {}", e))?;
 
     // Cache it
-    EVALUATOR_CACHE.with(|cache| {
-        cache.borrow_mut().insert(xml.to_owned(), Arc::clone(&evaluator));
+    EVALUATOR_CACHE.with_borrow_mut(|cache| {
+        cache.insert(xml.to_owned(), Arc::clone(&evaluator));
     });
 
     Ok(evaluator)
