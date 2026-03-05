@@ -49,6 +49,10 @@ Check compilation:
 docker run --rm -e USER=pgdmn -v "$(pwd)":/pgdmn -w /pgdmn pgdmn-test cargo check
 ```
 
+## README.md
+
+The README.md contains a quick start guide and an example for every SQL function. **Always** update README.md when adding, removing, renaming, or changing the signature of any SQL function. Keep examples accurate and working.
+
 ## Key Conventions
 
 - No LTO in dev profile (causes ICE on Rust 1.85/aarch64)
