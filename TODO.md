@@ -33,9 +33,9 @@ Compares the input and output definitions of a named invocable across a new mode
 - Whether to support checking multiple invocables in one call or keep it single-invocable
 - How to handle invocables that exist in one model but not the other (report as incompatible vs. skip with warning)
 
-### FEAT-003: SQL syntax highlighting in code blocks
+### FEAT-003: Syntax highlighting in code blocks
 
-Add syntax highlighting for SQL code examples on the website. Evaluate Rust-side highlighting (e.g. syntect) vs client-side (Prism.js or similar) and choose based on SSR compatibility and bundle size.
+Add syntax highlighting for SQL and DMN (XML) code examples on the website. Evaluate Rust-side highlighting (e.g. syntect) vs client-side (Prism.js or similar) and choose based on SSR compatibility and bundle size. The SqlBlock component should accept a language parameter to select the grammar.
 
 ### FEAT-004: Markdown-based blog infrastructure
 
