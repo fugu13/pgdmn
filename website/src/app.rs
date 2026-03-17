@@ -41,9 +41,9 @@ pub fn App() -> impl IntoView {
     view! {
         <Stylesheet id="leptos" href="/pkg/pgdmn-website.css"/>
         <Title text="pgdmn — DMN for PostgreSQL"/>
-        <SkipLink/>
-        <Header/>
         <Router>
+            <SkipLink/>
+            <Header/>
             <main id="main-content">
                 <Routes fallback=|| view! { <NotFoundPage/> }>
                     <Route path=StaticSegment("") view=HomePage/>
@@ -53,7 +53,7 @@ pub fn App() -> impl IntoView {
                     <Route path=StaticSegment(routes::BLOG) view=BlogPage/>
                 </Routes>
             </main>
+            <Footer/>
         </Router>
-        <Footer/>
     }
 }
