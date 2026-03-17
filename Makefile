@@ -1,4 +1,4 @@
-.PHONY: base-image test-image check test bench clean website website-dev website-build website-serve
+.PHONY: base-image test-image check test bench clean website website-dev website-build website-serve website-clean
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -30,6 +30,10 @@ bench: test-image
 # Remove build artifacts
 clean:
 	rm -rf target/
+
+# Remove website build artifacts
+website-clean:
+	rm -rf $(WEBSITE_TARGET_DIR)
 
 # Run the website dev server with hot-reload
 website-dev:
