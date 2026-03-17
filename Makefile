@@ -1,4 +1,4 @@
-.PHONY: base-image test-image check test bench clean website-dev website-build website-serve website-open
+.PHONY: base-image test-image check test bench clean website website-dev website-build website-serve
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -39,6 +39,7 @@ website-build:
 website-serve:
 	cd website && ./target/release/pgdmn-website
 
-# Open the website in the default browser
-website-open:
+# Open the website in the browser and start the dev server
+website:
 	open http://127.0.0.1:3000
+	cd website && cargo leptos watch
