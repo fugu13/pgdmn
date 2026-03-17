@@ -1,0 +1,202 @@
+:root {
+  --color-bg: #fafafa;
+  --color-text: #1a1a2e;
+  --color-primary: #336791;
+  --color-surface: #ffffff;
+  --color-border: #dde1e6;
+  --color-muted: #6b7280;
+  --color-code-bg: #f3f4f6;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+  --max-width: 64rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.6;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+// Skip link
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  background: var(--color-primary);
+  color: #fff;
+
+  &:focus {
+    left: 0;
+  }
+}
+
+// Header & nav
+.site-header {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.75rem 1.5rem;
+}
+
+.site-header-inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.site-logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.site-nav {
+  display: flex;
+  gap: 1.25rem;
+  list-style: none;
+
+  a {
+    color: var(--color-text);
+    text-decoration: none;
+    font-size: 0.95rem;
+
+    &:hover,
+    &:focus {
+      color: var(--color-primary);
+    }
+  }
+}
+
+// Main content
+main {
+  flex: 1;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  width: 100%;
+}
+
+// Footer
+.site-footer {
+  border-top: 1px solid var(--color-border);
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+
+  a {
+    color: var(--color-primary);
+    text-decoration: none;
+
+    &:hover,
+    &:focus {
+      text-decoration: underline;
+    }
+  }
+}
+
+// Page headings
+h1 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 1.5rem;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+p {
+  margin-bottom: 1rem;
+}
+
+// SQL code block
+.sql-block {
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    white-space: pre;
+    line-height: 1.5;
+  }
+}
+
+// Hero section
+.hero {
+  text-align: center;
+  padding: 3rem 0 2rem;
+
+  h1 {
+    font-size: 2.5rem;
+  }
+
+  .tagline {
+    font-size: 1.25rem;
+    color: var(--color-muted);
+    margin-bottom: 2rem;
+  }
+}
+
+// Card grid (examples page)
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+
+  h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+  }
+
+  p {
+    color: var(--color-muted);
+    font-size: 0.95rem;
+  }
+}
+
+// Placeholder notice
+.placeholder-notice {
+  background: var(--color-code-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: 0.5rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+}

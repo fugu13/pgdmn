@@ -1,4 +1,4 @@
-.PHONY: base-image test-image check test bench clean
+.PHONY: base-image test-image check test bench clean website-dev website-build website-serve
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -26,3 +26,15 @@ bench: test-image
 # Remove build artifacts
 clean:
 	rm -rf target/
+
+# Run the website dev server with hot-reload
+website-dev:
+	cd website && cargo leptos watch
+
+# Build the website for production
+website-build:
+	cd website && cargo leptos build --release
+
+# Serve the production build
+website-serve:
+	cd website && ./target/release/pgdmn-website
