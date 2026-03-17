@@ -264,4 +264,5 @@ at your option.
 
 ## Documentation
 
+- [RELEASEPLAN.md](RELEASEPLAN.md) - Release, promotion, and go-to-market plan
 - [docs/improvements.md](docs/improvements.md) - Investigation of approaches to bypass JSONB for more efficient PG-to-DMN data passing
