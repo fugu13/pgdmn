@@ -51,6 +51,10 @@ Set up automated builds and deployment for the website. Evaluate hosting options
 
 ## Chores
 
+### CHORE-003: Migrate website to Rust 2024 edition
+
+The website uses edition 2021 for cargo-leptos/wasm-bindgen compatibility. Once the toolchain supports it, migrate to edition 2024.
+
 ### CHORE-002: OpenGraph and social meta tags
 
 Add og:title, og:description, og:image, and Twitter card meta tags to the website shell and per-page overrides via leptos_meta.
