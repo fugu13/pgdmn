@@ -2,6 +2,10 @@
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
+# Shared cargo target dir so worktrees reuse the main repo's build cache
+REPO_ROOT = $(shell cd "$$(git rev-parse --git-common-dir)/.." && pwd)
+WEBSITE_TARGET_DIR = $(REPO_ROOT)/website/target
+
 # Build the base Docker image (PG17 + pgrx toolchain)
 base-image:
 	docker build -t pgdmn-base .
@@ -29,17 +33,17 @@ clean:
 
 # Run the website dev server with hot-reload
 website-dev:
-	cd website && cargo leptos watch
+	cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo leptos watch
 
 # Build the website for production
 website-build:
-	cd website && cargo leptos build --release
+	cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo leptos build --release
 
 # Serve the production build
 website-serve:
-	cd website && ./target/release/pgdmn-website
+	$(WEBSITE_TARGET_DIR)/release/pgdmn-website
 
 # Open the website in the browser and start the dev server
 website:
 	open http://127.0.0.1:3000
-	cd website && cargo leptos watch
+	cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo leptos watch
