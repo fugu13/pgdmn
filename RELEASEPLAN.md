@@ -2,7 +2,7 @@
 
 ## Info Website
 
-Standalone site for pgdmn (e.g. pgdmn.com or pgdmn.dev).
+Standalone site for pgdmn at pgdmn.com.
 
 **Pages:**
 
