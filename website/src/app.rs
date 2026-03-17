@@ -44,7 +44,7 @@ pub fn App() -> impl IntoView {
         <Router>
             <SkipLink/>
             <Header/>
-            <main id="main-content">
+            <main id="main-content" tabindex="-1">
                 <Routes fallback=|| view! { <NotFoundPage/> }>
                     <Route path=StaticSegment("") view=HomePage/>
                     <Route path=StaticSegment(routes::WHY) view=WhyPage/>
