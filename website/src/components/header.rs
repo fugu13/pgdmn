@@ -8,7 +8,7 @@ pub fn Header() -> impl IntoView {
     view! {
         <header class="site-header">
             <div class="site-header-inner">
-                <A href="/" class="site-logo" aria_label="pgdmn home">
+                <A href="/" attr:class="site-logo" attr:aria-label="pgdmn home">
                     "pgdmn"
                 </A>
                 <nav aria-label="Main navigation">
