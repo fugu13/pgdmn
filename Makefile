@@ -1,4 +1,4 @@
-.PHONY: base-image test-image check test bench clean website-dev website-build website-serve
+.PHONY: base-image test-image check test bench clean website-dev website-build website-serve website-open
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -38,3 +38,7 @@ website-build:
 # Serve the production build
 website-serve:
 	cd website && ./target/release/pgdmn-website
+
+# Open the website in the default browser
+website-open:
+	open http://127.0.0.1:3000
