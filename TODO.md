@@ -2,7 +2,33 @@
 
 ## Testing
 
-- [ ] Write property-based tests for DMN round trips (parse -> serialize -> parse should be identity)
+### TEST-001: Property-based tests for DMN round trips
+
+Write property-based tests (proptest) for DMN round trips: parse -> serialize -> parse should be identity. Commit `*.proptest-regressions` files.
+
+### TEST-003: Flaky timing assertion in cache test
+
+`test_cache_different_models_independent` asserts the warm (cached) evaluation is at least 2x faster than the cold one; under light load the cold path can complete in ~700µs and the assertion fails spuriously (observed 2026-07-08: cold=720µs, warm=603µs). Replace the wall-clock comparison with a deterministic signal — e.g. a cache-hit counter exposed for tests, or assert on repeated-call stability rather than a fixed speedup ratio.
+
+### TEST-002: Automated accessibility testing for the website
+
+Integrate axe-core into the website's test suite via Playwright: launch the SSR server, run axe-core against each page, fail on any violation at the "critical" or "serious" level.
+
+## Documentation
+
+### DOCS-001: Feature docs for major features
+
+Create one file per major feature in `docs/`: the FEEL evaluation functions, the DMN model type and evaluation functions, and the website. Each file needs a one-sentence summary and a list of user actions the feature accomplishes, described from the user's needs rather than mechanically. No code blocks in `docs/` — use tables, prose, and mermaid diagrams.
+
+### DOCS-002: UI behavioral descriptions for the website
+
+Add `docs/ux/{aspect}.md` behavioral descriptions covering the website's existing UI (navigation, page structure, code example presentation). Descriptions cover the full interaction lifecycle and must not reference implementation details.
+
+## Accessibility
+
+### A11Y-001: Install accessibility review agents
+
+Install the core agents from Community-Access/accessibility-agents into `.claude/agents/` with `install.sh --project`, so UI changes to the website get structured accessibility review before commit.
 
 ## Features
 
@@ -50,6 +76,10 @@ The site navigation needs a responsive hamburger menu for narrow viewports. Must
 Set up automated builds and deployment for the website. Evaluate hosting options (Fly.io, Railway, or similar SSR-capable hosts).
 
 ## Chores
+
+### CHORE-004: Build the Docker image as the non-root user from the start
+
+The base image installs the toolchain, fetches crates, and (formerly) initialized pgrx as root, while tests must run as the non-root `pgdmn` user — the mismatch caused BUG-001 and BUG-002 and is currently patched with a `chmod`, a `chown`, and a second `cargo pgrx init` in the `test` stage. Restructure the Dockerfile to create `pgdmn` first and run `cargo install cargo-pgrx`, `rustup component add`, `cargo fetch --locked`, and `cargo pgrx init` as that user (with `CARGO_HOME` under its home), making ownership correct by construction and collapsing the two stages into one.
 
 ### CHORE-003: Migrate website to Rust 2024 edition
 

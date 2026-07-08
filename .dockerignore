@@ -1,0 +1,6 @@
+target/
+website/
+examples/
+docs/
+.git/
+.claude/

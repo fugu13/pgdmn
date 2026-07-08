@@ -3,7 +3,9 @@ use std::num::NonZeroUsize;
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
 use dsntk_feel::{FeelNumber, Name};
-use dsntk_feel_temporal::{FeelDate, FeelDateTime, FeelDaysAndTimeDuration, FeelYearsAndMonthsDuration};
+use dsntk_feel_temporal::{
+    FeelDate, FeelDateTime, FeelDaysAndTimeDuration, FeelYearsAndMonthsDuration,
+};
 use pgrx::heap_tuple::PgHeapTuple;
 use pgrx::pg_sys;
 /// Convert a serde_json::Value to a dsntk FEEL Value.
@@ -15,7 +17,7 @@ pub fn json_to_feel(json: &serde_json::Value) -> Value {
             let s = n.to_string();
             match s.parse::<FeelNumber>() {
                 Ok(num) => Value::Number(num),
-                Err(_) => Value::Null(Some(format!("cannot convert number: {}", s))),
+                Err(_) => Value::Null(Some(format!("cannot convert number: {s}"))),
             }
         }
         serde_json::Value::String(s) => Value::String(s.clone()),
@@ -83,6 +85,7 @@ pub fn json_to_context(json: &serde_json::Value) -> FeelContext {
 }
 
 /// Convert a single PG datum from a PgHeapTuple to a FEEL Value, dispatching on the type OID.
+#[allow(clippy::too_many_lines)] // OID dispatch match; one arm per supported PG type
 fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
     tuple: &PgHeapTuple<'_, A>,
     attno: NonZeroUsize,
@@ -95,12 +98,12 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
             Err(e) => Value::Null(Some(format!("{e}"))),
         },
         pg_sys::INT2OID => match tuple.get_by_index::<i16>(attno) {
-            Ok(Some(v)) => Value::Number(FeelNumber::from(v as i64)),
+            Ok(Some(v)) => Value::Number(FeelNumber::from(i64::from(v))),
             Ok(None) => Value::Null(None),
             Err(e) => Value::Null(Some(format!("{e}"))),
         },
         pg_sys::INT4OID => match tuple.get_by_index::<i32>(attno) {
-            Ok(Some(v)) => Value::Number(FeelNumber::from(v as i64)),
+            Ok(Some(v)) => Value::Number(FeelNumber::from(i64::from(v))),
             Ok(None) => Value::Null(None),
             Err(e) => Value::Null(Some(format!("{e}"))),
         },
@@ -110,29 +113,28 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
             Err(e) => Value::Null(Some(format!("{e}"))),
         },
         pg_sys::FLOAT4OID => match tuple.get_by_index::<f32>(attno) {
-            Ok(Some(v)) => v
-                .to_string()
-                .parse::<FeelNumber>()
-                .map(Value::Number)
-                .unwrap_or_else(|_| Value::Null(Some(format!("bad float4: {v}")))),
+            Ok(Some(v)) => v.to_string().parse::<FeelNumber>().map_or_else(
+                |_| Value::Null(Some(format!("bad float4: {v}"))),
+                Value::Number,
+            ),
             Ok(None) => Value::Null(None),
             Err(e) => Value::Null(Some(format!("{e}"))),
         },
         pg_sys::FLOAT8OID => match tuple.get_by_index::<f64>(attno) {
-            Ok(Some(v)) => v
-                .to_string()
-                .parse::<FeelNumber>()
-                .map(Value::Number)
-                .unwrap_or_else(|_| Value::Null(Some(format!("bad float8: {v}")))),
+            Ok(Some(v)) => v.to_string().parse::<FeelNumber>().map_or_else(
+                |_| Value::Null(Some(format!("bad float8: {v}"))),
+                Value::Number,
+            ),
             Ok(None) => Value::Null(None),
             Err(e) => Value::Null(Some(format!("{e}"))),
         },
         pg_sys::NUMERICOID => match tuple.get_by_index::<pgrx::AnyNumeric>(attno) {
             Ok(Some(v)) => {
                 let s = v.to_string();
-                s.parse::<FeelNumber>()
-                    .map(Value::Number)
-                    .unwrap_or_else(|_| Value::Null(Some(format!("bad numeric: {s}"))))
+                s.parse::<FeelNumber>().map_or_else(
+                    |_| Value::Null(Some(format!("bad numeric: {s}"))),
+                    Value::Number,
+                )
             }
             Ok(None) => Value::Null(None),
             Err(e) => Value::Null(Some(format!("{e}"))),
@@ -145,8 +147,8 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
         pg_sys::DATEOID => match tuple.get_by_index::<pgrx::datum::Date>(attno) {
             Ok(Some(d)) => {
                 let y = d.year();
-                let m = d.month() as u32;
-                let day = d.day() as u32;
+                let m = u32::from(d.month());
+                let day = u32::from(d.day());
                 match FeelDate::new(y, m, day) {
                     Some(fd) => Value::Date(fd),
                     None => Value::Null(Some(format!("invalid date: {y}-{m}-{day}"))),
@@ -158,12 +160,14 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
         pg_sys::TIMESTAMPOID => match tuple.get_by_index::<pgrx::datum::Timestamp>(attno) {
             Ok(Some(ts)) => {
                 let y = ts.year();
-                let m = ts.month() as u32;
-                let d = ts.day() as u32;
+                let m = u32::from(ts.month());
+                let d = u32::from(ts.day());
                 let h = ts.hour();
                 let min = ts.minute();
+                // Whole seconds always fit in u8; the fraction is carried via microseconds()
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 let sec = ts.second() as u8;
-                let nano = (ts.microseconds() as u64) * 1000;
+                let nano = u64::from(ts.microseconds()) * 1000;
                 match FeelDateTime::local(y, m, d, h, min, sec, nano) {
                     Some(fdt) => Value::DateTime(fdt),
                     None => Value::Null(Some(format!("invalid timestamp: {ts}"))),
@@ -186,11 +190,13 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
                     );
                 }
                 if has_months {
-                    Value::YearsAndMonthsDuration(FeelYearsAndMonthsDuration::from_m(months as i64))
+                    Value::YearsAndMonthsDuration(FeelYearsAndMonthsDuration::from_m(i64::from(
+                        months,
+                    )))
                 } else {
                     let secs_from_micros = micros.div_euclid(1_000_000);
                     let micros_remainder = micros.rem_euclid(1_000_000);
-                    let total_secs = (days as i64) * 86400 + secs_from_micros;
+                    let total_secs = i64::from(days) * 86400 + secs_from_micros;
                     let nanos = micros_remainder * 1000;
                     Value::DaysAndTimeDuration(FeelDaysAndTimeDuration::from_sn(total_secs, nanos))
                 }
@@ -206,9 +212,7 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
 }
 
 /// Convert a PgHeapTuple to a FeelContext by iterating its attributes.
-pub fn tuple_to_context<A: pgrx::WhoAllocated>(
-    tuple: &PgHeapTuple<'_, A>,
-) -> FeelContext {
+pub fn tuple_to_context<A: pgrx::WhoAllocated>(tuple: &PgHeapTuple<'_, A>) -> FeelContext {
     let mut ctx = FeelContext::new();
     for (attno, attr) in tuple.attributes() {
         let name_str = attr.name();

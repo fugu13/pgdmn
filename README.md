@@ -236,21 +236,13 @@ SELECT feel_eval_interval('duration("PT4H30M")');
 
 ## Build & Test
 
-All builds run in Docker. See [CLAUDE.md](CLAUDE.md) for full build instructions.
+All builds run in Docker and go through `make`. See [CLAUDE.md](CLAUDE.md) for the full target list and conventions.
 
 ```sh
-# Build base image
-docker build -t pgdmn-base .
-
-# Build test image
-docker build -t pgdmn-test --build-arg BASE=pgdmn-base -<<'EOF'
-FROM pgdmn-base
-RUN useradd -ms /bin/bash pgdmn
-USER pgdmn
-EOF
-
-# Run tests
-docker run --rm -e USER=pgdmn -v "$(pwd)":/pgdmn -w /pgdmn pgdmn-test cargo pgrx test pg17
+make test-image   # build the Docker images (first time, and after dependency changes)
+make check        # fast compilation check
+make test         # run the pgrx test suite against PG17
+make verify       # fmt + lint + check
 ```
 
 ## License
@@ -264,6 +256,9 @@ at your option.
 
 ## Documentation
 
+- [CLAUDE.md](CLAUDE.md) - Development conventions, build targets, and architecture decisions
+- [TODO.md](TODO.md) - Tracked work items
+- [BUGHISTORY.md](BUGHISTORY.md) - Resolved bugs with reoccurrence checklists
 - [RELEASEPLAN.md](RELEASEPLAN.md) - Release, promotion, and go-to-market plan
 - [docs/improvements.md](docs/improvements.md) - Investigation of approaches to bypass JSONB for more efficient PG-to-DMN data passing
 - [website/](website/) - Marketing and documentation site (Leptos + Axum SSR)

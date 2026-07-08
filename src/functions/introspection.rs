@@ -17,7 +17,10 @@ pub fn dmn_invocables(
         rows.push((d.name().to_string(), "decision".to_string()));
     }
     for bkm in definitions.business_knowledge_models() {
-        rows.push((bkm.name().to_string(), "business_knowledge_model".to_string()));
+        rows.push((
+            bkm.name().to_string(),
+            "business_knowledge_model".to_string(),
+        ));
     }
     for ds in definitions.decision_services() {
         rows.push((ds.name().to_string(), "decision_service".to_string()));
