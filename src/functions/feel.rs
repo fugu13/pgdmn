@@ -1,8 +1,8 @@
 use pgrx::prelude::*;
 
+use dsntk_feel::FeelScope;
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
-use dsntk_feel::FeelScope;
 use dsntk_feel_evaluator::evaluate;
 use dsntk_feel_parser::parse_expression;
 
@@ -17,6 +17,14 @@ fn eval_feel_ctx(expression: &str, ctx: FeelContext) -> Value {
     evaluate(&scope, &node)
 }
 
+/// Raise the SQL error for a FEEL null result in a typed variant.
+fn feel_null_error(msg: Option<String>) -> ! {
+    pgrx::error!(
+        "FEEL expression returned null{}",
+        msg.map(|m| format!(": {m}")).unwrap_or_default()
+    )
+}
+
 /// Evaluate a FEEL expression and return the result.
 fn eval_feel(expression: &str, context: Option<pgrx::JsonB>) -> Value {
     let ctx = match &context {
@@ -28,10 +36,7 @@ fn eval_feel(expression: &str, context: Option<pgrx::JsonB>) -> Value {
 
 /// General-purpose FEEL evaluator returning JSONB.
 #[pg_extern(immutable, parallel_safe)]
-pub fn feel_eval(
-    expression: &str,
-    context: default!(Option<pgrx::JsonB>, "NULL"),
-) -> pgrx::JsonB {
+pub fn feel_eval(expression: &str, context: default!(Option<pgrx::JsonB>, "NULL")) -> pgrx::JsonB {
     let result = eval_feel(expression, context);
     pgrx::JsonB(feel_to_json(&result))
 }
@@ -63,44 +68,29 @@ pub fn feel_eval_numeric(
             s.parse::<pgrx::AnyNumeric>()
                 .unwrap_or_else(|e| pgrx::error!("cannot convert FEEL number to NUMERIC: {}", e))
         }
-        Value::Null(msg) => pgrx::error!(
-            "FEEL expression returned null{}",
-            msg.map(|m| format!(": {}", m)).unwrap_or_default()
-        ),
+        Value::Null(msg) => feel_null_error(msg),
         other => pgrx::error!("expected FEEL number, got: {}", other),
     }
 }
 
 /// Evaluate a FEEL expression expecting a BOOL result.
 #[pg_extern(immutable, parallel_safe)]
-pub fn feel_eval_bool(
-    expression: &str,
-    context: default!(Option<pgrx::JsonB>, "NULL"),
-) -> bool {
+pub fn feel_eval_bool(expression: &str, context: default!(Option<pgrx::JsonB>, "NULL")) -> bool {
     let result = eval_feel(expression, context);
     match result {
         Value::Boolean(b) => b,
-        Value::Null(msg) => pgrx::error!(
-            "FEEL expression returned null{}",
-            msg.map(|m| format!(": {}", m)).unwrap_or_default()
-        ),
+        Value::Null(msg) => feel_null_error(msg),
         other => pgrx::error!("expected FEEL boolean, got: {}", other),
     }
 }
 
 /// Evaluate a FEEL expression expecting a TEXT result.
 #[pg_extern(immutable, parallel_safe)]
-pub fn feel_eval_text(
-    expression: &str,
-    context: default!(Option<pgrx::JsonB>, "NULL"),
-) -> String {
+pub fn feel_eval_text(expression: &str, context: default!(Option<pgrx::JsonB>, "NULL")) -> String {
     let result = eval_feel(expression, context);
     match result {
         Value::String(s) => s,
-        Value::Null(msg) => pgrx::error!(
-            "FEEL expression returned null{}",
-            msg.map(|m| format!(": {}", m)).unwrap_or_default()
-        ),
+        Value::Null(msg) => feel_null_error(msg),
         other => pgrx::error!("expected FEEL string, got: {}", other),
     }
 }
@@ -115,13 +105,14 @@ pub fn feel_eval_date(
     match result {
         Value::Date(d) => {
             let (y, m, day) = d.as_tuple();
-            pgrx::datum::Date::new(y as i32, m as u8, day as u8)
+            let m = u8::try_from(m)
+                .unwrap_or_else(|_| pgrx::error!("FEEL date month out of range: {m}"));
+            let day = u8::try_from(day)
+                .unwrap_or_else(|_| pgrx::error!("FEEL date day out of range: {day}"));
+            pgrx::datum::Date::new(y, m, day)
                 .unwrap_or_else(|e| pgrx::error!("cannot convert FEEL date to PG DATE: {:?}", e))
         }
-        Value::Null(msg) => pgrx::error!(
-            "FEEL expression returned null{}",
-            msg.map(|m| format!(": {}", m)).unwrap_or_default()
-        ),
+        Value::Null(msg) => feel_null_error(msg),
         other => pgrx::error!("expected FEEL date, got: {}", other),
     }
 }
@@ -136,20 +127,19 @@ pub fn feel_eval_timestamp(
     match result {
         Value::DateTime(dt) => {
             let y = dt.year();
-            let m = dt.month();
-            let d = dt.day();
+            let (month, day) = (dt.month(), dt.day());
+            let m = u8::try_from(month)
+                .unwrap_or_else(|_| pgrx::error!("FEEL date-time month out of range: {month}"));
+            let d = u8::try_from(day)
+                .unwrap_or_else(|_| pgrx::error!("FEEL date-time day out of range: {day}"));
             let h = dt.hour();
             let min = dt.minute();
             let sec = dt.second();
-            pgrx::datum::Timestamp::new(y as i32, m as u8, d as u8, h, min, sec as f64)
-                .unwrap_or_else(|e| {
-                    pgrx::error!("cannot convert FEEL datetime to PG TIMESTAMP: {:?}", e)
-                })
+            pgrx::datum::Timestamp::new(y, m, d, h, min, f64::from(sec)).unwrap_or_else(|e| {
+                pgrx::error!("cannot convert FEEL datetime to PG TIMESTAMP: {:?}", e)
+            })
         }
-        Value::Null(msg) => pgrx::error!(
-            "FEEL expression returned null{}",
-            msg.map(|m| format!(": {}", m)).unwrap_or_default()
-        ),
+        Value::Null(msg) => feel_null_error(msg),
         other => pgrx::error!("expected FEEL date-time, got: {}", other),
     }
 }
@@ -163,24 +153,22 @@ pub fn feel_eval_interval(
     let result = eval_feel(expression, context);
     match result {
         Value::DaysAndTimeDuration(d) => {
-            let total_secs = d.as_seconds();
-            let total_usecs = (total_secs as i64) * 1_000_000;
-            pgrx::datum::Interval::new(0, 0, total_usecs)
-                .unwrap_or_else(|e| {
-                    pgrx::error!("cannot convert FEEL duration to PG INTERVAL: {:?}", e)
-                })
+            let secs = d.as_seconds();
+            let micros = (secs as i64) * 1_000_000;
+            pgrx::datum::Interval::new(0, 0, micros).unwrap_or_else(|e| {
+                pgrx::error!("cannot convert FEEL duration to PG INTERVAL: {:?}", e)
+            })
         }
         Value::YearsAndMonthsDuration(d) => {
-            let months = d.as_months() as i32;
-            pgrx::datum::Interval::new(months, 0, 0)
-                .unwrap_or_else(|e| {
-                    pgrx::error!("cannot convert FEEL duration to PG INTERVAL: {:?}", e)
-                })
+            let month_count = d.as_months();
+            let months = i32::try_from(month_count).unwrap_or_else(|_| {
+                pgrx::error!("FEEL duration months out of INTERVAL range: {month_count}")
+            });
+            pgrx::datum::Interval::new(months, 0, 0).unwrap_or_else(|e| {
+                pgrx::error!("cannot convert FEEL duration to PG INTERVAL: {:?}", e)
+            })
         }
-        Value::Null(msg) => pgrx::error!(
-            "FEEL expression returned null{}",
-            msg.map(|m| format!(": {}", m)).unwrap_or_default()
-        ),
+        Value::Null(msg) => feel_null_error(msg),
         other => pgrx::error!("expected FEEL duration, got: {}", other),
     }
 }

@@ -12,26 +12,22 @@ mod tests {
 
     #[pg_test]
     fn test_feel_eval_simple_addition() {
-        let result =
-            Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('1 + 2')").expect("SPI failed");
+        let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('1 + 2')").expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!(3));
     }
 
     #[pg_test]
     fn test_feel_eval_with_context() {
-        let result = Spi::get_one::<pgrx::JsonB>(
-            "SELECT feel_eval('x * 2', '{\"x\": 21}'::jsonb)",
-        )
-        .expect("SPI failed");
+        let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('x * 2', '{\"x\": 21}'::jsonb)")
+            .expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!(42));
     }
 
     #[pg_test]
     fn test_feel_eval_list() {
-        let result = Spi::get_one::<pgrx::JsonB>(
-            "SELECT feel_eval('for i in [1,2,3] return i * i')",
-        )
-        .expect("SPI failed");
+        let result =
+            Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('for i in [1,2,3] return i * i')")
+                .expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!([1, 4, 9]));
     }
 
@@ -47,33 +43,30 @@ mod tests {
     #[pg_test]
     fn test_feel_eval_bool_true() {
         let result = Spi::get_one::<bool>("SELECT feel_eval_bool('5 > 3')").expect("SPI failed");
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[pg_test]
     fn test_feel_eval_bool_with_context() {
-        let result = Spi::get_one::<bool>(
-            "SELECT feel_eval_bool('age >= 18', '{\"age\": 25}'::jsonb)",
-        )
-        .expect("SPI failed");
-        assert_eq!(result.unwrap(), true);
+        let result =
+            Spi::get_one::<bool>("SELECT feel_eval_bool('age >= 18', '{\"age\": 25}'::jsonb)")
+                .expect("SPI failed");
+        assert!(result.unwrap());
     }
 
     #[pg_test]
     fn test_feel_eval_text() {
-        let result = Spi::get_one::<String>(
-            "SELECT feel_eval_text('\"hello\" + \" \" + \"world\"')",
-        )
-        .expect("SPI failed");
+        let result =
+            Spi::get_one::<String>("SELECT feel_eval_text('\"hello\" + \" \" + \"world\"')")
+                .expect("SPI failed");
         assert_eq!(result.unwrap(), "hello world");
     }
 
     #[pg_test]
     fn test_feel_eval_date() {
-        let result = Spi::get_one::<pgrx::datum::Date>(
-            "SELECT feel_eval_date('date(\"2024-03-15\")')",
-        )
-        .expect("SPI failed");
+        let result =
+            Spi::get_one::<pgrx::datum::Date>("SELECT feel_eval_date('date(\"2024-03-15\")')")
+                .expect("SPI failed");
         let d = result.unwrap();
         assert_eq!(d.to_string(), "2024-03-15");
     }
@@ -94,7 +87,7 @@ mod tests {
             "SELECT feel_eval_interval('duration(\"P2D\")') = interval '2 days'",
         )
         .expect("SPI failed");
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[pg_test]
@@ -103,13 +96,12 @@ mod tests {
             "SELECT feel_eval_interval('duration(\"P3M\")') = interval '3 months'",
         )
         .expect("SPI failed");
-        assert_eq!(result.unwrap(), true);
+        assert!(result.unwrap());
     }
 
     #[pg_test]
     fn test_feel_eval_null_context() {
-        let result =
-            Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('1 + 1')").expect("SPI failed");
+        let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('1 + 1')").expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!(2));
     }
 
@@ -216,7 +208,10 @@ mod tests {
 
     #[pg_test]
     fn test_dmn_load_and_name() {
-        let query = format!("SELECT dmn_name(dmn_load('{}'))", SIMPLE_DMN.replace('\'', "''"));
+        let query = format!(
+            "SELECT dmn_name(dmn_load('{}'))",
+            SIMPLE_DMN.replace('\'', "''")
+        );
         let result = Spi::get_one::<String>(&query).expect("SPI failed");
         assert_eq!(result.unwrap(), "SimpleDecisions");
     }
@@ -424,12 +419,8 @@ mod tests {
                 .unwrap()
                 .map(|row| {
                     (
-                        row.get_by_name::<String, _>("name")
-                            .unwrap()
-                            .unwrap(),
-                        row.get_by_name::<String, _>("kind")
-                            .unwrap()
-                            .unwrap(),
+                        row.get_by_name::<String, _>("name").unwrap().unwrap(),
+                        row.get_by_name::<String, _>("kind").unwrap().unwrap(),
                     )
                 })
                 .collect();
@@ -445,10 +436,7 @@ mod tests {
     #[pg_test]
     fn test_cache_speeds_up_repeated_eval() {
         let escaped = SIMPLE_DMN.replace('\'', "''");
-        let query = format!(
-            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')",
-            escaped
-        );
+        let query = format!("SELECT dmn_eval(dmn_load('{escaped}'), 'Greeting')");
 
         // Cold call: first evaluation parses XML and builds evaluator
         let cold_start = std::time::Instant::now();
@@ -605,6 +593,8 @@ mod tests {
 </definitions>"##;
 
     #[pg_test]
+    // Benchmark: long inline scenario setup; float division only for human-readable reporting
+    #[expect(clippy::too_many_lines, clippy::cast_precision_loss)]
     fn bench_dmn_eval_vs_pg_concat() {
         if std::env::var("PGDMN_BENCH").ok().as_deref() != Some("1") {
             return;
@@ -661,11 +651,10 @@ mod tests {
         let row_count = Spi::get_one::<i64>("SELECT count(*) FROM bench_names")
             .expect("SPI failed")
             .unwrap();
-        let distinct_count = Spi::get_one::<i64>(
-            "SELECT count(DISTINCT (first_name, last_name)) FROM bench_names",
-        )
-        .expect("SPI failed")
-        .unwrap();
+        let distinct_count =
+            Spi::get_one::<i64>("SELECT count(DISTINCT (first_name, last_name)) FROM bench_names")
+                .expect("SPI failed")
+                .unwrap();
 
         // Create composite types for record-based evaluation
         Spi::run("CREATE TYPE concat_input AS (first_name text, last_name text)")
@@ -731,7 +720,7 @@ mod tests {
                  THEN credit_score * 0.1 + income / 5000 \
                WHEN credit_score < 650 THEN credit_score * 0.05 \
                ELSE credit_score * 0.3 + income / 2000 + years_employed * 5 \
-             END FROM bench_names LIMIT 1"
+             END FROM bench_names LIMIT 1",
         )
         .expect("PG plain risk warmup failed");
         Spi::run(&format!(
@@ -831,7 +820,7 @@ mod tests {
                  THEN credit_score * 0.1 + income / 5000 \
                WHEN credit_score < 650 THEN credit_score * 0.05 \
                ELSE credit_score * 0.3 + income / 2000 + years_employed * 5 \
-             END FROM bench_names"
+             END FROM bench_names",
         )
         .expect("PG plain risk query failed");
         let pg_plain_risk_dur = pg_plain_risk_start.elapsed();
@@ -866,17 +855,25 @@ mod tests {
              record/jsonb:    {:.2}x | DMN jsonb/plain: {:.1}x | DMN record/plain: {:.1}x\n\
              \n\
              Complex/Simple DMN: {:.1}x",
-            dmn_concat_dur.as_micros() as f64 / rc, dmn_concat_dur,
-            dmn_record_concat_dur.as_micros() as f64 / rc, dmn_record_concat_dur,
-            pg_jsonb_concat_dur.as_micros() as f64 / rc, pg_jsonb_concat_dur,
-            pg_plain_concat_dur.as_micros() as f64 / rc, pg_plain_concat_dur,
+            dmn_concat_dur.as_micros() as f64 / rc,
+            dmn_concat_dur,
+            dmn_record_concat_dur.as_micros() as f64 / rc,
+            dmn_record_concat_dur,
+            pg_jsonb_concat_dur.as_micros() as f64 / rc,
+            pg_jsonb_concat_dur,
+            pg_plain_concat_dur.as_micros() as f64 / rc,
+            pg_plain_concat_dur,
             dmn_record_concat_dur.as_secs_f64() / dmn_concat_dur.as_secs_f64(),
             dmn_concat_dur.as_secs_f64() / pg_plain_concat_dur.as_secs_f64(),
             dmn_record_concat_dur.as_secs_f64() / pg_plain_concat_dur.as_secs_f64(),
-            dmn_risk_dur.as_micros() as f64 / rc, dmn_risk_dur,
-            dmn_record_risk_dur.as_micros() as f64 / rc, dmn_record_risk_dur,
-            pg_jsonb_risk_dur.as_micros() as f64 / rc, pg_jsonb_risk_dur,
-            pg_plain_risk_dur.as_micros() as f64 / rc, pg_plain_risk_dur,
+            dmn_risk_dur.as_micros() as f64 / rc,
+            dmn_risk_dur,
+            dmn_record_risk_dur.as_micros() as f64 / rc,
+            dmn_record_risk_dur,
+            pg_jsonb_risk_dur.as_micros() as f64 / rc,
+            pg_jsonb_risk_dur,
+            pg_plain_risk_dur.as_micros() as f64 / rc,
+            pg_plain_risk_dur,
             dmn_record_risk_dur.as_secs_f64() / dmn_risk_dur.as_secs_f64(),
             dmn_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
             dmn_record_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
@@ -898,7 +895,10 @@ mod tests {
         ))
         .expect("SPI failed")
         .unwrap();
-        assert_eq!(mismatches, 0, "DMN and PG concat produced different results");
+        assert_eq!(
+            mismatches, 0,
+            "DMN and PG concat produced different results"
+        );
     }
 
     // --- Record-based evaluation tests ---
@@ -932,7 +932,10 @@ mod tests {
         .expect("SPI failed");
         let v = result.unwrap().0;
         let s = v.to_string();
-        assert!(s.starts_with("3703703670.3703"), "unexpected numeric result: {s}");
+        assert!(
+            s.starts_with("3703703670.3703"),
+            "unexpected numeric result: {s}"
+        );
     }
 
     #[pg_test]
@@ -951,9 +954,7 @@ mod tests {
     #[pg_test]
     fn test_dmn_record_eval_null_input() {
         let escaped = SIMPLE_DMN.replace('\'', "''");
-        let query = format!(
-            "SELECT dmn_record_eval(dmn_load('{escaped}'), 'Greeting', NULL)"
-        );
+        let query = format!("SELECT dmn_record_eval(dmn_load('{escaped}'), 'Greeting', NULL)");
         let result = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!("Hello, World!"));
     }
@@ -989,7 +990,10 @@ mod tests {
         )
         .expect("SPI failed");
         let s = result.unwrap().0.as_str().unwrap().to_string();
-        assert!(s.starts_with("2024-03-15T10:30:00"), "unexpected timestamp: {s}");
+        assert!(
+            s.starts_with("2024-03-15T10:30:00"),
+            "unexpected timestamp: {s}"
+        );
     }
 
     #[pg_test]
@@ -1022,7 +1026,7 @@ mod tests {
         )
         .expect("SPI failed");
         let s = result.unwrap().0.as_str().unwrap().to_string();
-        assert!(s.contains("P"), "unexpected negative duration: {s}");
+        assert!(s.contains('P'), "unexpected negative duration: {s}");
     }
 
     #[pg_test]
@@ -1145,7 +1149,10 @@ mod tests {
             r#"{"loan": {"principal": 600000, "rate": 0.0375, "termMonths": 360}}"#,
         );
         let payment = result.as_f64().expect("expected numeric result");
-        assert!(payment > 2000.0 && payment < 3500.0, "unexpected payment: {payment}");
+        assert!(
+            payment > 2000.0 && payment < 3500.0,
+            "unexpected payment: {payment}"
+        );
     }
 
     // -- Monthly Payment with BKM: reusable PMT function + fee --
@@ -1159,7 +1166,10 @@ mod tests {
         );
         let payment = result.as_f64().expect("expected numeric result");
         // Should be PMT + 100 fee, so > 100
-        assert!(payment > 2000.0 && payment < 3600.0, "unexpected payment: {payment}");
+        assert!(
+            payment > 2000.0 && payment < 3600.0,
+            "unexpected payment: {payment}"
+        );
     }
 
     // -- Vacation Days: COLLECT/MAX hit policy, sub-decisions --
@@ -1340,18 +1350,35 @@ mod tests {
             r#"{"RequestedAmt": 330000}"#,
         );
         // Should contain metricsTable with 10 lender entries
-        let metrics = result["metricsTable"].as_array().expect("metricsTable should be an array");
-        assert_eq!(metrics.len(), 10, "expected 10 loan products in metricsTable");
+        let metrics = result["metricsTable"]
+            .as_array()
+            .expect("metricsTable should be an array");
+        assert_eq!(
+            metrics.len(),
+            10,
+            "expected 10 loan products in metricsTable"
+        );
 
         // Each ranking should also have 10 entries
-        for key in ["rankByRate", "rankByDownPmt", "rankByMonthlyPmt", "rankByEquityPct"] {
-            let ranked = result[key].as_array().unwrap_or_else(|| panic!("{key} should be an array"));
+        for key in [
+            "rankByRate",
+            "rankByDownPmt",
+            "rankByMonthlyPmt",
+            "rankByEquityPct",
+        ] {
+            let ranked = result[key]
+                .as_array()
+                .unwrap_or_else(|| panic!("{key} should be an array"));
             assert_eq!(ranked.len(), 10, "{key} should have 10 entries");
         }
 
         // First in rankByRate should have the lowest rate
-        let best_rate = result["rankByRate"][0]["rate"].as_f64().expect("rate should be a number");
-        let worst_rate = result["rankByRate"][9]["rate"].as_f64().expect("rate should be a number");
+        let best_rate = result["rankByRate"][0]["rate"]
+            .as_f64()
+            .expect("rate should be a number");
+        let worst_rate = result["rankByRate"][9]["rate"]
+            .as_f64()
+            .expect("rate should be a number");
         assert!(best_rate <= worst_rate, "rankByRate should be ascending");
     }
 
@@ -1366,12 +1393,8 @@ mod tests {
         let escaped_a = model_a.replace('\'', "''");
         let escaped_b = model_b.replace('\'', "''");
 
-        let query_a = format!(
-            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_a
-        );
-        let query_b = format!(
-            "SELECT dmn_eval(dmn_load('{}'), 'Greeting')", escaped_b
-        );
+        let query_a = format!("SELECT dmn_eval(dmn_load('{escaped_a}'), 'Greeting')");
+        let query_b = format!("SELECT dmn_eval(dmn_load('{escaped_b}'), 'Greeting')");
 
         // Load model A (cold)
         let cold_a_start = std::time::Instant::now();
@@ -1417,7 +1440,7 @@ pub mod pg_test {
         // No setup needed
     }
 
-    pub fn postgresql_conf_options() -> Vec<&'static str> {
-        vec![]
+    pub const fn postgresql_conf_options() -> Vec<&'static str> {
+        Vec::new()
     }
 }

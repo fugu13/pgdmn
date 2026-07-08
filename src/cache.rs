@@ -12,9 +12,7 @@ thread_local! {
 }
 
 /// Get or create a ModelEvaluator for the given XML content.
-pub fn get_or_build_evaluator(
-    xml: &str,
-) -> Result<Arc<ModelEvaluator>, String> {
+pub fn get_or_build_evaluator(xml: &str) -> Result<Arc<ModelEvaluator>, String> {
     // Check cache first
     let cached = EVALUATOR_CACHE.with_borrow(|cache| cache.get(xml).cloned());
     if let Some(evaluator) = cached {
@@ -23,9 +21,9 @@ pub fn get_or_build_evaluator(
 
     // Parse and build
     let definitions =
-        dsntk_model::parse(xml).map_err(|e| format!("failed to parse DMN XML: {}", e))?;
+        dsntk_model::parse(xml).map_err(|e| format!("failed to parse DMN XML: {e}"))?;
     let evaluator = ModelEvaluator::new(&[definitions])
-        .map_err(|e| format!("failed to build model evaluator: {}", e))?;
+        .map_err(|e| format!("failed to build model evaluator: {e}"))?;
 
     // Cache it
     EVALUATOR_CACHE.with_borrow_mut(|cache| {

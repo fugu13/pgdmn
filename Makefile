@@ -1,53 +1,61 @@
-.PHONY: base-image test-image check test bench clean website website-dev website-build website-serve website-clean
+.PHONY: help base-image test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-clean
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
 # Shared cargo target dir so worktrees reuse the main repo's build cache
 REPO_ROOT = $(shell cd "$$(git rev-parse --git-common-dir)/.." && pwd)
 WEBSITE_TARGET_DIR = $(REPO_ROOT)/website/target
+WEBSITE_CARGO = cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo
 
-# Build the base Docker image (PG17 + pgrx toolchain)
-base-image:
-	docker build -t pgdmn-base .
+help: ## Show available targets
+	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "%-16s %s\n", $$1, $$2}'
 
-# Build the test image (adds non-root user required by initdb)
-test-image: base-image
-	printf 'FROM pgdmn-base\nRUN useradd -ms /bin/bash pgdmn\nUSER pgdmn\n' | docker build -t pgdmn-test -f - .
+base-image: ## Build the base Docker image (PG17 + pgrx toolchain)
+	docker build --target base -t pgdmn-base .
 
-# Run cargo check (fast compilation check, no tests)
-check: test-image
-	$(DOCKER_RUN) cargo check
+test-image: base-image ## Build the test image (adds non-root user required by initdb)
+	docker build --target test -t pgdmn-test .
 
-# Run the pgrx test suite against PG17
-test: test-image
+check: test-image ## Run cargo check (fast compilation check, no tests)
+	$(DOCKER_RUN) cargo check --all-targets
+
+build: test-image ## Build the extension
+	$(DOCKER_RUN) cargo build
+
+test: test-image ## Run the pgrx test suite against PG17
 	$(DOCKER_RUN) cargo pgrx test pg17
 
-# Run DMN eval benchmark and print results (gated by PGDMN_BENCH=1)
-bench: test-image
+bench: test-image ## Run DMN eval benchmark and print results (gated by PGDMN_BENCH=1)
 	docker run --rm -e USER=pgdmn -e PGDMN_BENCH=1 -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test cargo pgrx test pg17 -- bench_dmn_eval_vs_pg_concat
 	@cat benchmark_results.txt 2>/dev/null
 
-# Remove build artifacts
-clean:
+lint: test-image ## Run clippy (deny warnings) and rustfmt check
+	$(DOCKER_RUN) sh -c 'cargo clippy --all-targets -- -D warnings && cargo fmt -- --check'
+
+fmt: test-image ## Auto-format code
+	$(DOCKER_RUN) cargo fmt
+
+verify: fmt lint ## Run after code changes: fmt + lint (clippy --all-targets subsumes check)
+
+clean: ## Remove build artifacts
 	rm -rf target/
 
-# Remove website build artifacts
-website-clean:
+website-clean: ## Remove website build artifacts
 	rm -rf $(WEBSITE_TARGET_DIR)
 
-# Run the website dev server with hot-reload
-website-dev:
-	cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo leptos watch
+website-dev: ## Run the website dev server with hot-reload
+	$(WEBSITE_CARGO) leptos watch
 
-# Build the website for production
-website-build:
-	cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo leptos build --release
+website-build: ## Build the website for production
+	$(WEBSITE_CARGO) leptos build --release
 
-# Serve the production build
-website-serve:
+website-serve: ## Serve the production build
 	$(WEBSITE_TARGET_DIR)/release/pgdmn-website
 
-# Open the website in the browser and start the dev server
-website:
+website-lint: ## Run clippy (deny warnings) and rustfmt check on the website
+	$(WEBSITE_CARGO) clippy --all-targets --features ssr -- -D warnings
+	$(WEBSITE_CARGO) fmt -- --check
+
+website: ## Open the website in the browser and start the dev server
 	open http://127.0.0.1:3000
-	cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo leptos watch
+	$(WEBSITE_CARGO) leptos watch
