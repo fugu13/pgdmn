@@ -73,7 +73,7 @@ website/
 ### Lints
 
 - Lint policy lives in `[lints.clippy]` in each `Cargo.toml` (pedantic + nursery as warnings, justified allows listed there). Enforcement is `make lint` with `-D warnings` — never `#![deny(warnings)]` in source.
-- Per-item `#[allow(clippy::...)]` only with a comment explaining why.
+- Per-item suppressions only with a comment explaining why. Prefer `#[expect(clippy::...)]` — it self-reports the moment the suppression goes stale. Use `#[allow(clippy::...)]` only when the lint fires inconsistently (e.g. varies with macro expansion or cfg).
 
 ### Code quality
 
@@ -95,7 +95,7 @@ website/
 ## Testing
 
 - **Test-first:** write signatures, then tests expressing the behavior, confirm they fail for the right reason, then implement. Do not add untested behavior.
-- **Property-based testing is mandatory** for code with algebraic or combinatorial properties (parsing round trips, value conversions). Use `proptest`; commit `*.proptest-regressions` (TEST-001 tracks the initial suite).
+- **Property-based testing is mandatory** for code with algebraic or combinatorial properties (parsing round trips, value conversions). Use `proptest`; commit the persisted `proptest-regressions/` directories (TEST-001 tracks the initial suite).
 - Unit tests in `#[cfg(test)]` blocks in the module they test; SQL-level integration tests via `#[pg_test]` in `src/lib.rs`.
 
 ## Website

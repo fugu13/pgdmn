@@ -85,7 +85,7 @@ pub fn json_to_context(json: &serde_json::Value) -> FeelContext {
 }
 
 /// Convert a single PG datum from a PgHeapTuple to a FEEL Value, dispatching on the type OID.
-#[allow(clippy::too_many_lines)] // OID dispatch match; one arm per supported PG type
+#[expect(clippy::too_many_lines)] // OID dispatch match; one arm per supported PG type
 fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
     tuple: &PgHeapTuple<'_, A>,
     attno: NonZeroUsize,
@@ -165,7 +165,7 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
                 let h = ts.hour();
                 let min = ts.minute();
                 // Whole seconds always fit in u8; the fraction is carried via microseconds()
-                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                 let sec = ts.second() as u8;
                 let nano = u64::from(ts.microseconds()) * 1000;
                 match FeelDateTime::local(y, m, d, h, min, sec, nano) {

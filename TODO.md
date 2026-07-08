@@ -4,7 +4,7 @@
 
 ### TEST-001: Property-based tests for DMN round trips
 
-Write property-based tests (proptest) for DMN round trips: parse -> serialize -> parse should be identity. Commit `*.proptest-regressions` files.
+Write property-based tests (proptest) for DMN round trips: parse -> serialize -> parse should be identity. Commit the persisted `proptest-regressions/` directories.
 
 ### TEST-003: Flaky timing assertion in cache test
 

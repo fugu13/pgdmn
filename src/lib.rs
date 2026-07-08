@@ -594,7 +594,7 @@ mod tests {
 
     #[pg_test]
     // Benchmark: long inline scenario setup; float division only for human-readable reporting
-    #[allow(clippy::too_many_lines, clippy::cast_precision_loss)]
+    #[expect(clippy::too_many_lines, clippy::cast_precision_loss)]
     fn bench_dmn_eval_vs_pg_concat() {
         if std::env::var("PGDMN_BENCH").ok().as_deref() != Some("1") {
             return;
