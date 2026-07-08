@@ -23,11 +23,11 @@ Resolved bugs, recorded so they can be recognised if they reappear. Every entry 
 
 **Root cause:** Everything pgrx needs at test time was set up as root: `cargo pgrx init` wrote `/root/.pgrx` (invisible to the `pgdmn` user), and the system PostgreSQL's extension install directories are root-owned, so `cargo pgrx install --test` cannot copy the built extension in. Warm builds masked the first half by reusing cached `pgrx-pg-sys` artifacts from a populated `target/`.
 
-**Fix:** The Dockerfile's `test` stage chowns `/usr/share/postgresql/17/extension` and `/usr/lib/postgresql/17/lib` to `pgdmn`, then runs `cargo pgrx init --pg17=/usr/lib/postgresql/17/bin/pg_config` as `pgdmn`, creating `/home/pgdmn/.pgrx`. CHORE-004 tracks the deeper fix (build the whole image as the non-root user).
+**Fix:** The Dockerfile chowns `/usr/share/postgresql/17/extension` and `/usr/lib/postgresql/17/lib` to `pgdmn` right after creating that user, then switches to `USER pgdmn` before installing `cargo-pgrx`, adding rustup components, fetching crates, and running `cargo pgrx init --pg17=/usr/lib/postgresql/17/bin/pg_config` — every later step is owned by `pgdmn` by construction (CHORE-004 collapsed the former root `base` / non-root `test` stages into a single stage).
 
-**Files:** `Dockerfile` (`test` stage), `Makefile` (`test-image` target)
+**Files:** `Dockerfile`, `Makefile` (`test-image` target)
 
 **Reoccurrence check:**
-- [ ] The Dockerfile `test` stage chowns the PG17 extension and lib directories before `USER pgdmn`
-- [ ] The Dockerfile `test` stage runs `cargo pgrx init` after `USER pgdmn`
+- [ ] The Dockerfile chowns the PG17 extension and lib directories immediately after `useradd`, before `USER pgdmn`
+- [ ] `cargo pgrx init` (and every step after `USER pgdmn`) runs as `pgdmn`, not root
 - [ ] `make check` and `make test` succeed from a fresh worktree with no `target/` directory
