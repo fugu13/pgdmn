@@ -127,11 +127,11 @@ pub fn feel_eval_timestamp(
     match result {
         Value::DateTime(dt) => {
             let y = dt.year();
-            let m = u8::try_from(dt.month()).unwrap_or_else(|_| {
-                pgrx::error!("FEEL date-time month out of range: {}", dt.month())
-            });
-            let d = u8::try_from(dt.day())
-                .unwrap_or_else(|_| pgrx::error!("FEEL date-time day out of range: {}", dt.day()));
+            let (month, day) = (dt.month(), dt.day());
+            let m = u8::try_from(month)
+                .unwrap_or_else(|_| pgrx::error!("FEEL date-time month out of range: {month}"));
+            let d = u8::try_from(day)
+                .unwrap_or_else(|_| pgrx::error!("FEEL date-time day out of range: {day}"));
             let h = dt.hour();
             let min = dt.minute();
             let sec = dt.second();
@@ -160,11 +160,9 @@ pub fn feel_eval_interval(
             })
         }
         Value::YearsAndMonthsDuration(d) => {
-            let months = i32::try_from(d.as_months()).unwrap_or_else(|_| {
-                pgrx::error!(
-                    "FEEL duration months out of INTERVAL range: {}",
-                    d.as_months()
-                )
+            let month_count = d.as_months();
+            let months = i32::try_from(month_count).unwrap_or_else(|_| {
+                pgrx::error!("FEEL duration months out of INTERVAL range: {month_count}")
             });
             pgrx::datum::Interval::new(months, 0, 0).unwrap_or_else(|e| {
                 pgrx::error!("cannot convert FEEL duration to PG INTERVAL: {:?}", e)

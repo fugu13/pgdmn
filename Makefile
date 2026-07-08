@@ -8,7 +8,7 @@ WEBSITE_TARGET_DIR = $(REPO_ROOT)/website/target
 WEBSITE_CARGO = cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo
 
 help: ## Show available targets
-	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-16s %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "%-16s %s\n", $$1, $$2}'
 
 base-image: ## Build the base Docker image (PG17 + pgrx toolchain)
 	docker build --target base -t pgdmn-base .
