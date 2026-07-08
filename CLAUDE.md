@@ -25,7 +25,7 @@ All extension builds run in Docker (images: `pgdmn-base` = PG17 + pgrx toolchain
 | `make test` | pgrx test suite against PG17 |
 | `make lint` | clippy (deny warnings) + rustfmt check |
 | `make fmt` | Auto-format |
-| `make verify` | fmt + lint + check — run after every code change |
+| `make verify` | fmt + lint — run after every code change (lint's clippy subsumes check) |
 | `make bench` | DMN eval benchmark |
 | `make website-dev` | Website dev server with hot-reload |
 | `make website-build` | Production website build |

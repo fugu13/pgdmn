@@ -35,7 +35,7 @@ lint: test-image ## Run clippy (deny warnings) and rustfmt check
 fmt: test-image ## Auto-format code
 	$(DOCKER_RUN) cargo fmt
 
-verify: fmt lint check ## Run after code changes: fmt + lint + check
+verify: fmt lint ## Run after code changes: fmt + lint (clippy --all-targets subsumes check)
 
 clean: ## Remove build artifacts
 	rm -rf target/
