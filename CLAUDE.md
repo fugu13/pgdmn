@@ -6,7 +6,7 @@ PostgreSQL extension that brings DMN (Decision Model and Notation) support to Po
 
 | Component | Choice |
 |---|---|
-| Language | Rust 2024 edition (extension); Rust 2021 (website, pending CHORE-003) |
+| Language | Rust 2024 edition (extension and website) |
 | Extension framework | pgrx 0.16 |
 | DMN/FEEL engine | dsntk 0.2 |
 | Target | PostgreSQL 17 |
@@ -30,6 +30,8 @@ All extension builds run in Docker (images: `pgdmn-base` = PG17 + pgrx toolchain
 | `make website-dev` | Website dev server with hot-reload |
 | `make website-build` | Production website build |
 | `make website-lint` | clippy + rustfmt check for the website |
+
+Unlike the extension, the website builds on the host, so two host tools must match the repo: `wasm-bindgen-cli` has to be the exact version of the `wasm-bindgen` crate pinned in `website/Cargo.lock` (0.2.126), or `make website-build` fails with `wasm-bindgen failed`. Install with `cargo install -f wasm-bindgen-cli --version <locked version>`. WEB-001 removes this coupling by dropping the wasm bundle entirely.
 
 ## Architecture
 
