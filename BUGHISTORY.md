@@ -31,3 +31,18 @@ Resolved bugs, recorded so they can be recognised if they reappear. Every entry 
 - [ ] The Dockerfile `test` stage chowns the PG17 extension and lib directories before `USER pgdmn`
 - [ ] The Dockerfile `test` stage runs `cargo pgrx init` after `USER pgdmn`
 - [ ] `make check` and `make test` succeed from a fresh worktree with no `target/` directory
+
+## BUG-003: website build breaks when the wasm-bindgen crate outruns the host CLI
+
+**Symptom:** `make website-build` fails with `wasm-bindgen failed` and a message telling you to either downgrade the crate (`cargo update -p wasm-bindgen --precise <old>`) or reinstall the binary. Triggered by an ordinary `cargo update` of `website/Cargo.lock`, with no source change at all.
+
+**Root cause:** `wasm-bindgen` is two things that must be the *exact* same version: the crate compiled into the wasm bundle, and the `wasm-bindgen-cli` binary installed on the build host that post-processes it. The lockfile pins the crate; nothing pins the binary. Refreshing dependencies moved the crate to 0.2.126 while the host still had 0.2.114, and the build broke. Nothing in the repo could have prevented it, because the binary lives outside the repo.
+
+**Fix:** Removed the coupling rather than patching it. WEB-001 dropped the wasm bundle entirely — the site is prerendered to static HTML and has no `hydrate` feature, no `wasm-bindgen` dependency, no `cargo-leptos`, and therefore no host tool that has to be kept version-matched. Sass is compiled in-process by `grass`. (The immediate unblock at the time was `cargo install -f wasm-bindgen-cli --version 0.2.126`.)
+
+**Files:** `website/Cargo.toml`, `website/src/bin/prerender.rs`, `Makefile`
+
+**Reoccurrence check:**
+- [ ] `website/Cargo.toml` declares no `wasm-bindgen`, no `console_error_panic_hook`, no `hydrate` feature, and no `cdylib` crate type
+- [ ] The website build invokes no host binary other than `cargo` — in particular not `cargo-leptos`, `wasm-bindgen`, or `sass`
+- [ ] Any proposal to reintroduce client-side interactivity is weighed against WEB-001 in CLAUDE.md's Decided section first; reintroducing the wasm bundle reintroduces this bug class

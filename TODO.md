@@ -61,29 +61,33 @@ Compares the input and output definitions of a named invocable across a new mode
 
 ### FEAT-003: Syntax highlighting in code blocks
 
-Add syntax highlighting for SQL and DMN (XML) code examples on the website. Evaluate Rust-side highlighting (e.g. syntect) vs client-side (Prism.js or similar) and choose based on SSR compatibility and bundle size. The SqlBlock component should accept a language parameter to select the grammar.
+Add syntax highlighting for SQL and DMN (XML) code examples on the website. The `SqlBlock` component should accept a language parameter to select the grammar.
+
+The client-side option (Prism.js or similar) is closed: WEB-001 ships zero JavaScript, and highlighting prose-level code samples does not justify reversing that. Highlight at build time in Rust — syntect is the obvious candidate — emitting styled markup into the prerendered HTML.
 
 ### FEAT-004: Markdown-based blog infrastructure
 
 Build a blog system for the website that reads markdown files from a directory, renders them as pages, and generates an index with titles and dates.
 
-### WEB-001: Prerender the website to static HTML
+Must render at build time into the prerendered output (WEB-001), not per request: there is no server in production to read files at request time.
 
-The website ships a wasm hydration bundle but has no client-side interactivity: no signals, no server functions, no client state. Every page is prose, navigation links, and code blocks. The hydration bundle therefore buys nothing, while costing a `cdylib` target, a `wasm-release` profile, and a hard version coupling between the `wasm-bindgen` crate in `website/Cargo.lock` and the `wasm-bindgen-cli` binary on the build host — a coupling that broke `make website-build` during the dependency refresh.
+### FEAT-005: Mobile hamburger menu
 
-Drop the `hydrate` feature, the `wasm-bindgen` and `console_error_panic_hook` dependencies, the `cdylib` crate type, and the `wasm-release` profile. Prerender all routes to static HTML at build time using Leptos static route generation, keeping the Axum SSR path only as the rendering engine that produces those files. Verify the emitted HTML preserves the accessibility guarantees the site already makes (skip link, landmarks, heading order) and that navigation works with JavaScript disabled — which prerendering makes literally true rather than aspirational.
+The site navigation needs a responsive hamburger menu for narrow viewports.
 
-Blocks FEAT-006 (deployment) and interacts with FEAT-004 (blog): a markdown blog must render at build time into the static output rather than at request time.
-
-### FEAT-005: Mobile hamburger menu with focus trapping
-
-The site navigation needs a responsive hamburger menu for narrow viewports. Must include focus trapping when open and proper aria attributes for the toggle button.
+The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which WEB-001 removed. Either implement it without script — a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert — or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
 
 ### FEAT-006: Website CI/CD deployment pipeline
 
-Set up automated builds and deployment for the website. Hosting is GitHub Pages, with the custom domain pointed at it from Route 53. The earlier evaluation of SSR-capable hosts (Fly.io, Railway) is closed: Pages serves static files only and cannot run a server process, which makes the static prerender in WEB-001 a prerequisite rather than an optimization.
+Set up automated builds and deployment for the website. Hosting is GitHub Pages, with the custom domain pointed at it from Route 53. The earlier evaluation of SSR-capable hosts (Fly.io, Railway) is closed: Pages serves static files only and cannot run a server process.
 
-Depends on WEB-001. The pipeline is a GitHub Actions workflow that builds the prerendered output and publishes it to Pages. Two Pages-specific details the build must produce: a `CNAME` file carrying the custom domain, and a `404.html` for the not-found route, since Pages has no server-side routing to fall back on.
+WEB-001 is done, so this is unblocked. The pipeline is a GitHub Actions workflow that runs `make website-build` and publishes `website/dist` to Pages. The prerender already emits `404.html` and `.nojekyll`; the one Pages-specific artifact still missing is a `CNAME` file carrying the custom domain, which this item should add to the published output.
+
+### WEB-001: Prerender the website to static HTML (done)
+
+The website shipped a wasm hydration bundle (343 KB of wasm plus 19.5 KB of JS) to hydrate pages with no client-side interactivity at all — no signals, no server functions, no client state. The bundle bought nothing while forcing a `wasm-bindgen` crate/CLI version match on the build host and a server-capable host in production.
+
+Done 2026-07-13. Dropped the `hydrate` feature, `wasm-bindgen`, `console_error_panic_hook`, the `cdylib` crate type, the `wasm-release` profile, and `cargo-leptos` itself. Every route is now `SsrMode::Static` and rendered to `website/dist` by a `prerender` binary, which also compiles Sass in-process via `grass` and emits `404.html` and `.nojekyll`. Specification in `docs/specifications/WEB-001-static-prerender.md`; decision recorded in CLAUDE.md.
 
 ## Chores
 
