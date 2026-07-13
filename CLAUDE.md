@@ -111,7 +111,8 @@ website/
 
 - **Accessibility is a default, not a feature.** WCAG 2.2 AA on every page. Semantic HTML before ARIA; one `<h1>` per page, no skipped heading levels; `<main>`, `<nav>`, and a skip link; visible focus indicators; 4.5:1 text contrast (3:1 large text/UI); keyboard reachability for every interactive element; every image has `alt`.
 - **URL as state:** the current view is reproducible from its URL.
-- **No JavaScript at all.** Pages are prerendered to static HTML and ship zero JS; links and navigation work with scripting disabled because there is nothing to disable. Anything that would need client-side code has to justify reversing WEB-001 first.
+- **No JavaScript at all.** Pages are prerendered to static HTML and ship zero JS; links and navigation work with scripting disabled because there is nothing to disable. Anything that would need client-side code has to justify reversing WEB-001 first. CI enforces this: the `Website` workflow fails if a script or wasm reference appears in the output.
+- **Deployment is automatic.** Pushing to `main` publishes `website/dist` to GitHub Pages at `www.pgdmn.com` via `.github/workflows/website.yml`. The site is served from a domain root because its links and stylesheet are absolute paths — a `github.io` subpath would break them.
 - **Anti-patterns — do not build:** modals, toasts, skeleton screens, infinite scroll, dark-mode toggles (respect `prefers-color-scheme`), custom cursors.
 - Styles in Sass (`style/main.scss`), flat colors, BEM-like modifier names.
 - UI changes get a behavioral description in `docs/ux/{aspect}.md` in the same change (see DOCS-002 for the backfill).

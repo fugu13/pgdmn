@@ -2,7 +2,7 @@
 
 ## Info Website
 
-Standalone site for pgdmn at pgdmn.com.
+Standalone site for pgdmn, canonically at **www.pgdmn.com**, with the apex `pgdmn.com` redirecting there.
 
 **Pages:**
 
@@ -13,7 +13,27 @@ Standalone site for pgdmn at pgdmn.com.
 - **Blog** -- launch post, deep dives, integration guides (dbt, Supabase, pgAdmin)
 - **GitHub link** -- prominent
 
-**Tech:** Static site generator (Hugo, Astro, or similar). Hosted on Netlify/Vercel/GitHub Pages.
+**Tech:** Leptos, prerendered to static HTML (WEB-001). `make website-build` writes `website/dist`; the `Website` GitHub Actions workflow lints, prerenders, and publishes that directory to GitHub Pages on every push to `main`. No server runs in production.
+
+### Going live: the manual steps
+
+The workflow and the `CNAME` are in the repo, but three things must be done by hand once, and the site will not resolve until they are.
+
+**1. Pages must be enabled from a private repo.** Publishing Pages from a private repository requires a paid GitHub plan. The workflow's `configure-pages` step enables Pages on first run against `main`; if it fails, set Settings → Pages → Source to **GitHub Actions** manually.
+
+**2. DNS records in Route 53.** Route 53's ALIAS record only targets AWS resources, so the apex cannot ALIAS to GitHub. Use A and AAAA records for the apex and a CNAME for `www`:
+
+| Name | Type | Value |
+|---|---|---|
+| `pgdmn.com` | A | `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153` |
+| `pgdmn.com` | AAAA | `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153`, `2606:50c0:8003::153` |
+| `www.pgdmn.com` | CNAME | `fugu13.github.io` |
+
+The published `CNAME` file names `www.pgdmn.com` as canonical, so GitHub serves the site there and redirects the apex to it once the apex records above resolve to GitHub.
+
+**3. Enforce HTTPS.** After DNS propagates, GitHub provisions a Let's Encrypt certificate; tick Settings → Pages → **Enforce HTTPS** once it is available.
+
+Note that the site's links and stylesheet are absolute paths, so it must be served from a domain root. Deploying without the custom domain would place it under a `github.io/pgdmn` subpath and break every link.
 
 ---
 

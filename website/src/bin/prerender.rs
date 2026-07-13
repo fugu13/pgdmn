@@ -18,6 +18,10 @@ const DIST: &str = "dist";
 /// Assets copied verbatim into the site root.
 const PUBLIC: &str = "public";
 const STYLESHEET: &str = "style/main.scss";
+/// The canonical host. GitHub Pages reads this from the published output and
+/// redirects the apex (pgdmn.com) here. Pages are linked with absolute paths,
+/// so the site must be served from a domain root — not a `github.io` subpath.
+const DOMAIN: &str = "www.pgdmn.com";
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -43,6 +47,7 @@ async fn main() -> Result<(), BoxError> {
     // GitHub Pages runs the pages through Jekyll unless this file exists, which
     // silently drops anything whose name starts with an underscore.
     fs::write(Path::new(DIST).join(".nojekyll"), "")?;
+    fs::write(Path::new(DIST).join("CNAME"), format!("{DOMAIN}\n"))?;
 
     println!("prerendered site written to {DIST}/");
     Ok(())

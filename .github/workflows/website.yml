@@ -1,0 +1,87 @@
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'Makefile'
+      - '.github/workflows/website.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'Makefile'
+      - '.github/workflows/website.yml'
+
+permissions:
+  contents: read
+
+# A superseded deploy is never worth finishing, but let an in-flight one to
+# main finish rather than leaving Pages serving a half-published site.
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build:
+    name: Lint and prerender
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: website
+
+      - run: make website-lint
+
+      - run: make website-build
+
+      # The site ships no JavaScript (WEB-001). Leptos emits inline hydration
+      # bookkeeping that the prerenderer strips; if a change ever reintroduces a
+      # script, fail here rather than quietly serving it.
+      - name: Assert the output ships no scripts or wasm
+        run: |
+          if grep -rlE '<script|\.wasm' website/dist/; then
+            echo "::error::prerendered output contains scripts or wasm; see WEB-001"
+            exit 1
+          fi
+          echo "output is script-free"
+
+      - name: Assert the deployable artifact is complete
+        run: |
+          for f in index.html 404.html CNAME style.css; do
+            test -s "website/dist/$f" || { echo "::error::missing or empty website/dist/$f"; exit 1; }
+          done
+          # .nojekyll is meaningful precisely by existing; it is always empty.
+          test -f website/dist/.nojekyll || { echo "::error::missing website/dist/.nojekyll"; exit 1; }
+          grep -qx 'www.pgdmn.com' website/dist/CNAME || { echo "::error::CNAME is not www.pgdmn.com"; exit 1; }
+          echo "index, 404, CNAME, .nojekyll and stylesheet all present"
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: website/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
