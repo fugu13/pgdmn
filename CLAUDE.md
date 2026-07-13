@@ -34,6 +34,8 @@ All extension builds run in Docker (images: `pgdmn-base` = PG17 + pgrx toolchain
 
 The website builds on the host rather than in Docker, but needs no host tools beyond cargo: Sass is compiled in-process by the `grass` crate, and there is no wasm step. There is deliberately no hot-reload — it depended on `cargo-leptos`, which cannot survive the removal of the wasm target (see WEB-001).
 
+The website's toolchain is pinned in `website/rust-toolchain.toml` (the extension's lives in the Dockerfile). CI installs no toolchain of its own and honours that pin, so clippy and rustfmt behave identically on a laptop and in CI. Do not pin a toolchain in the workflow instead — CI drifting ahead of developers is what broke the first run of the `Website` workflow.
+
 ## Architecture
 
 ```

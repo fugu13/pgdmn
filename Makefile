@@ -1,4 +1,4 @@
-.PHONY: help base-image test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-clean
+.PHONY: help base-image test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-fmt website-clean
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -55,6 +55,9 @@ website-dev: website-build ## Prerender, then serve; re-run to pick up changes
 website-lint: ## Run clippy (deny warnings) and rustfmt check on the website
 	$(WEBSITE_CARGO) clippy --all-targets -- -D warnings
 	$(WEBSITE_CARGO) fmt -- --check
+
+website-fmt: ## Auto-format the website
+	$(WEBSITE_CARGO) fmt
 
 website: website-build ## Prerender, open the site in the browser, and serve it
 	open http://127.0.0.1:3000

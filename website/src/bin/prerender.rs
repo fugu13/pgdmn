@@ -113,7 +113,12 @@ fn strip_scripts(directory: &Path) -> Result<(), BoxError> {
         let path = entry?.path();
         if path.is_dir() {
             strip_scripts(&path)?;
-        } else if path.extension().is_some_and(|extension| extension == "html") {
+            continue;
+        }
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "html")
+        {
             let html = fs::read_to_string(&path)?;
             fs::write(&path, without_script_elements(&html))?;
         }
