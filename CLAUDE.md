@@ -14,7 +14,12 @@ PostgreSQL extension that brings DMN (Decision Model and Notation) support to Po
 
 ## Build & Run
 
-All extension builds run in Docker (single `pgdmn-test` image: PG17 + pgrx toolchain, built and owned throughout by the non-root user initdb requires). All commands go through `make` — do not invoke `cargo` or `docker` directly.
+All extension builds run in Docker (single `pgdmn-test` image: PG17 + pgrx toolchain, built and owned throughout by the non-root user initdb requires). All extension commands go through `make` — do not invoke `cargo` or `docker` directly.
+
+Two host-native exceptions (always with `cargo +stable-aarch64-apple-darwin` — the default host toolchain is x86_64/Rosetta and unusable for measurement):
+
+- `profiling/` — benchmark/profiling harness over the vendored engine; build with `cargo build --release` in that directory, no PostgreSQL needed.
+- Vendored dsntk test gates — `CARGO_TARGET_DIR=target-host cargo test -p dsntk-<crate> -- --skip external_functions --skip bif_now --skip dmn_3_0076 --skip "dmn_3_0103::_0017"` from the repo root (the skips are environment-dependent upstream tests; `CARGO_TARGET_DIR=target-host` keeps host artifacts out of the Docker-shared `target/`).
 
 | Command | Purpose |
 |---|---|
@@ -51,6 +56,9 @@ website/
 
 ### Decided
 
+- **dsntk is vendored (`vendor/`, 12 crates) and patched in-tree for performance.** The patch set must stay minimal, separable (one commit per change), and upstreamable: `PGDMN:` comments at every change site, no reformatting of surrounding code, repo lint/style conventions do not apply to vendor code (`vendor/rustfmt.toml` disables formatting; cap-lints still surfaces default clippy lints in `make lint`). The user trades ~10% of a speedup for substantially less vendor diff — always report scope alongside speed. Safety net: the vendored crates are workspace members and their test suites (3,600+ evaluator tests, DMN TCK corpus) must stay green after any vendor change.
+- **Perf claims are canary-gated measurements.** Benchmark windows are gated on an untouched-code micro-benchmark canary (see docs/performance.md, methodology); sub-microsecond deltas across separate builds are noise below ~8%. Candidate optimization removals are measured at the final tip, not only in isolation — optimizations interact.
+- **Evaluation caches are content-addressed by 128-bit double-seeded rapidhash** (DMN: model XML hash; FEEL: expression text + context-shape digest). The shape digest deliberately mirrors the vendored parser's scope derivation — an accepted, test-pinned tradeoff; re-verify on dsntk upgrades.
 - **Docker-only extension builds.** The pgrx toolchain and PG17 live in the images; the host never needs them. The Dockerfile copies `Cargo.lock` and fetches `--locked` so the image's crate cache matches the repo (see BUG-001 in BUGHISTORY.md).
 - **Error model:** SQL-facing errors are raised with `pgrx::error!` (unwinds into a PostgreSQL ERROR — the idiomatic pgrx mechanism). Internal fallible functions return `Result<_, String>` and callers convert at the SQL boundary with `unwrap_or_else(|e| pgrx::error!(...))`. This is an accepted deviation from the thiserror convention: errors here terminate at the SQL boundary as messages, so enum error types add no value. Revisit if errors ever need programmatic matching.
 - **Website uses Leptos SSR** — an accepted deviation from the no-client-framework frontend rule, decided before this convention existed. New pages follow the existing Leptos patterns.
@@ -117,6 +125,7 @@ website/
 | `BUGHISTORY.md` | Resolved bugs with reoccurrence checks | Immediately when a bug is fixed |
 | `RELEASEPLAN.md` | Release and go-to-market plan | As the plan changes |
 | `docs/{feature}.md` | Feature descriptions (user actions, no code blocks; mermaid for diagrams) | When feature behavior changes |
+| `docs/performance.md` | Evaluation performance: amortization architecture, measurement methodology, vendored patch inventory | When caches, benchmarks, or the vendor patch set change |
 | `docs/ux/{aspect}.md` | Website UI behavioral descriptions | When UI changes |
 | `docs/specifications/{ID}-{slug}.md` | Specifications (via `/spec`; historical artifacts) | Created before planning |
 | `docs/plans/{ID}-{slug}.md` | Implementation plans (via `/blueprint`; status header kept current) | When work completes or is superseded |

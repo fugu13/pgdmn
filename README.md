@@ -260,5 +260,7 @@ at your option.
 - [TODO.md](TODO.md) - Tracked work items
 - [BUGHISTORY.md](BUGHISTORY.md) - Resolved bugs with reoccurrence checklists
 - [RELEASEPLAN.md](RELEASEPLAN.md) - Release, promotion, and go-to-market plan
+- [docs/performance.md](docs/performance.md) - Evaluation performance: what is amortized, per-row costs, measurement infrastructure, vendored engine patch inventory
 - [docs/improvements.md](docs/improvements.md) - Investigation of approaches to bypass JSONB for more efficient PG-to-DMN data passing
+- [vendor/README.md](vendor/README.md) - Provenance and conventions for the vendored dsntk engine
 - [website/](website/) - Marketing and documentation site (Leptos + Axum SSR)
