@@ -14,6 +14,8 @@ mod iterations;
 mod macros;
 mod tests;
 
+// PGDMN: exported for the decision-table evaluator's `?`-entry classification.
+pub use crate::builders::ast_references_name;
 pub use crate::evaluators::*;
 pub use crate::filters::FilterExpressionEvaluator;
 pub use crate::iterations::{EveryExpressionEvaluator, ForExpressionEvaluator, SomeExpressionEvaluator};

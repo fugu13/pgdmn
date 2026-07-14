@@ -1,5 +1,50 @@
 # TODO
 
+## Performance
+
+### PERF-001: Zero-copy DmnModel datum layout
+
+`dmn_eval` still CBOR-decodes the whole DmnModel struct (including the
+full XML string) from the datum on every row; only the cache probe was
+made O(1) via the stored content hash. A manual varlena layout
+(`[hash][ns][name][xml]`) with borrowed `&str` views would make per-row
+cost O(1) in model size, materializing the XML only on cache miss.
+Breaks the on-disk format (acceptable pre-1.0, needs a migration note).
+
+### PERF-002: Cache compiled regexes in dsntk-feel-regex (matches BIF)
+
+`replace()`/`split()` now reuse compiled regexes via a thread-local
+cache in dsntk-feel-evaluator, but `matches()` compiles inside the
+dsntk-feel-regex crate on every call. Needs a small change in that
+crate to route through the same cache.
+
+### PERF-003: Arc payloads for Value::List / Value::String / FunctionDefinition
+
+FeelContext is Arc-backed copy-on-write, but list, string, and function
+payloads still deep-clone on every scope resolution. Requires a
+compiler-guided sweep across dsntk-model-evaluator (~43 construction and
+match sites), which was out of scope for the minimal patch set. Expected
+to matter for list-heavy and BKM-heavy models.
+
+### PERF-004: DecisionServiceEvaluator per-call read lock
+
+Two-phase construction forces an RwLock read per decision-service call;
+`Arc::new_cyclic` would remove it. Minor cost, larger refactor.
+
+### PERF-005: Shared or serialized evaluator cache across backends
+
+The evaluator cache is thread-local, so every new PostgreSQL backend
+re-parses and re-builds each model on first use (~ms per model). For
+connection-churn workloads without a pooler, consider a shared-memory
+cache or a serialized precompiled-evaluator representation.
+
+### PERF-006: Upstream the vendored dsntk performance patch set
+
+The vendor/ changes are deliberately minimal and separable (one commit
+per fix, `PGDMN:` markers). Offer them upstream to dsntk; each accepted
+PR shrinks the maintained delta. The perf report's scope-vs-speed table
+is the negotiation sheet.
+
 ## Conversions
 
 ### CONVERT-001: Integers above i64::MAX lose precision in feel_to_json
@@ -18,13 +63,13 @@ fixed.
 
 Write property-based tests (proptest) for DMN round trips: parse -> serialize -> parse should be identity. Commit the persisted `proptest-regressions/` directories.
 
-### TEST-003: Flaky timing assertion in cache test
-
-`test_cache_different_models_independent` asserts the warm (cached) evaluation is at least 2x faster than the cold one; under light load the cold path can complete in ~700µs and the assertion fails spuriously (observed 2026-07-08: cold=720µs, warm=603µs). Replace the wall-clock comparison with a deterministic signal — e.g. a cache-hit counter exposed for tests, or assert on repeated-call stability rather than a fixed speedup ratio.
-
 ### TEST-002: Automated accessibility testing for the website
 
 Integrate axe-core into the website's test suite via Playwright: launch the SSR server, run axe-core against each page, fail on any violation at the "critical" or "serious" level.
+
+### TEST-003: Flaky timing assertion in cache test (done)
+
+`test_cache_different_models_independent` asserted the warm (cached) evaluation is at least 2x faster than the cold one and failed spuriously under load (observed again 2026-07-14 after the evaluator got faster: cold=464µs, warm=367µs). Fixed by exposing a test-only `dmn_evaluator_builds()` counter (`src/cache.rs`, gated to test builds) and asserting build counts instead of wall-clock ratios.
 
 ## Documentation
 

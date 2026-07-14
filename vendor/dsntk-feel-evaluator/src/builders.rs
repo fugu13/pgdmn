@@ -2688,9 +2688,10 @@ fn eval_external_function_definition(scope: &FeelScope, arguments: &[Value], bod
 /// Returns `true` when the AST may reference the specified name.
 /// Conservative: qualified-name segments and path tails count as references.
 // PGDMN: H13 — detects whether a for-expression body references `partial`.
-// Exhaustive match, so a new AST node variant fails the build instead of
-// being silently classified.
-fn ast_references_name(node: &AstNode, name: &Name) -> bool {
+// Also used by the decision-table evaluator to classify `?`-referencing
+// input entries (exported below). Exhaustive match, so a new AST node
+// variant fails the build instead of being silently classified.
+pub fn ast_references_name(node: &AstNode, name: &Name) -> bool {
   match node {
     AstNode::Name(n) | AstNode::QualifiedNameSegment(n) => n == name,
     AstNode::At(_)

@@ -57,6 +57,21 @@ thread_local! {
         RefCell::new(HashMap::with_hasher(RapidBuildHasher::default()));
 }
 
+/// Counts evaluator builds (cache misses) in this backend. Test-only
+/// observability so cache tests assert deterministically instead of
+/// comparing wall-clock timings (TEST-003).
+#[cfg(any(test, feature = "pg_test"))]
+thread_local! {
+    static EVALUATOR_BUILDS: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
+}
+
+/// Number of DMN evaluator builds (cache misses) in this backend so far.
+#[cfg(any(test, feature = "pg_test"))]
+#[pgrx::pg_extern]
+fn dmn_evaluator_builds() -> i64 {
+    EVALUATOR_BUILDS.with(std::cell::Cell::get)
+}
+
 /// Get or create a ModelEvaluator for the given model.
 ///
 /// Keyed by the model's 128-bit XML content hash (computed once when the
@@ -74,6 +89,8 @@ pub fn get_or_build_evaluator(model: &DmnModel) -> Result<Arc<ModelEvaluator>, S
     }
 
     // Parse and build
+    #[cfg(any(test, feature = "pg_test"))]
+    EVALUATOR_BUILDS.with(|count| count.set(count.get() + 1));
     let definitions =
         dsntk_model::parse(&model.xml).map_err(|e| format!("failed to parse DMN XML: {e}"))?;
     let evaluator = ModelEvaluator::new(&[definitions])

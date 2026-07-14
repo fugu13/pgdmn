@@ -239,6 +239,37 @@ impl EvaluatedDecisionTable<'_> {
   }
 }
 
+// PGDMN: DMN unary-test semantics for `?` — an entry item that references the
+// tested input value as `?` is itself the boolean test (e.g. `? >= 18`), while
+// `?`-free items keep the implicit `? in (...)` membership form. Items of a
+// comma list are OR-combined, mirroring the membership list's any-match rule.
+// String literals containing '?' are unaffected (the check is on AST names).
+fn input_entry_test_node(entry_node: AstNode, input_value_name: &Name) -> AstNode {
+  let in_wrap = |node: AstNode| AstNode::In(Box::new(AstNode::Name(input_value_name.clone())), Box::new(node));
+  let AstNode::ExpressionList(items) = entry_node else {
+    return in_wrap(entry_node);
+  };
+  let (direct, membership): (Vec<AstNode>, Vec<AstNode>) = items
+    .into_iter()
+    .partition(|item| dsntk_feel_evaluator::ast_references_name(item, input_value_name));
+  if direct.is_empty() {
+    return in_wrap(AstNode::ExpressionList(membership));
+  }
+  let mut combined: Option<AstNode> = if membership.is_empty() {
+    None
+  } else {
+    Some(in_wrap(AstNode::ExpressionList(membership)))
+  };
+  for item in direct {
+    combined = Some(match combined {
+      Some(acc) => AstNode::Or(Box::new(acc), Box::new(item)),
+      None => item,
+    });
+  }
+  // `direct` was non-empty, so `combined` is always Some here.
+  combined.unwrap_or(AstNode::Irrelevant)
+}
+
 fn parse_decision_table(scope: &FeelScope, decision_table: &DecisionTable) -> Result<ParsedDecisionTable> {
   // PGDMN (H10): the name the evaluated input expression value is bound to.
   let input_value_name = Name::from("?");
@@ -288,7 +319,7 @@ fn parse_decision_table(scope: &FeelScope, decision_table: &DecisionTable) -> Re
     let mut input_entries_evaluators = vec![];
     for i in 0..input_expression_evaluators.len() {
       let input_entry_node = dsntk_feel_parser::parse_unary_tests(scope, &rule.input_entries[i].text, false)?;
-      let node = AstNode::In(Box::new(AstNode::Name(input_value_name.clone())), Box::new(input_entry_node));
+      let node = input_entry_test_node(input_entry_node, &input_value_name);
       input_entries_evaluators.push(dsntk_feel_evaluator::prepare(&node));
     }
     // parse output clause

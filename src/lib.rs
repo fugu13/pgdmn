@@ -1664,17 +1664,26 @@ mod tests {
         let query_a = format!("SELECT dmn_eval(dmn_load('{escaped_a}'), 'Greeting')");
         let query_b = format!("SELECT dmn_eval(dmn_load('{escaped_b}'), 'Greeting')");
 
-        // Load model A (cold)
-        let cold_a_start = std::time::Instant::now();
+        // Deterministic cache observability (TEST-003): count evaluator
+        // builds instead of comparing wall-clock timings.
+        let builds = || {
+            Spi::get_one::<i64>("SELECT dmn_evaluator_builds()")
+                .expect("SPI failed")
+                .expect("builds count returned NULL")
+        };
+        let builds_start = builds();
+
+        // Load model A (cold — one build)
         let result_a = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL");
-        let cold_a = cold_a_start.elapsed();
+        assert_eq!(builds(), builds_start + 1, "model A should build once");
 
         // Load model B (cold — different XML, not cached)
         let result_b = Spi::get_one::<pgrx::JsonB>(&query_b)
             .expect("SPI failed")
             .expect("model B returned NULL");
+        assert_eq!(builds(), builds_start + 2, "model B should build once");
 
         // Models produce different output — a false cache hit would fail here
         assert_eq!(result_a.0, serde_json::json!("Hello, World!"));
@@ -1684,21 +1693,14 @@ mod tests {
             "Models A and B returned the same result; cache keying may not distinguish them"
         );
 
-        // Model A again (warm — should be cached)
-        let warm_a_start = std::time::Instant::now();
+        // Model A again (warm — served from cache, no new build)
         let result_a_warm = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL on warm run");
-        let warm_a = warm_a_start.elapsed();
+        assert_eq!(builds(), builds_start + 2, "warm model A must not rebuild");
 
         // Cached result matches original
         assert_eq!(result_a.0, result_a_warm.0);
-
-        // Warm A should be significantly faster than cold A
-        assert!(
-            warm_a < cold_a / 2,
-            "Model A was not faster on second call: cold={cold_a:?}, warm={warm_a:?}"
-        );
     }
 
     #[pg_test]
