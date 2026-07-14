@@ -256,9 +256,9 @@ ORDER BY count(*) DESC, handling;
 
         <h2 id="routing">"Ticket routing"</h2>
         <p>
-            "Change how work is triaged without shipping code. The rules sit in the database
-            beside the tickets, so updating the model reroutes every ticket the next time anyone
-            looks — and the old rules are still there to answer for what happened last week."
+            "Automatically visualize the ticket routing decision flowchart with DMN then put the
+            same flowchart directly into the database. What the documentation site says is what
+            happens because they're the same rules."
         </p>
 
         <ul class="download-list">
