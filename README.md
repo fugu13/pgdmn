@@ -261,4 +261,6 @@ at your option.
 - [BUGHISTORY.md](BUGHISTORY.md) - Resolved bugs with reoccurrence checklists
 - [RELEASEPLAN.md](RELEASEPLAN.md) - Release, promotion, and go-to-market plan
 - [docs/improvements.md](docs/improvements.md) - Investigation of approaches to bypass JSONB for more efficient PG-to-DMN data passing
-- [website/](website/) - Marketing and documentation site (Leptos + Axum SSR)
+- [docs/specifications/](docs/specifications/) - Specifications describing what a feature must do, written before implementation
+- [docs/ux/](docs/ux/) - Behavioral descriptions of the website's UI
+- [website/](website/) - Marketing and documentation site (Leptos, prerendered to static HTML; `make website-build`, deployed to GitHub Pages at www.pgdmn.com on push to `main`)
