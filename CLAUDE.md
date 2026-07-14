@@ -65,11 +65,11 @@ website/
 - **Error model:** SQL-facing errors are raised with `pgrx::error!` (unwinds into a PostgreSQL ERROR — the idiomatic pgrx mechanism). Internal fallible functions return `Result<_, String>` and callers convert at the SQL boundary with `unwrap_or_else(|e| pgrx::error!(...))`. This is an accepted deviation from the thiserror convention: errors here terminate at the SQL boundary as messages, so enum error types add no value. Revisit if errors ever need programmatic matching.
 - **Website is prerendered to static HTML, with no hydration** (WEB-001). Leptos renders every route once at build time; `dist/` is served as plain files by GitHub Pages, with no server process and no JavaScript shipped. The site had no client-side interactivity, so the wasm bundle it used to ship (343 KB) bought nothing while forcing a `wasm-bindgen` crate/CLI version match and a server-capable host. Consequences that bind new work: **no route may depend on request state**, and anything dynamic (e.g. the FEAT-004 blog) must render at build time. Reintroducing hydration means reintroducing both couplings — do not do it for a page that merely *looks* interactive.
 - **Website uses Leptos** — an accepted deviation from the no-client-framework frontend rule, decided before this convention existed. It is now used purely as a server-side template engine. New pages follow the existing Leptos patterns.
+- **JSONB is not the bottleneck** (measured 2026-07-14, `make bench`). `dmn_record_eval` skips the JSONB path entirely and is only **5–9% faster** than `dmn_eval`. The time is in FEEL evaluation itself, so any scheme to bypass serialization — direct datum conversion, SPI batch functions, hstore, variadic inputs — is chasing at most a tenth of the runtime. Do not spend effort there without profiling FEEL first. What *does* pay is letting Postgres parallelize: the functions are already `IMMUTABLE` and `PARALLEL SAFE`, and parallelism measures 3.8× (`make bench-shapes`). See PERF-001 and PERF-002.
 - **No LTO in dev profile** (causes ICE on Rust 1.85/aarch64).
 
 ### Undecided
 
-- Efficient PG→DMN data passing beyond JSONB and records — candidate approaches tracked in `docs/improvements.md`.
 - FEEL type compatibility rules for FEAT-002 (`dmn_compat`).
 
 ## Conventions
@@ -117,7 +117,6 @@ website/
 - **Deployment is automatic.** Pushing to `main` publishes `website/dist` to GitHub Pages at `www.pgdmn.com` via `.github/workflows/website.yml`. The site is served from a domain root because its links and stylesheet are absolute paths — a `github.io` subpath would break them.
 - **Anti-patterns — do not build:** modals, toasts, skeleton screens, infinite scroll, dark-mode toggles (respect `prefers-color-scheme`), custom cursors.
 - Styles in Sass (`style/main.scss`), flat colors, BEM-like modifier names.
-- UI changes get a behavioral description in `docs/ux/{aspect}.md` in the same change (see DOCS-002 for the backfill).
 
 ## Documentation
 
@@ -127,11 +126,10 @@ website/
 | `README.md` | Project description, quick start, an example for **every** SQL function, doc index | Any SQL function change; any doc added/removed |
 | `TODO.md` | Tracked work items with stable IDs | During planning; when items complete |
 | `BUGHISTORY.md` | Resolved bugs with reoccurrence checks | Immediately when a bug is fixed |
-| `RELEASEPLAN.md` | Release and go-to-market plan | As the plan changes |
-| `docs/{feature}.md` | Feature descriptions (user actions, no code blocks; mermaid for diagrams) | When feature behavior changes |
-| `docs/ux/{aspect}.md` | Website UI behavioral descriptions | When UI changes |
-| `docs/specifications/{ID}-{slug}.md` | Specifications (via `/spec`; historical artifacts) | Created before planning |
-| `docs/plans/{ID}-{slug}.md` | Implementation plans (via `/blueprint`; status header kept current) | When work completes or is superseded |
+
+**This project has no `docs/` directory** — a deliberate departure from the global convention, decided 2026-07-14. Everything that would have lived there lives somewhere with a reader: user-facing explanation goes on the website (`website/` — the Docs page, and the walkthroughs in `website/posts/`), decisions go in this file's *Decided* section, and findings and future work go in `TODO.md`. Do not create `docs/`, `docs/ux/`, `docs/specifications/`, or `docs/plans/`.
+
+**Direction, release, and go-to-market notes live outside this repo.** This repo holds the extension and its site; the thinking about where it is going is kept separately.
 
 - **Documentation is part of the code change, not a follow-up.**
 - TODO items: stable IDs with domain-specific prefixes (`TEST-`, `DOCS-`, `A11Y-`, `CHORE-`, …); avoid catch-all prefixes like `FEAT` for new items (existing `FEAT-*` IDs stay stable). Each item is a header plus paragraphs; completed items move to the end of their section.

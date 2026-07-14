@@ -16,15 +16,13 @@ Integrate axe-core into the website's test suite via Playwright: launch the SSR 
 
 ## Documentation
 
-### DOCS-001: Feature docs for major features
+### DOCS-001: Feature docs for major features (dropped)
 
-Create one file per major feature in `docs/`: the FEEL evaluation functions, the DMN model type and evaluation functions, and the website. Each file needs a one-sentence summary and a list of user actions the feature accomplishes, described from the user's needs rather than mechanically. No code blocks in `docs/` — use tables, prose, and mermaid diagrams.
+Dropped 2026-07-14 with the `docs/` directory. Explanation aimed at users belongs where users are — the website's Docs page and the walkthroughs in `website/posts/` — rather than in a parallel set of files inside the repo that only contributors would ever open. Conventions live in CLAUDE.md; findings and future work live here.
 
-### DOCS-002: UI behavioral descriptions for the website
+### DOCS-002: UI behavioral descriptions for the website (dropped)
 
-Add `docs/ux/{aspect}.md` behavioral descriptions covering the website's existing UI. Descriptions cover the full interaction lifecycle and must not reference implementation details.
-
-Navigation (`docs/ux/navigation.md`) and the Examples page's downloads, code blocks, and tables (`docs/ux/examples-and-code.md`) are written. Still to cover: the home page's hero and quick start, and the function reference's structure on the Docs page.
+Dropped 2026-07-14 with the `docs/` directory, for the same reason. The behaviour of the site is described by the site.
 
 ## Accessibility
 
@@ -69,15 +67,31 @@ The original framing of this item (focus trapping, an aria-expanded toggle butto
 
 ### PERF-001: Tell people to let the planner parallelize
 
-Evaluating a decision is pure, per-row, self-contained work — the ideal parallel workload — and `make bench-shapes` measures a **3.8×** speedup from parallelism alone, far more than any other change to the query. The functions are already `IMMUTABLE` and `PARALLEL SAFE`, so this needs no code change; it needs a reader who knows to check that their plan actually has a Gather in it.
+Evaluating a decision is pure, per-row, self-contained work — the ideal parallel workload — and parallelism is worth more than every other change to the query put together. The functions are already `IMMUTABLE` and `PARALLEL SAFE`, so this needs no code change; it needs a reader who knows to check that their plan actually has a Gather in it.
 
-Document this where someone doing bulk evaluation will read it: the Docs page and the README. Include the deduplication trap alongside it — the obvious "evaluate once per distinct input" CTE silently does nothing unless it is `MATERIALIZED`, because the planner pulls the call back up above the join. Both findings are recorded in `docs/improvements.md`.
+Measured with `make bench-shapes` (2026-07-14), same model and rows under different SQL, against a naive per-row baseline of 18 µs/row simple and 68 µs/row complex:
+
+| Query shape | Speedup |
+|---|---|
+| **Permit parallelism** | **3.8×** |
+| Deduplicate inputs, `MATERIALIZED` | 1.35–1.5× |
+| Deduplicate inputs, plain CTE | 1.00× — no effect |
+| Parallel *and* deduplicated | 1.3× |
+| Model from a table column vs. an inline literal | 1.0× — no penalty |
+
+Two findings worth writing down for users, on the Docs page and in the README.
+
+**The deduplication trap.** The obvious way to write "evaluate once per distinct input, then join the answers back" is a plain CTE, and it does *nothing*: the planner inlines the CTE and pulls `dmn_eval` back up above the join, so it evaluates once per output row exactly as before. It looks like an optimization and measures like the baseline. `WITH … AS MATERIALIZED` is what holds the evaluation down at the distinct-row count.
+
+**They do not compose.** A `MATERIALIZED` CTE is scanned serially, throwing the parallelism away. Given the choice, take the parallelism.
 
 ### PERF-002: Fingerprint models instead of hashing the XML per call
 
 `cache.rs` keys the evaluator cache on the entire XML string, so every `dmn_eval` hashes the whole model to find its evaluator, then compares the string on a hit. The cost scales with model size rather than with the decision being made. On the benchmark's small models it is a few percent; on a large model it would not be.
 
-Compute a fingerprint once, in `dmn_load`, store it on `DmnModel`, and key the cache on that. Measure before and after with `make bench` — this is worth doing only if the numbers say so, and the numbers currently say it is not the bottleneck (see PERF-001 and `docs/improvements.md`).
+Compute a fingerprint once, in `dmn_load`, store it on `DmnModel`, and key the cache on that. Measure before and after with `make bench` — worth doing only if the numbers say so, and the numbers currently say it is not the bottleneck.
+
+**What is the bottleneck: FEEL evaluation itself.** `dmn_record_eval` skips the JSONB path entirely and is only **5–9% faster** than `dmn_eval` (16.4 vs 18.1 µs/row simple, 65.5 vs 69.0 complex). Any future work aimed at the serialization hops — direct datum conversion, SPI batch functions, hstore or variadic inputs — is chasing at most a tenth of the runtime. Profile FEEL evaluation before spending effort there.
 
 ### WEB-003: Respect prefers-color-scheme
 
@@ -95,7 +109,7 @@ This would have caught the trailing-slash problem WEB-001 fixed by hand (linking
 
 The website shipped a wasm hydration bundle (343 KB of wasm plus 19.5 KB of JS) to hydrate pages with no client-side interactivity at all — no signals, no server functions, no client state. The bundle bought nothing while forcing a `wasm-bindgen` crate/CLI version match on the build host and a server-capable host in production.
 
-Done 2026-07-13. Dropped the `hydrate` feature, `wasm-bindgen`, `console_error_panic_hook`, the `cdylib` crate type, the `wasm-release` profile, and `cargo-leptos` itself. Every route is now `SsrMode::Static` and rendered to `website/dist` by a `prerender` binary, which also compiles Sass in-process via `grass` and emits `404.html` and `.nojekyll`. Specification in `docs/specifications/WEB-001-static-prerender.md`; decision recorded in CLAUDE.md.
+Done 2026-07-13. Dropped the `hydrate` feature, `wasm-bindgen`, `console_error_panic_hook`, the `cdylib` crate type, the `wasm-release` profile, and `cargo-leptos` itself. Every route is now `SsrMode::Static` and rendered to `website/dist` by a `prerender` binary, which also compiles Sass in-process via `grass` and emits `404.html` and `.nojekyll`. The decision is recorded in CLAUDE.md.
 
 ### FEAT-003: Syntax highlighting in code blocks (done)
 

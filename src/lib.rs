@@ -1150,6 +1150,139 @@ mod tests {
         pgrx::warning!("{}", report);
     }
 
+    // A model whose decisions each return a different FEEL type, so every typed
+    // dmn_eval_* variant has something to unwrap.
+    const TYPED_DMN: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="typed" name="Typed" namespace="https://example.org/typed">
+    <decision id="Verdict" name="Verdict">
+        <variable name="Verdict" typeRef="string"/>
+        <literalExpression><text>"Approved"</text></literalExpression>
+    </decision>
+    <decision id="Total" name="Total">
+        <variable name="Total" typeRef="number"/>
+        <literalExpression><text>100 + 10</text></literalExpression>
+    </decision>
+    <decision id="Eligible" name="Eligible">
+        <variable name="Eligible" typeRef="boolean"/>
+        <literalExpression><text>5 > 3</text></literalExpression>
+    </decision>
+    <decision id="Due" name="Due">
+        <variable name="Due" typeRef="date"/>
+        <literalExpression><text>date("2024-03-15")</text></literalExpression>
+    </decision>
+    <decision id="Stamp" name="Stamp">
+        <variable name="Stamp" typeRef="dateTime"/>
+        <literalExpression><text>date and time("2024-03-15T10:30:00")</text></literalExpression>
+    </decision>
+    <decision id="Term" name="Term">
+        <variable name="Term" typeRef="yearMonthDuration"/>
+        <literalExpression><text>duration("P2Y3M")</text></literalExpression>
+    </decision>
+</definitions>"#;
+
+    #[pg_test]
+    fn test_dmn_eval_text() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<String>(&format!(
+            "SELECT dmn_eval_text(dmn_load('{escaped}'), 'Verdict')"
+        ))
+        .expect("SPI failed");
+        // No `#>> '{}'`: a string decision comes back as text, unquoted.
+        assert_eq!(result.unwrap(), "Approved");
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_numeric() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::AnyNumeric>(&format!(
+            "SELECT dmn_eval_numeric(dmn_load('{escaped}'), 'Total')"
+        ))
+        .expect("SPI failed");
+        assert_eq!(result.unwrap().to_string(), "110");
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_numeric_is_arithmetic_without_a_cast() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::AnyNumeric>(&format!(
+            "SELECT round(dmn_eval_numeric(dmn_load('{escaped}'), 'Total') * 1.5, 2)"
+        ))
+        .expect("SPI failed");
+        assert_eq!(result.unwrap().to_string(), "165.00");
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_bool() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<bool>(&format!(
+            "SELECT dmn_eval_bool(dmn_load('{escaped}'), 'Eligible')"
+        ))
+        .expect("SPI failed");
+        assert!(result.unwrap());
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_date() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::datum::Date>(&format!(
+            "SELECT dmn_eval_date(dmn_load('{escaped}'), 'Due')"
+        ))
+        .expect("SPI failed")
+        .unwrap();
+        assert_eq!((result.year(), result.month(), result.day()), (2024, 3, 15));
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_timestamp() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::datum::Timestamp>(&format!(
+            "SELECT dmn_eval_timestamp(dmn_load('{escaped}'), 'Stamp')"
+        ))
+        .expect("SPI failed")
+        .unwrap();
+        assert_eq!(
+            (result.year(), result.month(), result.day(), result.hour()),
+            (2024, 3, 15, 10)
+        );
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_interval() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::datum::Interval>(&format!(
+            "SELECT dmn_eval_interval(dmn_load('{escaped}'), 'Term')"
+        ))
+        .expect("SPI failed")
+        .unwrap();
+        assert_eq!(result.months(), 27); // P2Y3M
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_typed_rejects_the_wrong_type() {
+        // Asking a string decision for a number is a mistake worth hearing about,
+        // and the error names what came back instead.
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = std::panic::catch_unwind(|| {
+            Spi::get_one::<pgrx::AnyNumeric>(&format!(
+                "SELECT dmn_eval_numeric(dmn_load('{escaped}'), 'Verdict')"
+            ))
+        });
+        assert!(result.is_err(), "expected an error, got a number");
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_text_on_the_website_loan_model() {
+        // The shape the website's SQL now uses.
+        let escaped = LOAN_DMN.replace('\'', "''");
+        let result = Spi::get_one::<String>(&format!(
+            "SELECT dmn_eval_text(dmn_load('{escaped}'), 'Eligibility', \
+             '{{\"Age\": 34, \"Income\": 82000, \"Bankrupt\": false}}'::jsonb)"
+        ))
+        .expect("SPI failed");
+        assert_eq!(result.unwrap(), "Approved");
+    }
+
     // --- Record-based evaluation tests ---
 
     #[pg_test]

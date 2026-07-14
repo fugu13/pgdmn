@@ -87,6 +87,68 @@ SELECT dmn_record_eval(
 -- "Approved"
 ```
 
+### Typed variants
+
+`dmn_eval` returns JSONB, so a decision that produces the string `Approved` comes back as `"Approved"` — quoted. Unwrapping that by hand means `dmn_eval(...) #>> '{}'`, and a numeric decision means `(dmn_eval(...) #>> '{}')::numeric`.
+
+The typed variants take the same arguments and return a native PostgreSQL type instead. Each raises an error if the decision returns something else — asking for a number and getting a string is a mistake worth hearing about.
+
+#### dmn_eval_text(model, invocable, input?) -> text
+
+```sql
+SELECT dmn_eval_text(
+  dmn_load('...'),
+  'Eligibility',
+  '{"Age": 34, "Income": 82000, "Bankrupt": false}'::jsonb
+);
+-- Approved
+```
+
+#### dmn_eval_numeric(model, invocable, input?) -> numeric
+
+Drops straight into arithmetic, with no unwrap and no cast.
+
+```sql
+SELECT round(dmn_eval_numeric(
+  dmn_load('...'),
+  'Total Price',
+  '{"Base Price": 2499.99, "Tax Rate": 0.0825}'::jsonb
+), 2);
+-- 2706.24
+```
+
+#### dmn_eval_bool(model, invocable, input?) -> boolean
+
+Usable directly in a `WHERE` clause or a `CHECK` constraint.
+
+```sql
+SELECT dmn_eval_bool(dmn_load('...'), 'Eligible', '{"Age": 30}'::jsonb);
+-- true
+```
+
+#### dmn_eval_date(model, invocable, input?) -> date
+
+```sql
+SELECT dmn_eval_date(dmn_load('...'), 'Due Date');
+-- 2024-03-15
+```
+
+#### dmn_eval_timestamp(model, invocable, input?) -> timestamp
+
+```sql
+SELECT dmn_eval_timestamp(dmn_load('...'), 'Effective From');
+-- 2024-03-15 10:30:00
+```
+
+#### dmn_eval_interval(model, invocable, input?) -> interval
+
+Both FEEL durations convert: years and months, and days and time.
+
+```sql
+SELECT dmn_eval_interval(dmn_load('...'), 'Term');
+-- 2 years 3 mons
+```
+
 ## Introspection Functions
 
 ### dmn_invocables(model) -> setof (name text, kind text)
@@ -260,7 +322,6 @@ at your option.
 - [TODO.md](TODO.md) - Tracked work items
 - [BUGHISTORY.md](BUGHISTORY.md) - Resolved bugs with reoccurrence checklists
 - [RELEASEPLAN.md](RELEASEPLAN.md) - Release, promotion, and go-to-market plan
-- [docs/improvements.md](docs/improvements.md) - Investigation of approaches to bypass JSONB for more efficient PG-to-DMN data passing
-- [docs/specifications/](docs/specifications/) - Specifications describing what a feature must do, written before implementation
-- [docs/ux/](docs/ux/) - Behavioral descriptions of the website's UI
-- [website/](website/) - Marketing and documentation site (Leptos, prerendered to static HTML; `make website-build`, deployed to GitHub Pages at www.pgdmn.com on push to `main`)
+- [website/](website/) - The site: worked examples, a function reference, and walkthroughs in `website/posts/` (Leptos, prerendered to static HTML; `make website-build`, deployed to GitHub Pages at www.pgdmn.com on push to `main`)
+
+There is no `docs/` directory: explanation aimed at users lives on the website, decisions live in CLAUDE.md, and findings and future work live in TODO.md.

@@ -71,6 +71,113 @@ pub fn feel_to_json(value: &Value) -> serde_json::Value {
     }
 }
 
+/// The message a SQL author sees when a decision or expression evaluated to
+/// null. FEEL carries a reason with its nulls when it has one; pass it on.
+fn null_error(detail: Option<&String>) -> String {
+    detail.map_or_else(
+        || "evaluation returned null".to_string(),
+        |reason| format!("evaluation returned null: {reason}"),
+    )
+}
+
+/// Unwrap a FEEL result into `NUMERIC`.
+///
+/// These six conversions are what the typed `feel_eval_*` and `dmn_eval_*`
+/// functions are made of — same rules, same errors, whether the value came from
+/// an expression or a decision.
+pub fn feel_to_numeric(value: &Value) -> Result<pgrx::AnyNumeric, String> {
+    match value {
+        Value::Number(n) => n
+            .to_string()
+            .parse::<pgrx::AnyNumeric>()
+            .map_err(|e| format!("cannot convert FEEL number to NUMERIC: {e}")),
+        Value::Null(detail) => Err(null_error(detail.as_ref())),
+        other => Err(format!("expected FEEL number, got: {other}")),
+    }
+}
+
+/// Unwrap a FEEL result into `BOOLEAN`.
+pub fn feel_to_bool(value: &Value) -> Result<bool, String> {
+    match value {
+        Value::Boolean(b) => Ok(*b),
+        Value::Null(detail) => Err(null_error(detail.as_ref())),
+        other => Err(format!("expected FEEL boolean, got: {other}")),
+    }
+}
+
+/// Unwrap a FEEL result into `TEXT`, without the quotes JSONB would carry.
+pub fn feel_to_text(value: &Value) -> Result<String, String> {
+    match value {
+        Value::String(s) => Ok(s.clone()),
+        Value::Null(detail) => Err(null_error(detail.as_ref())),
+        other => Err(format!("expected FEEL string, got: {other}")),
+    }
+}
+
+/// Unwrap a FEEL result into `DATE`.
+pub fn feel_to_date(value: &Value) -> Result<pgrx::datum::Date, String> {
+    match value {
+        Value::Date(d) => {
+            let (year, month, day) = d.as_tuple();
+            let month = u8::try_from(month)
+                .map_err(|_| format!("FEEL date month out of range: {month}"))?;
+            let day =
+                u8::try_from(day).map_err(|_| format!("FEEL date day out of range: {day}"))?;
+            pgrx::datum::Date::new(year, month, day)
+                .map_err(|e| format!("cannot convert FEEL date to PG DATE: {e:?}"))
+        }
+        Value::Null(detail) => Err(null_error(detail.as_ref())),
+        other => Err(format!("expected FEEL date, got: {other}")),
+    }
+}
+
+/// Unwrap a FEEL result into `TIMESTAMP`.
+pub fn feel_to_timestamp(value: &Value) -> Result<pgrx::datum::Timestamp, String> {
+    match value {
+        Value::DateTime(dt) => {
+            let (month, day) = (dt.month(), dt.day());
+            let month = u8::try_from(month)
+                .map_err(|_| format!("FEEL date-time month out of range: {month}"))?;
+            let day =
+                u8::try_from(day).map_err(|_| format!("FEEL date-time day out of range: {day}"))?;
+            pgrx::datum::Timestamp::new(
+                dt.year(),
+                month,
+                day,
+                dt.hour(),
+                dt.minute(),
+                f64::from(dt.second()),
+            )
+            .map_err(|e| format!("cannot convert FEEL date-time to PG TIMESTAMP: {e:?}"))
+        }
+        Value::Null(detail) => Err(null_error(detail.as_ref())),
+        other => Err(format!("expected FEEL date-time, got: {other}")),
+    }
+}
+
+/// Unwrap a FEEL result into `INTERVAL`. Both FEEL durations convert: years and
+/// months, and days and time.
+pub fn feel_to_interval(value: &Value) -> Result<pgrx::datum::Interval, String> {
+    match value {
+        Value::DaysAndTimeDuration(d) => {
+            let secs = d.as_seconds();
+            let micros = (secs as i64) * 1_000_000;
+            pgrx::datum::Interval::new(0, 0, micros)
+                .map_err(|e| format!("cannot convert FEEL duration to PG INTERVAL: {e:?}"))
+        }
+        Value::YearsAndMonthsDuration(d) => {
+            let month_count = d.as_months();
+            let months = i32::try_from(month_count).map_err(|_| {
+                format!("FEEL duration months out of INTERVAL range: {month_count}")
+            })?;
+            pgrx::datum::Interval::new(months, 0, 0)
+                .map_err(|e| format!("cannot convert FEEL duration to PG INTERVAL: {e:?}"))
+        }
+        Value::Null(detail) => Err(null_error(detail.as_ref())),
+        other => Err(format!("expected FEEL duration, got: {other}")),
+    }
+}
+
 /// Convert a JSON value (expected object) to a FeelContext.
 pub fn json_to_context(json: &serde_json::Value) -> FeelContext {
     if let serde_json::Value::Object(map) = json {

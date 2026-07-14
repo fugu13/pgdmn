@@ -71,6 +71,42 @@ SELECT feel_eval('1 + 2');
             </Fun>
         </dl>
 
+        <h3 id="typed">"Typed variants"</h3>
+        <p>
+            <code>"dmn_eval"</code>" returns JSONB, so a decision that produces the string "
+            <em>"Approved"</em>" comes back as "<code>"\"Approved\""</code>" — quoted. Unwrapping
+            that by hand means "<code>"dmn_eval(…) #>> '{}'"</code>", and a numeric decision means
+            "<code>"(dmn_eval(…) #>> '{}')::numeric"</code>"."
+        </p>
+        <p>
+            "These take the same arguments and hand back a native PostgreSQL type instead. Each
+            errors if the decision returns something else — asking for a number and getting a
+            string is a mistake worth hearing about."
+        </p>
+        <dl class="fn-list">
+            <Fun signature="dmn_eval_text(model dmnmodel, invocable text, input jsonb DEFAULT NULL) → text">
+                "A decision that returns a string, unquoted."
+            </Fun>
+            <Fun signature="dmn_eval_numeric(model dmnmodel, invocable text, input jsonb DEFAULT NULL) → numeric">
+                "A decision that returns a number, ready for arithmetic without a cast: "
+                <code>"round(dmn_eval_numeric(…), 2)"</code>"."
+            </Fun>
+            <Fun signature="dmn_eval_bool(model dmnmodel, invocable text, input jsonb DEFAULT NULL) → boolean">
+                "A decision that returns a boolean — usable directly in a "<code>"WHERE"</code>
+                " clause or a "<code>"CHECK"</code>" constraint."
+            </Fun>
+            <Fun signature="dmn_eval_date(model dmnmodel, invocable text, input jsonb DEFAULT NULL) → date">
+                "A decision that returns a date."
+            </Fun>
+            <Fun signature="dmn_eval_timestamp(model dmnmodel, invocable text, input jsonb DEFAULT NULL) → timestamp">
+                "A decision that returns a date and time."
+            </Fun>
+            <Fun signature="dmn_eval_interval(model dmnmodel, invocable text, input jsonb DEFAULT NULL) → interval">
+                "A decision that returns a duration. Both flavours convert: years and months, and
+                days and time."
+            </Fun>
+        </dl>
+
         <h2>"Introspection functions"</h2>
         <dl class="fn-list">
             <Fun signature="dmn_invocables(model dmnmodel) → setof (name text, kind text)">
