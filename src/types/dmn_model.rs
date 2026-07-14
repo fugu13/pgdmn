@@ -16,6 +16,10 @@ pub struct DmnModel {
     pub namespace: String,
     pub name: String,
     pub invocable_names: Vec<String>,
+    /// 128-bit rapidhash content hash of `xml`, computed once at parse time
+    /// and stored with the value, so per-row evaluator-cache probes never
+    /// rehash the XML (see cache.rs for the collision reasoning).
+    pub xml_hash: [u64; 2],
 }
 
 impl InOutFuncs for DmnModel {
@@ -61,6 +65,7 @@ impl DmnModel {
             namespace,
             name,
             invocable_names,
+            xml_hash: crate::cache::content_hash128(xml.as_bytes()),
         })
     }
 }

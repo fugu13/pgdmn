@@ -3,18 +3,22 @@ use pgrx::prelude::*;
 use dsntk_feel::FeelScope;
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
-use dsntk_feel_evaluator::evaluate;
-use dsntk_feel_parser::parse_expression;
 
+use crate::cache::{context_shape_digest, get_or_prepare_feel_evaluator};
 use crate::convert::{feel_to_json, json_to_context, tuple_to_context};
 
 /// Evaluate a FEEL expression with a pre-built FeelContext.
+///
+/// Parsing and evaluator construction are amortized across calls: the prepared
+/// evaluator is cached per (expression, context shape) — see cache.rs — so a
+/// cache hit costs one shape digest, one map probe, and the evaluation itself.
 fn eval_feel_ctx(expression: &str, ctx: FeelContext) -> Value {
+    let shape = context_shape_digest(&ctx);
     let scope = FeelScope::default();
     scope.push(ctx);
-    let node = parse_expression(&scope, expression, false)
-        .unwrap_or_else(|e| pgrx::error!("FEEL parse error: {}", e));
-    evaluate(&scope, &node)
+    let evaluator = get_or_prepare_feel_evaluator(expression, shape, &scope)
+        .unwrap_or_else(|e| pgrx::error!("{}", e));
+    evaluator(&scope)
 }
 
 /// Raise the SQL error for a FEEL null result in a typed variant.

@@ -14,10 +14,22 @@ pub fn json_to_feel(json: &serde_json::Value) -> Value {
         serde_json::Value::Null => Value::Null(None),
         serde_json::Value::Bool(b) => Value::Boolean(*b),
         serde_json::Value::Number(n) => {
-            let s = n.to_string();
-            match s.parse::<FeelNumber>() {
-                Ok(num) => Value::Number(num),
-                Err(_) => Value::Null(Some(format!("cannot convert number: {s}"))),
+            // Integer fast path: serde_json already holds i64/u64 for integer
+            // JSON numbers, and FeelNumber::from(i64/u64) is one exact FFI
+            // conversion — no String, CString, or per-character decimal parse.
+            if let Some(i) = n.as_i64() {
+                Value::Number(FeelNumber::from(i))
+            } else if let Some(u) = n.as_u64() {
+                Value::Number(FeelNumber::from(u))
+            } else {
+                // Non-integer: keep the decimal-string path. The shortest
+                // decimal rendering -> decimal128 preserves intended decimal
+                // values (e.g. 0.1); do not route floats through f64 binary.
+                let s = n.to_string();
+                match s.parse::<FeelNumber>() {
+                    Ok(num) => Value::Number(num),
+                    Err(_) => Value::Null(Some(format!("cannot convert number: {s}"))),
+                }
             }
         }
         serde_json::Value::String(s) => Value::String(s.clone()),
@@ -28,7 +40,7 @@ pub fn json_to_feel(json: &serde_json::Value) -> Value {
         serde_json::Value::Object(map) => {
             let mut ctx = FeelContext::new();
             for (key, val) in map {
-                ctx.set_entry(&Name::from(key.as_str()), json_to_feel(val));
+                ctx.insert(Name::from(key.as_str()), json_to_feel(val));
             }
             Value::Context(ctx)
         }
@@ -40,16 +52,7 @@ pub fn feel_to_json(value: &Value) -> serde_json::Value {
     match value {
         Value::Null(_) => serde_json::Value::Null,
         Value::Boolean(b) => serde_json::Value::Bool(*b),
-        Value::Number(n) => {
-            let s = n.to_string();
-            if let Ok(i) = s.parse::<i64>() {
-                serde_json::Value::Number(serde_json::Number::from(i))
-            } else if let Ok(f) = s.parse::<f64>() {
-                serde_json::json!(f)
-            } else {
-                serde_json::Value::String(s)
-            }
-        }
+        Value::Number(n) => feel_number_to_json(n),
         Value::String(s) => serde_json::Value::String(s.clone()),
         Value::List(items) => {
             let arr: Vec<serde_json::Value> = items.iter().map(feel_to_json).collect();
@@ -71,12 +74,36 @@ pub fn feel_to_json(value: &Value) -> serde_json::Value {
     }
 }
 
+/// Convert a FEEL number to a JSON number.
+///
+/// Integers take a single exact FFI conversion. The `is_integer` guard is
+/// required because `i64::try_from(&FeelNumber)` truncates fractional values
+/// instead of failing. Integers wider than i64 and all non-integers fall back
+/// to the decimal-string path: i64 when the digits parse as one, f64 when
+/// parseable, otherwise a JSON string.
+fn feel_number_to_json(n: &FeelNumber) -> serde_json::Value {
+    if n.is_integer() {
+        if let Ok(i) = i64::try_from(n) {
+            return serde_json::Value::Number(serde_json::Number::from(i));
+        }
+        // Integer wider than i64: fall through to the string path.
+    }
+    let s = n.to_string();
+    if let Ok(i) = s.parse::<i64>() {
+        serde_json::Value::Number(serde_json::Number::from(i))
+    } else if let Ok(f) = s.parse::<f64>() {
+        serde_json::json!(f)
+    } else {
+        serde_json::Value::String(s)
+    }
+}
+
 /// Convert a JSON value (expected object) to a FeelContext.
 pub fn json_to_context(json: &serde_json::Value) -> FeelContext {
     if let serde_json::Value::Object(map) = json {
         let mut ctx = FeelContext::new();
         for (key, val) in map {
-            ctx.set_entry(&Name::from(key.as_str()), json_to_feel(val));
+            ctx.insert(Name::from(key.as_str()), json_to_feel(val));
         }
         ctx
     } else {
@@ -215,10 +242,9 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
 pub fn tuple_to_context<A: pgrx::WhoAllocated>(tuple: &PgHeapTuple<'_, A>) -> FeelContext {
     let mut ctx = FeelContext::new();
     for (attno, attr) in tuple.attributes() {
-        let name_str = attr.name();
-        let feel_name = Name::from(name_str);
+        let feel_name = Name::from(attr.name());
         let value = pg_datum_to_feel(tuple, attno, attr.atttypid);
-        ctx.set_entry(&feel_name, value);
+        ctx.insert(feel_name, value);
     }
     ctx
 }
