@@ -1001,6 +1001,43 @@ mod tests {
         .expect("DMN record risk query failed");
         let dmn_record_risk_dur = dmn_record_risk_start.elapsed();
 
+        // --- Benchmark 3: FEEL expression evaluation per row ---
+        let feel_concat_sql = "SELECT feel_eval('first_name + \" \" + last_name', \
+             jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+             FROM bench_names";
+        let feel_numeric_sql = "SELECT feel_eval_numeric(\
+             'credit_score * 0.3 + income / 2000 + years_employed * 5', \
+             jsonb_build_object('income', income, 'credit_score', credit_score, \
+             'years_employed', years_employed)) FROM bench_names";
+        Spi::run(&format!("{feel_concat_sql} LIMIT 1")).expect("FEEL concat warmup failed");
+        Spi::run(&format!("{feel_numeric_sql} LIMIT 1")).expect("FEEL numeric warmup failed");
+
+        let feel_concat_start = std::time::Instant::now();
+        Spi::run(feel_concat_sql).expect("FEEL concat query failed");
+        let feel_concat_dur = feel_concat_start.elapsed();
+
+        let feel_numeric_start = std::time::Instant::now();
+        Spi::run(feel_numeric_sql).expect("FEEL numeric query failed");
+        let feel_numeric_dur = feel_numeric_start.elapsed();
+
+        // --- Benchmark 4: large model (85KB lending DMN) per-row overhead ---
+        let escaped_lending = EXAMPLE_LENDING.replace('\'', "''");
+        let lending_sql = format!(
+            "SELECT dmn_eval(dmn_load('{escaped_lending}'), 'Strategy', jsonb_build_object(\
+             'ApplicantData', jsonb_build_object('Age', 51, 'MaritalStatus', 'M', \
+             'EmploymentStatus', 'EMPLOYED', 'ExistingCustomer', false, \
+             'Monthly', jsonb_build_object('Income', income / 10, 'Expenses', 3000, 'Repayments', 0)), \
+             'RequestedProduct', jsonb_build_object('ProductType', 'STANDARD LOAN', \
+             'Amount', income, 'Rate', 0.06, 'Term', 36), \
+             'BureauData', jsonb_build_object('CreditScore', credit_score, 'Bankrupt', false))) \
+             FROM bench_names"
+        );
+        Spi::run(&format!("{lending_sql} LIMIT 1")).expect("DMN lending warmup failed");
+
+        let dmn_lending_start = std::time::Instant::now();
+        Spi::run(&lending_sql).expect("DMN lending query failed");
+        let dmn_lending_dur = dmn_lending_start.elapsed();
+
         let rc = row_count as f64;
 
         // Report results
@@ -1020,6 +1057,13 @@ mod tests {
              PG via jsonb:    {:.1} us/row ({:?})\n\
              PG plain SQL:    {:.1} us/row ({:?})\n\
              record/jsonb:    {:.2}x | DMN jsonb/plain: {:.1}x | DMN record/plain: {:.1}x\n\
+             \n\
+             --- FEEL per-row (evaluator cache path) ---\n\
+             feel_eval concat:    {:.1} us/row ({:?})\n\
+             feel_eval_numeric:   {:.1} us/row ({:?})\n\
+             \n\
+             --- Large model, 85KB lending DMN (per-row model overhead) ---\n\
+             DMN lending jsonb:   {:.1} us/row ({:?})\n\
              \n\
              Complex/Simple DMN: {:.1}x",
             dmn_concat_dur.as_micros() as f64 / rc,
@@ -1044,6 +1088,12 @@ mod tests {
             dmn_record_risk_dur.as_secs_f64() / dmn_risk_dur.as_secs_f64(),
             dmn_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
             dmn_record_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
+            feel_concat_dur.as_micros() as f64 / rc,
+            feel_concat_dur,
+            feel_numeric_dur.as_micros() as f64 / rc,
+            feel_numeric_dur,
+            dmn_lending_dur.as_micros() as f64 / rc,
+            dmn_lending_dur,
             dmn_risk_dur.as_secs_f64() / dmn_concat_dur.as_secs_f64(),
         );
         if let Err(e) = std::fs::write("/pgdmn/benchmark_results.txt", &report) {
