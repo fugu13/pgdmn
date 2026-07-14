@@ -151,4 +151,3 @@ website/
 - **When uncertain or when rules conflict, ask** — with a concrete option.
 - When the user overrules you, get the reasoning and record it here.
 - Flag likely performance problems proactively (unbounded allocations, per-row re-parsing, hot-path bloat).
-- Never reference Harry Potter or anything related to JK Rowling.

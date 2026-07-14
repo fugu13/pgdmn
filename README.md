@@ -307,6 +307,16 @@ make test         # run the pgrx test suite against PG17
 make verify       # fmt + lint + check
 ```
 
+## Security
+
+pgdmn runs inside your database, so a few properties are worth stating plainly:
+
+- **`dmn_load` parses caller-supplied XML, and does not resolve external entities** — DMN XML is not an XXE vector. A test asserts this so it stays true.
+- **FEEL is a decision language, not a general-purpose one** — expressions and decisions have no filesystem, network, or shell access.
+- **All evaluation functions are `IMMUTABLE` and `PARALLEL SAFE`** and touch no external state.
+
+A DMN model and a FEEL expression are code: treat one from an untrusted source as you would any SQL you did not write. To report a vulnerability, see [SECURITY.md](SECURITY.md) — please do not open a public issue.
+
 ## License
 
 Licensed under either of
@@ -318,10 +328,11 @@ at your option.
 
 ## Documentation
 
+- [CONTRIBUTING.md](CONTRIBUTING.md) - How to build, test, and submit changes
+- [SECURITY.md](SECURITY.md) - Reporting a vulnerability, and the trust boundary
 - [CLAUDE.md](CLAUDE.md) - Development conventions, build targets, and architecture decisions
 - [TODO.md](TODO.md) - Tracked work items
 - [BUGHISTORY.md](BUGHISTORY.md) - Resolved bugs with reoccurrence checklists
-- [RELEASEPLAN.md](RELEASEPLAN.md) - Release, promotion, and go-to-market plan
 - [website/](website/) - The site: worked examples, a function reference, and walkthroughs in `website/posts/` (Leptos, prerendered to static HTML; `make website-build`, deployed to GitHub Pages at www.pgdmn.com on push to `main`)
 
 There is no `docs/` directory: explanation aimed at users lives on the website, decisions live in CLAUDE.md, and findings and future work live in TODO.md.

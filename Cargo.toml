@@ -3,6 +3,12 @@ name = "pgdmn"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+description = "DMN (Decision Model and Notation) support for PostgreSQL: evaluate decision tables and FEEL expressions in SQL."
+repository = "https://github.com/fugu13/pgdmn"
+homepage = "https://www.pgdmn.com"
+readme = "README.md"
+keywords = ["dmn", "feel", "decision", "postgres", "pgrx"]
+categories = ["database"]
 
 [lib]
 crate-type = ["cdylib", "lib"]

@@ -1,0 +1,51 @@
+{
+   "name": "pgdmn",
+   "abstract": "DMN (Decision Model and Notation) support for PostgreSQL",
+   "description": "Evaluate DMN decision tables and FEEL expressions directly in SQL. Load a model, ask a decision, and get a native PostgreSQL value back — no external rules engine and no network hop.",
+   "version": "0.1.0",
+   "maintainer": [
+      "Russell Duhon <FIXME-set-a-public-contact-address>"
+   ],
+   "license": {
+      "mit": "https://opensource.org/licenses/MIT",
+      "apache_2_0": "https://www.apache.org/licenses/LICENSE-2.0"
+   },
+   "provides": {
+      "pgdmn": {
+         "abstract": "DMN and FEEL evaluation functions and the dmnmodel type",
+         "file": "src/lib.rs",
+         "docfile": "README.md",
+         "version": "0.1.0"
+      }
+   },
+   "prereqs": {
+      "runtime": {
+         "requires": {
+            "PostgreSQL": "17.0.0"
+         }
+      }
+   },
+   "resources": {
+      "homepage": "https://www.pgdmn.com",
+      "bugtracker": {
+         "web": "https://github.com/fugu13/pgdmn/issues"
+      },
+      "repository": {
+         "url": "https://github.com/fugu13/pgdmn.git",
+         "web": "https://github.com/fugu13/pgdmn",
+         "type": "git"
+      }
+   },
+   "generated_by": "hand-authored",
+   "meta-spec": {
+      "version": "1.0.0",
+      "url": "https://pgxn.org/meta/spec.txt"
+   },
+   "tags": [
+      "dmn",
+      "feel",
+      "decision",
+      "business rules",
+      "decision table"
+   ]
+}

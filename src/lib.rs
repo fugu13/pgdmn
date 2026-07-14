@@ -278,6 +278,47 @@ mod tests {
         Spi::run("SELECT dmn_load('<root><child/></root>')").unwrap();
     }
 
+    /// `dmn_load` parses caller-supplied XML, so it must not resolve external
+    /// entities: a `SYSTEM` entity pointing at a file is the classic XXE vector,
+    /// and this runs inside the database. Write a secret to a temp file, ask a
+    /// model to embed it via an external entity, and assert the secret does not
+    /// come back — whether because the parser rejects the DOCTYPE or because it
+    /// leaves the entity unresolved.
+    #[pg_test]
+    fn test_dmn_load_does_not_resolve_external_entities() {
+        let dir = std::env::temp_dir();
+        let secret_path = dir.join("pgdmn_xxe_probe.txt");
+        let secret = "TOP-SECRET-DO-NOT-LEAK";
+        std::fs::write(&secret_path, secret).expect("could not write probe file");
+
+        let payload = format!(
+            r#"<?xml version="1.0"?>
+<!DOCTYPE definitions [<!ENTITY xxe SYSTEM "file://{}">]>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="xxe" name="&xxe;" namespace="https://example.org/xxe">
+  <decision id="D" name="D"><literalExpression><text>1</text></literalExpression></decision>
+</definitions>"#,
+            secret_path.display()
+        );
+
+        // dmn_load may succeed or fail; either is fine. What must never happen is
+        // the file's contents appearing in the parsed model.
+        let escaped = payload.replace('\'', "''");
+        let leaked = std::panic::catch_unwind(|| {
+            Spi::get_one::<String>(&format!("SELECT dmn_name(dmn_load('{escaped}'))"))
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+
+        let _ = std::fs::remove_file(&secret_path);
+        assert!(
+            !leaked.contains(secret),
+            "XXE: external entity resolved, model name leaked the file: {leaked:?}"
+        );
+    }
+
     #[pg_test]
     fn test_dmn_eval_nonexistent_invocable() {
         // Evaluating a non-existent invocable should return null, not crash
