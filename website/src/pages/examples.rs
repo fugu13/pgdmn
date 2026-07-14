@@ -116,8 +116,8 @@ pub fn ExamplesPage() -> impl IntoView {
 
         <h2 id="loan">"Loan eligibility"</h2>
         <p>
-            "A first-hit decision table evaluating applicant age, income, and prior bankruptcy to
-            produce an eligibility decision."
+            "Decide based on complex inputs with rules that are hard to read and verify in SQL.
+            Verify the model when authoring the DMN, and run the exact same model in production."
         </p>
 
         <ul class="download-list">
