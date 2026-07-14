@@ -205,7 +205,9 @@ ORDER BY o.id;
 
         <h2 id="compliance">"Compliance checks"</h2>
         <p>
-            "Data-handling rules as a decision table, evaluated per-row on a customers table."
+            "Write regulatory requirements where the people who own them can read and check them,
+            rather than burying them in application logic. The obligation for every row becomes a
+            column, computed from the rules in force whenever anyone asks."
         </p>
 
         <ul class="download-list">
@@ -255,8 +257,9 @@ ORDER BY count(*) DESC, handling;
 
         <h2 id="routing">"Ticket routing"</h2>
         <p>
-            "Route requests, tickets, or tasks based on structured decision logic co-located with
-            your data."
+            "Change how work is triaged without shipping code. The rules sit in the database
+            beside the tickets, so updating the model reroutes every ticket the next time anyone
+            looks — and the old rules are still there to answer for what happened last week."
         </p>
 
         <ul class="download-list">
