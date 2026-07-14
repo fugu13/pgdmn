@@ -57,9 +57,9 @@ thread_local! {
         RefCell::new(HashMap::with_hasher(RapidBuildHasher::default()));
 }
 
-/// Counts evaluator builds (cache misses) in this backend. Test-only
-/// observability so cache tests assert deterministically instead of
-/// comparing wall-clock timings (TEST-003).
+// Counts evaluator builds (cache misses) in this backend. Test-only
+// observability so cache tests assert deterministically instead of
+// comparing wall-clock timings (TEST-003).
 #[cfg(any(test, feature = "pg_test"))]
 thread_local! {
     static EVALUATOR_BUILDS: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
