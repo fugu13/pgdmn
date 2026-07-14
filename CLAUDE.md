@@ -14,12 +14,12 @@ PostgreSQL extension that brings DMN (Decision Model and Notation) support to Po
 
 ## Build & Run
 
-All extension builds run in Docker (images: `pgdmn-base` = PG17 + pgrx toolchain, `pgdmn-test` adds the non-root user initdb requires). All commands go through `make` — do not invoke `cargo` or `docker` directly.
+All extension builds run in Docker (single `pgdmn-test` image: PG17 + pgrx toolchain, built and owned throughout by the non-root user initdb requires). All commands go through `make` — do not invoke `cargo` or `docker` directly.
 
 | Command | Purpose |
 |---|---|
 | `make help` | List all targets |
-| `make test-image` | Build/refresh the Docker images (required after `Cargo.lock` changes) |
+| `make test-image` | Build/refresh the Docker image (required after `Cargo.lock` changes) |
 | `make check` | Fast compilation check |
 | `make build` | Build the extension |
 | `make test` | pgrx test suite against PG17 |

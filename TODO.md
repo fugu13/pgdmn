@@ -131,13 +131,13 @@ Going live still needs three manual steps, recorded in RELEASEPLAN.md: a paid pl
 
 ## Chores
 
-### CHORE-004: Build the Docker image as the non-root user from the start
-
-The base image installs the toolchain, fetches crates, and (formerly) initialized pgrx as root, while tests must run as the non-root `pgdmn` user — the mismatch caused BUG-001 and BUG-002 and is currently patched with a `chmod`, a `chown`, and a second `cargo pgrx init` in the `test` stage. Restructure the Dockerfile to create `pgdmn` first and run `cargo install cargo-pgrx`, `rustup component add`, `cargo fetch --locked`, and `cargo pgrx init` as that user (with `CARGO_HOME` under its home), making ownership correct by construction and collapsing the two stages into one.
-
 ### CHORE-002: OpenGraph and social meta tags
 
 Add og:title, og:description, og:image, and Twitter card meta tags to the website shell and per-page overrides via leptos_meta.
+
+### CHORE-004: Build the Docker image as the non-root user from the start (done)
+
+The base image installed the toolchain, fetched crates, and (formerly) initialized pgrx as root, while tests must run as the non-root `pgdmn` user — the mismatch caused BUG-001 and BUG-002 and was patched with a `chmod`, a `chown`, and a second `cargo pgrx init` in a separate `test` stage. The Dockerfile now creates `pgdmn` first and runs `cargo install cargo-pgrx`, `rustup component add`, `cargo fetch --locked`, and `cargo pgrx init` as that user (with `CARGO_HOME` under its home), making ownership correct by construction in a single stage.
 
 ### FEAT-001: `dmn_create_input_type` helper
 
