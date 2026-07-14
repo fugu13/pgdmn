@@ -67,19 +67,25 @@ Add syntax highlighting for SQL and DMN (XML) code examples on the website. Eval
 
 Build a blog system for the website that reads markdown files from a directory, renders them as pages, and generates an index with titles and dates.
 
+### WEB-001: Prerender the website to static HTML
+
+The website ships a wasm hydration bundle but has no client-side interactivity: no signals, no server functions, no client state. Every page is prose, navigation links, and code blocks. The hydration bundle therefore buys nothing, while costing a `cdylib` target, a `wasm-release` profile, and a hard version coupling between the `wasm-bindgen` crate in `website/Cargo.lock` and the `wasm-bindgen-cli` binary on the build host — a coupling that broke `make website-build` during the dependency refresh.
+
+Drop the `hydrate` feature, the `wasm-bindgen` and `console_error_panic_hook` dependencies, the `cdylib` crate type, and the `wasm-release` profile. Prerender all routes to static HTML at build time using Leptos static route generation, keeping the Axum SSR path only as the rendering engine that produces those files. Verify the emitted HTML preserves the accessibility guarantees the site already makes (skip link, landmarks, heading order) and that navigation works with JavaScript disabled — which prerendering makes literally true rather than aspirational.
+
+Blocks FEAT-006 (deployment) and interacts with FEAT-004 (blog): a markdown blog must render at build time into the static output rather than at request time.
+
 ### FEAT-005: Mobile hamburger menu with focus trapping
 
 The site navigation needs a responsive hamburger menu for narrow viewports. Must include focus trapping when open and proper aria attributes for the toggle button.
 
 ### FEAT-006: Website CI/CD deployment pipeline
 
-Set up automated builds and deployment for the website. Evaluate hosting options (Fly.io, Railway, or similar SSR-capable hosts).
+Set up automated builds and deployment for the website. Hosting is GitHub Pages, with the custom domain pointed at it from Route 53. The earlier evaluation of SSR-capable hosts (Fly.io, Railway) is closed: Pages serves static files only and cannot run a server process, which makes the static prerender in WEB-001 a prerequisite rather than an optimization.
+
+Depends on WEB-001. The pipeline is a GitHub Actions workflow that builds the prerendered output and publishes it to Pages. Two Pages-specific details the build must produce: a `CNAME` file carrying the custom domain, and a `404.html` for the not-found route, since Pages has no server-side routing to fall back on.
 
 ## Chores
-
-### CHORE-003: Migrate website to Rust 2024 edition
-
-The website uses edition 2021 for cargo-leptos/wasm-bindgen compatibility. Once the toolchain supports it, migrate to edition 2024.
 
 ### CHORE-002: OpenGraph and social meta tags
 
@@ -98,3 +104,7 @@ Example usage:
 SELECT dmn_create_input_type(dmn_load('<xml>'), 'Eligibility', 'eligibility_input');
 -- Creates: CREATE TYPE eligibility_input AS ("Age" numeric, "Income" numeric)
 ```
+
+### CHORE-003: Migrate website to Rust 2024 edition (done)
+
+The website used edition 2021 for cargo-leptos/wasm-bindgen compatibility. Migrated to edition 2024 on 2026-07-13 under rustc 1.95: `cargo fix --edition` reported no source changes, and both `make website-lint` and `make website-build` pass on the new edition.
