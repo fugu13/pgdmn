@@ -239,7 +239,7 @@ SELECT feel_eval_interval('duration("PT4H30M")');
 All builds run in Docker and go through `make`. See [CLAUDE.md](CLAUDE.md) for the full target list and conventions.
 
 ```sh
-make test-image   # build the Docker images (first time, and after dependency changes)
+make test-image   # build the Docker image (first time, and after dependency changes)
 make check        # fast compilation check
 make test         # run the pgrx test suite against PG17
 make verify       # fmt + lint + check
