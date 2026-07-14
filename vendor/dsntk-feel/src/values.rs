@@ -628,22 +628,33 @@ impl Value {
   /// All these conversion rules are implemented in this function.
   ///
   pub fn coerced(&self, target_type: &FeelType) -> Value {
+    // PGDMN: H6 — delegate to the owned variant; call sites that own the value
+    // should call `coerced_owned` directly to avoid this clone.
+    self.clone().coerced_owned(target_type)
+  }
+
+  /// Like [Value::coerced], but consumes the value, so the common case where the
+  /// value already conforms to the target type returns it unchanged without cloning.
+  // PGDMN: H6 — added owned coercion path; every result and argument coercion in the
+  // evaluator wraps an already-conformant value, which previously paid a deep clone.
+  pub fn coerced_owned(self, target_type: &FeelType) -> Value {
     if let Value::FunctionDefinition(_, _, _, _, _, _) = self {
-      return self.clone();
+      return self;
     }
-    if let Value::BuiltInFunction(bif) = self {
+    if let Value::BuiltInFunction(bif) = &self {
       if bif.feel_type().is_conformant(target_type) {
-        return self.clone();
+        return self;
       }
     }
     if self.is_conformant(target_type) {
-      return self.clone();
+      return self;
     }
     match self {
       // from singleton list
-      Value::List(items) => {
+      Value::List(mut items) => {
         if items.len() == 1 {
-          let value = items[0].clone();
+          // remove below never panics, the length is checked above
+          let value = items.remove(0);
           if value.is_conformant(target_type) {
             return value;
           }
@@ -653,7 +664,7 @@ impl Value {
       value => {
         if let FeelType::List(list_type) = target_type {
           if value.is_conformant(list_type) {
-            return Value::List(vec![value.clone()]);
+            return Value::List(vec![value]);
           }
         }
       }
