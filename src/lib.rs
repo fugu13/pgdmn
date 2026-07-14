@@ -2,6 +2,8 @@
 
 mod cache;
 mod convert;
+#[cfg(test)]
+mod convert_props;
 mod functions;
 mod types;
 

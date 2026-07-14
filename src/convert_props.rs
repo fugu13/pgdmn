@@ -1,0 +1,131 @@
+//! Property-based tests for the JSON <-> FEEL conversion layer (TEST-001).
+//!
+//! These are plain Rust tests (no PostgreSQL involved) exercising
+//! `convert::json_to_feel` / `convert::feel_to_json`; they run inside the
+//! same `cargo pgrx test` invocation as the `#[pg_test]` suite.
+//!
+//! Round-trip semantics being pinned down:
+//! - JSON -> FEEL -> JSON preserves structure and *numeric value*, not
+//!   lexical number form: an integral float (`2.0`) legitimately comes back
+//!   as the JSON integer `2` because FEEL numbers are decimals with no
+//!   int/float distinction.
+//! - Integers within i64 round-trip exactly.
+//! - Integers above i64::MAX currently lose precision through the f64
+//!   fallback in `feel_to_json` (tracked as CONVERT-001 in TODO.md), so the
+//!   generators stay within i64.
+
+#![cfg(test)]
+
+use proptest::prelude::*;
+
+use crate::convert::{feel_to_json, json_to_feel};
+
+/// Structural equality with numeric-value comparison for numbers.
+fn json_value_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+    use serde_json::Value as J;
+    match (a, b) {
+        (J::Number(x), J::Number(y)) => {
+            match (x.as_i64(), y.as_i64()) {
+                (Some(i), Some(j)) => i == j,
+                // Mixed or float representation: compare as f64 (both sides
+                // came from the same decimal, so this is exact in practice).
+                _ => match (x.as_f64(), y.as_f64()) {
+                    (Some(p), Some(q)) => p == q,
+                    _ => false,
+                },
+            }
+        }
+        (J::Array(x), J::Array(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| json_value_eq(p, q))
+        }
+        (J::Object(x), J::Object(y)) => {
+            x.len() == y.len()
+                && x.iter()
+                    .all(|(k, v)| y.get(k).is_some_and(|w| json_value_eq(v, w)))
+        }
+        _ => a == b,
+    }
+}
+
+/// Keys exercise FEEL-relevant shapes: multi-word names, unicode, symbols.
+fn key_strategy() -> impl Strategy<Value = String> {
+    prop_oneof![
+        "[a-z]{1,8}",
+        "[a-z]{1,6} [a-z]{1,6}",
+        "[a-z]{1,4} [a-z]{1,4} [a-z]{1,4}",
+        Just("monthly salary".to_string()),
+        Just("crédit score".to_string()),
+    ]
+}
+
+/// Finite f64s that survive serde_json's Number representation.
+fn float_strategy() -> impl Strategy<Value = f64> {
+    prop_oneof![
+        -1.0e12..1.0e12f64,
+        proptest::num::f64::NORMAL,
+        Just(0.0),
+        Just(-0.5),
+        Just(0.1),
+    ]
+    .prop_filter("serde_json requires finite", |f| f.is_finite())
+}
+
+fn json_strategy() -> impl Strategy<Value = serde_json::Value> {
+    let leaf = prop_oneof![
+        Just(serde_json::Value::Null),
+        any::<bool>().prop_map(serde_json::Value::Bool),
+        any::<i64>().prop_map(|i| serde_json::json!(i)),
+        float_strategy().prop_map(|f| serde_json::json!(f)),
+        "[ -~]{0,24}".prop_map(serde_json::Value::String),
+    ];
+    leaf.prop_recursive(3, 48, 6, |inner| {
+        prop_oneof![
+            prop::collection::vec(inner.clone(), 0..6).prop_map(serde_json::Value::Array),
+            prop::collection::btree_map(key_strategy(), inner, 0..6).prop_map(|m| {
+                serde_json::Value::Object(m.into_iter().collect())
+            }),
+        ]
+    })
+}
+
+proptest! {
+    /// JSON -> FEEL -> JSON preserves structure and numeric value.
+    #[test]
+    fn json_feel_json_roundtrip(json in json_strategy()) {
+        let feel = json_to_feel(&json);
+        let back = feel_to_json(&feel);
+        prop_assert!(
+            json_value_eq(&json, &back),
+            "round trip diverged:\n  in:  {json}\n  out: {back}"
+        );
+    }
+
+    /// Integers within i64 round-trip exactly (stricter than value equality).
+    #[test]
+    fn integer_roundtrip_exact(i in any::<i64>()) {
+        let json = serde_json::json!(i);
+        let back = feel_to_json(&json_to_feel(&json));
+        prop_assert_eq!(back, serde_json::json!(i));
+    }
+
+    /// Object key insertion order does not affect conversion results.
+    /// (Keys come from a BTreeMap so they are unique; duplicate keys would
+    /// make insertion order observable via last-wins before conversion.)
+    #[test]
+    fn object_key_order_irrelevant(
+        entries in prop::collection::btree_map(key_strategy(), any::<i64>(), 1..8)
+    ) {
+        let forward: serde_json::Map<String, serde_json::Value> = entries
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+            .collect();
+        let reversed: serde_json::Map<String, serde_json::Value> = entries
+            .iter()
+            .rev()
+            .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+            .collect();
+        let a = feel_to_json(&json_to_feel(&serde_json::Value::Object(forward)));
+        let b = feel_to_json(&json_to_feel(&serde_json::Value::Object(reversed)));
+        prop_assert_eq!(a, b);
+    }
+}

@@ -1,5 +1,17 @@
 # TODO
 
+## Conversions
+
+### CONVERT-001: Integers above i64::MAX lose precision in feel_to_json
+
+`feel_to_json` converts a FEEL number by trying `parse::<i64>()` and falling
+back to `parse::<f64>()`. A JSON integer above `i64::MAX` (e.g. `2^63`)
+survives the trip into FEEL exactly (decimal128) but comes back as a lossy
+f64 (`9.223372036854776e18`). Either serialize such values as JSON strings,
+or use serde_json's arbitrary-precision feature. The property tests in
+`src/convert_props.rs` deliberately generate only within i64 until this is
+fixed.
+
 ## Testing
 
 ### TEST-001: Property-based tests for DMN round trips

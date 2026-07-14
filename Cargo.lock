@@ -1351,6 +1351,7 @@ dependencies = [
  "dsntk-model-evaluator",
  "pgrx",
  "pgrx-tests",
+ "proptest",
  "rapidhash",
  "serde",
  "serde_cbor",
