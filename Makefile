@@ -1,4 +1,4 @@
-.PHONY: help base-image test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-clean
+.PHONY: help test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-clean
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -10,11 +10,8 @@ WEBSITE_CARGO = cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "%-16s %s\n", $$1, $$2}'
 
-base-image: ## Build the base Docker image (PG17 + pgrx toolchain)
-	docker build --target base -t pgdmn-base .
-
-test-image: base-image ## Build the test image (adds non-root user required by initdb)
-	docker build --target test -t pgdmn-test .
+test-image: ## Build the Docker image (PG17 + pgrx toolchain, non-root pgdmn user)
+	docker build -t pgdmn-test .
 
 check: test-image ## Run cargo check (fast compilation check, no tests)
 	$(DOCKER_RUN) cargo check --all-targets
