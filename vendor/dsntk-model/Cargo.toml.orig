@@ -1,0 +1,21 @@
+[package]
+name = "dsntk-model"
+version = { workspace = true }
+authors = { workspace = true }
+description = "dsntk | DecisionToolkit | DMN model and parser"
+categories = ["development-tools", "command-line-utilities", "finance", "parsing"]
+keywords = ["dmn", "decision", "toolkit", "model"]
+documentation = "https://docs.rs/dsntk-model"
+repository = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+petgraph = { workspace = true }
+roxmltree = { workspace = true }
+dsntk-common = { workspace = true }
+dsntk-examples = { workspace = true }
+dsntk-feel = { workspace = true }
+dsntk-feel-parser = { workspace = true }
+dsntk-macros = { workspace = true }
+dsntk-recognizer = { workspace = true }

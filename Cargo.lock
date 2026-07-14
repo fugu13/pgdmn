@@ -400,8 +400,6 @@ dependencies = [
 [[package]]
 name = "dsntk-common"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a0702548e7d5c73f2b89d07d7ea9d079e0333546fdfcfd59c649d3e7d92ae60"
 dependencies = [
  "dsntk-macros",
  "serde",
@@ -414,14 +412,10 @@ dependencies = [
 [[package]]
 name = "dsntk-examples"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fb397c537663553f71409faa4ddd0388581a8874aff97907df43cd94dfe7f60"
 
 [[package]]
 name = "dsntk-feel"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abcfd1159f4edd90b358865da8f476ff5e13bf94c456c6403e345dfcbe0cbde0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -437,8 +431,6 @@ dependencies = [
 [[package]]
 name = "dsntk-feel-evaluator"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ccb23b82b6b64d3b80e47dc71f9304c8eaec8bc12e17581f10d27d0b586d7f8"
 dependencies = [
  "dsntk-common",
  "dsntk-feel",
@@ -456,8 +448,6 @@ dependencies = [
 [[package]]
 name = "dsntk-feel-grammar"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05fe051feadfcfd44f4bbc2e49607cbc96442b87ba7b51d7c60649bfca769025"
 dependencies = [
  "convert_case",
  "regex",
@@ -466,8 +456,6 @@ dependencies = [
 [[package]]
 name = "dsntk-feel-number"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29ff3a3d81774c3d3cbd5d1b69ccf856743018975f52fec548dff485fcb9460b"
 dependencies = [
  "dfp-number-sys",
  "dsntk-common",
@@ -477,8 +465,6 @@ dependencies = [
 [[package]]
 name = "dsntk-feel-parser"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "518e44c21aef4d98322d574a2a26838eefddcce2b7a562f4182cbff149efa204"
 dependencies = [
  "antex",
  "dsntk-common",
@@ -490,8 +476,6 @@ dependencies = [
 [[package]]
 name = "dsntk-feel-regex"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e027dce085af0ef4d9b0658ca262876e0a61af61c3526b474f335d37d422465c"
 dependencies = [
  "dsntk-common",
  "dsntk-macros",
@@ -502,8 +486,6 @@ dependencies = [
 [[package]]
 name = "dsntk-feel-temporal"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3709b01f0732e80493b2cd44c27ef1573effaa2f0bd279b08eb455ab82b1eb0f"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -517,8 +499,6 @@ dependencies = [
 [[package]]
 name = "dsntk-macros"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e390a9cb52e1c3292978b3c8670218cf3702b9d8a79e0c2962bf29b38513acc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -528,8 +508,6 @@ dependencies = [
 [[package]]
 name = "dsntk-model"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d1c185662f08d4a9d1d0723e4022c377aff8db719b6dfa54dffafad0901417f"
 dependencies = [
  "dsntk-common",
  "dsntk-examples",
@@ -544,8 +522,6 @@ dependencies = [
 [[package]]
 name = "dsntk-model-evaluator"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce17cae5c4972b717d1a45c057dc1e64359786cb662ae8a8944a28d6aaf4095"
 dependencies = [
  "dsntk-common",
  "dsntk-feel",

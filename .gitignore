@@ -1,4 +1,5 @@
 /target
+/profiling/target
 *.swp
 *.swo
 benchmark_results.txt

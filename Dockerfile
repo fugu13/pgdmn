@@ -29,8 +29,10 @@ RUN cargo install cargo-pgrx --version "~0.16" --locked
 # Lint and format tooling for `make lint` / `make fmt`
 RUN rustup component add clippy rustfmt
 
-# Copy manifests first for layer caching
+# Copy manifests first for layer caching; vendor/ holds the patched dsntk
+# sources referenced by [patch.crates-io], needed for dependency resolution
 COPY --chown=pgdmn:pgdmn Cargo.toml Cargo.lock pgdmn.control ./
+COPY --chown=pgdmn:pgdmn vendor ./vendor
 
 # Create stub lib.rs so cargo fetch works
 RUN mkdir -p src && echo '::pgrx::pg_module_magic!();' > src/lib.rs
