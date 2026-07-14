@@ -14,36 +14,35 @@
 //!   fallback in `feel_to_json` (tracked as CONVERT-001 in TODO.md), so the
 //!   generators stay within i64.
 
-#![cfg(test)]
-
 use proptest::prelude::*;
 
 use crate::convert::{feel_to_json, json_to_feel};
 
 /// Structural equality with numeric-value comparison for numbers.
-fn json_value_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+fn json_value_eq(left: &serde_json::Value, right: &serde_json::Value) -> bool {
     use serde_json::Value as J;
-    match (a, b) {
-        (J::Number(x), J::Number(y)) => {
-            match (x.as_i64(), y.as_i64()) {
-                (Some(i), Some(j)) => i == j,
+    match (left, right) {
+        (J::Number(ln), J::Number(rn)) => {
+            match (ln.as_i64(), rn.as_i64()) {
+                (Some(li), Some(ri)) => li == ri,
                 // Mixed or float representation: compare as f64 (both sides
                 // came from the same decimal, so this is exact in practice).
-                _ => match (x.as_f64(), y.as_f64()) {
-                    (Some(p), Some(q)) => p == q,
+                _ => match (ln.as_f64(), rn.as_f64()) {
+                    (Some(lf), Some(rf)) => lf == rf,
                     _ => false,
                 },
             }
         }
-        (J::Array(x), J::Array(y)) => {
-            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| json_value_eq(p, q))
+        (J::Array(la), J::Array(ra)) => {
+            la.len() == ra.len() && la.iter().zip(ra).all(|(lv, rv)| json_value_eq(lv, rv))
         }
-        (J::Object(x), J::Object(y)) => {
-            x.len() == y.len()
-                && x.iter()
-                    .all(|(k, v)| y.get(k).is_some_and(|w| json_value_eq(v, w)))
+        (J::Object(lo), J::Object(ro)) => {
+            lo.len() == ro.len()
+                && lo
+                    .iter()
+                    .all(|(key, lv)| ro.get(key).is_some_and(|rv| json_value_eq(lv, rv)))
         }
-        _ => a == b,
+        _ => left == right,
     }
 }
 
