@@ -124,6 +124,14 @@ impl FeelContext {
     self.0.insert(name.clone(), value);
   }
 
+  // PGDMN: by-value variant of set_entry that takes ownership of the name,
+  // avoiding one Name clone per entry on hot conversion paths; set_entry is
+  // kept untouched for compatibility.
+  /// Sets a value for specified entry name, taking ownership of the name.
+  pub fn insert(&mut self, name: Name, value: Value) {
+    self.0.insert(name, value);
+  }
+
   /// Removes a value of an entry with specified name.
   pub fn remove_entry(&mut self, name: &Name) -> Option<Value> {
     self.0.remove(name)

@@ -105,6 +105,171 @@ mod tests {
         assert_eq!(result.unwrap().0, serde_json::json!(2));
     }
 
+    // --- FEEL evaluator cache correctness ---
+    // The prepared-evaluator cache key must capture the context *shape*, because
+    // FEEL name tokenization depends on which names are in scope: the same
+    // expression text parses to different ASTs under different key sets. Each
+    // test below would produce a wrong ANSWER (not an error) if a cached
+    // evaluator were reused across shapes.
+
+    fn feel_eval_jsonb(expression: &str, context: &str) -> serde_json::Value {
+        let query = format!("SELECT feel_eval('{expression}', '{context}'::jsonb)");
+        Spi::get_one::<pgrx::JsonB>(&query)
+            .expect("SPI failed")
+            .expect("feel_eval returned NULL")
+            .0
+    }
+
+    #[pg_test]
+    fn test_feel_eval_shape_hyphen_name_vs_subtraction() {
+        // Prime the cache with the subtraction shape first.
+        assert_eq!(
+            feel_eval_jsonb("a - b", r#"{"a": 100, "b": 1}"#),
+            serde_json::json!(99)
+        );
+        // Under a shape whose key set contains "a-b", the lexer tokenizes
+        // 'a - b' as that single name: the answer is 42. A shape-blind cache
+        // would reuse the subtraction AST and return 99.
+        assert_eq!(
+            feel_eval_jsonb("a - b", r#"{"a-b": 42, "a": 100, "b": 1}"#),
+            serde_json::json!(42)
+        );
+        // And back: the original shape still yields the subtraction result.
+        assert_eq!(
+            feel_eval_jsonb("a - b", r#"{"a": 100, "b": 1}"#),
+            serde_json::json!(99)
+        );
+    }
+
+    #[pg_test]
+    fn test_feel_eval_shape_nested_vs_flat_key() {
+        // Nested shape: 'order.total' is a path expression.
+        assert_eq!(
+            feel_eval_jsonb("order.total * 2", r#"{"order": {"total": 21}}"#),
+            serde_json::json!(42)
+        );
+        // Flat shape: "order.total" is a single key, resolved as one name.
+        // Wrong reuse of the path AST would return null instead of 10.
+        assert_eq!(
+            feel_eval_jsonb("order.total * 2", r#"{"order.total": 5}"#),
+            serde_json::json!(10)
+        );
+        // The nested shape still parses as a path afterwards.
+        assert_eq!(
+            feel_eval_jsonb("order.total * 2", r#"{"order": {"total": 21}}"#),
+            serde_json::json!(42)
+        );
+    }
+
+    #[pg_test]
+    fn test_feel_eval_shape_multiword_name() {
+        // 'monthly salary' is a single multi-word FEEL name when in scope.
+        assert_eq!(
+            feel_eval_jsonb("monthly salary * 12", r#"{"monthly salary": 5000}"#),
+            serde_json::json!(60000)
+        );
+        // A wider shape containing the same multi-word key parses the same way.
+        assert_eq!(
+            feel_eval_jsonb(
+                "monthly salary * 12",
+                r#"{"monthly salary": 7000, "bonus": 1}"#
+            ),
+            serde_json::json!(84000)
+        );
+    }
+
+    #[pg_test]
+    #[should_panic(expected = "FEEL parse error")]
+    fn test_feel_eval_shape_multiword_split_is_error() {
+        // Prime the cache with the multi-word shape (must succeed).
+        assert_eq!(
+            feel_eval_jsonb("monthly salary * 12", r#"{"monthly salary": 5000}"#),
+            serde_json::json!(60000)
+        );
+        // With the multi-word key absent, the same text is a syntax error. A
+        // shape-blind cache would evaluate the cached AST and return null
+        // instead of raising.
+        feel_eval_jsonb("monthly salary * 12", r#"{"monthly": 3, "salary": 7}"#);
+    }
+
+    #[pg_test]
+    fn test_feel_eval_values_change_shape_constant() {
+        // Same expression and shape, varying leaf values: one cache entry must
+        // serve all rows and produce varying, correct results.
+        assert_eq!(
+            feel_eval_jsonb("x * y", r#"{"x": 2, "y": 3}"#),
+            serde_json::json!(6)
+        );
+        assert_eq!(
+            feel_eval_jsonb("x * y", r#"{"x": 5, "y": 7}"#),
+            serde_json::json!(35)
+        );
+        assert_eq!(
+            feel_eval_jsonb("x * y", r#"{"x": 6, "y": 0.5}"#),
+            serde_json::json!(3)
+        );
+    }
+
+    #[pg_test]
+    fn test_feel_eval_shape_list_of_contexts_vs_scalars() {
+        // A list of contexts contributes its element key structure to the scope
+        // ('items . price' becomes a known name path).
+        assert_eq!(
+            feel_eval_jsonb(
+                "sum(items.price)",
+                r#"{"items": [{"price": 2}, {"price": 3}]}"#
+            ),
+            serde_json::json!(5)
+        );
+        // A list of scalars has no 'price' projection: the result is null.
+        assert_eq!(
+            feel_eval_jsonb("sum(items.price)", r#"{"items": [10, 20]}"#),
+            serde_json::Value::Null
+        );
+        // The list-of-contexts shape still works afterwards.
+        assert_eq!(
+            feel_eval_jsonb(
+                "sum(items.price)",
+                r#"{"items": [{"price": 2}, {"price": 3}]}"#
+            ),
+            serde_json::json!(5)
+        );
+    }
+
+    // --- Number conversion fast paths ---
+
+    #[pg_test]
+    fn test_feel_eval_large_integer_exact() {
+        // 2^53 + 1 is not representable in f64; the integer paths must stay
+        // exact in both directions (JSON -> FEEL and FEEL -> JSON).
+        assert_eq!(
+            feel_eval_jsonb("x + 1", r#"{"x": 9007199254740992}"#),
+            serde_json::json!(9_007_199_254_740_993_i64)
+        );
+        let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('9007199254740993')")
+            .expect("SPI failed");
+        assert_eq!(
+            result.unwrap().0,
+            serde_json::json!(9_007_199_254_740_993_i64)
+        );
+    }
+
+    #[pg_test]
+    fn test_feel_eval_non_integer_float_output() {
+        let result =
+            Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('1.5 + 1')").expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!(2.5));
+    }
+
+    #[pg_test]
+    fn test_feel_eval_integer_beyond_i64_as_float() {
+        // Integers wider than i64 fall back to the f64 output path.
+        let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('9223372036854775807 + 1')")
+            .expect("SPI failed");
+        let f = result.unwrap().0.as_f64().expect("expected f64 result");
+        assert!((f - 2f64.powi(63)).abs() < 1.0, "unexpected value: {f}");
+    }
+
     // DMN model tests using a simple inline model
     const SIMPLE_DMN: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
@@ -1431,6 +1596,35 @@ mod tests {
             warm_a < cold_a / 2,
             "Model A was not faster on second call: cold={cold_a:?}, warm={warm_a:?}"
         );
+    }
+
+    #[pg_test]
+    fn test_cache_same_name_different_xml() {
+        // Two models with identical namespace AND name but different decision
+        // logic: the evaluator cache is keyed by XML content hash, so anything
+        // keyed on less than full content would collide here.
+        let model_b = SIMPLE_DMN.replace("Hello, World!", "Goodbye, World!");
+        let escaped_a = SIMPLE_DMN.replace('\'', "''");
+        let escaped_b = model_b.replace('\'', "''");
+
+        let query_a = format!("SELECT dmn_eval(dmn_load('{escaped_a}'), 'Greeting')");
+        let query_b = format!("SELECT dmn_eval(dmn_load('{escaped_b}'), 'Greeting')");
+
+        let result_a = Spi::get_one::<pgrx::JsonB>(&query_a)
+            .expect("SPI failed")
+            .expect("model A returned NULL");
+        assert_eq!(result_a.0, serde_json::json!("Hello, World!"));
+
+        let result_b = Spi::get_one::<pgrx::JsonB>(&query_b)
+            .expect("SPI failed")
+            .expect("model B returned NULL");
+        assert_eq!(result_b.0, serde_json::json!("Goodbye, World!"));
+
+        // Model A again: the cache must still hold A's evaluator, not B's.
+        let result_a_again = Spi::get_one::<pgrx::JsonB>(&query_a)
+            .expect("SPI failed")
+            .expect("model A returned NULL on second run");
+        assert_eq!(result_a_again.0, serde_json::json!("Hello, World!"));
     }
 }
 
