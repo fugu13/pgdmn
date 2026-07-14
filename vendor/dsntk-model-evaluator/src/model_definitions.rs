@@ -32,41 +32,49 @@ pub enum InvocableType {
 
 #[derive(Default)]
 pub struct Invocables {
-  /// (model namespace, model name, invocable name) -> invocable type
-  items: HashMap<(String, String, String), InvocableType>,
+  /// model namespace -> model name -> invocable name -> invocable type
+  // PGDMN (H18): nested maps allow lookups from &str with zero allocations per
+  // call; the former (String, String, String) tuple key forced three owned
+  // String allocations on every by_name probe.
+  items: HashMap<String, HashMap<String, HashMap<String, InvocableType>>>,
 }
 
 impl Invocables {
+  fn insert(&mut self, namespace: String, model_name: String, invocable_name: String, invocable_type: InvocableType) {
+    self.items.entry(namespace).or_default().entry(model_name).or_default().insert(invocable_name, invocable_type);
+  }
+
   pub fn add_decision(&mut self, namespace: String, model_name: String, invocable_name: String, def_key: DefKey) {
-    let invocable_type = InvocableType::Decision(def_key);
-    self.items.insert((namespace, model_name, invocable_name), invocable_type);
+    self.insert(namespace, model_name, invocable_name, InvocableType::Decision(def_key));
   }
 
   pub fn add_bkm(&mut self, namespace: String, model_name: String, invocable_name: String, def_key: DefKey, output_variable_name: Name) {
-    let invocable_type = InvocableType::BusinessKnowledgeModel(def_key, output_variable_name);
-    self.items.insert((namespace, model_name, invocable_name), invocable_type);
+    self.insert(namespace, model_name, invocable_name, InvocableType::BusinessKnowledgeModel(def_key, output_variable_name));
   }
 
   pub fn add_decision_service(&mut self, namespace: String, model_name: String, invocable_name: String, def_key: DefKey) {
-    let invocable_type = InvocableType::DecisionService(def_key);
-    self.items.insert((namespace, model_name, invocable_name), invocable_type);
+    self.insert(namespace, model_name, invocable_name, InvocableType::DecisionService(def_key));
   }
 
   pub fn by_name(&self, namespace: &str, model_name: &str, invocable_name: &str) -> Option<&InvocableType> {
-    self.items.get(&(namespace.to_string(), model_name.to_string(), invocable_name.to_string()))
+    self.items.get(namespace)?.get(model_name)?.get(invocable_name)
   }
 
   pub fn list(&self) -> Vec<(String, String, String)> {
     let mut items = vec![];
-    for (model_namespace, model_name, invocable_name) in self.items.keys().cloned() {
-      items.push((model_namespace, model_name, invocable_name));
+    for (model_namespace, models) in &self.items {
+      for (model_name, invocables) in models {
+        for invocable_name in invocables.keys() {
+          items.push((model_namespace.clone(), model_name.clone(), invocable_name.clone()));
+        }
+      }
     }
     items.sort();
     items
   }
 
   pub fn len(&self) -> usize {
-    self.items.len()
+    self.items.values().flat_map(HashMap::values).map(HashMap::len).sum()
   }
 }
 

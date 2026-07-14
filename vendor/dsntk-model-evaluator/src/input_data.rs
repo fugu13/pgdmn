@@ -3,6 +3,7 @@
 use crate::item_definition::ItemDefinitionEvaluator;
 use crate::model_definitions::{DefDefinitions, DefKey};
 use crate::variable::{Variable, VariableEvaluatorFn};
+use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
 use dsntk_feel::Name;
 use std::collections::HashMap;
@@ -32,8 +33,10 @@ impl InputDataEvaluator {
   }
 
   /// Evaluates input data.
-  pub fn evaluate(&self, def_key: &DefKey, value: &Value, item_definition_evaluator: &ItemDefinitionEvaluator) -> Option<(Name, Value)> {
-    self.evaluators.get(def_key).map(|evaluator| evaluator.1(value, item_definition_evaluator))
+  // PGDMN (H5): takes the input data context directly instead of a Value wrapper,
+  // so callers no longer clone the context per evaluated decision.
+  pub fn evaluate(&self, def_key: &DefKey, input_data: &FeelContext, item_definition_evaluator: &ItemDefinitionEvaluator) -> Option<(Name, Value)> {
+    self.evaluators.get(def_key).map(|evaluator| evaluator.1(input_data, item_definition_evaluator))
   }
 
   /// Returns the variable for input data definition.
@@ -73,7 +76,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Full", "Name"]), Value::String("John".to_string()))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -88,7 +91,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Full", "Name"]), Value::String("Phillip".to_string()))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -103,7 +106,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Full", "Name"]), value_null!("after coercion"))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -118,7 +121,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Monthly", "Salary"]), value_number!(12000))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -133,7 +136,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Monthly", "Salary"]), value_number!(813535, 2))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -148,7 +151,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Monthly", "Salary"]), value_null!("after coercion"))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -163,7 +166,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Is", "Affordable"]), Value::Boolean(true))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -178,7 +181,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Is", "Affordable"]), Value::Boolean(false))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -193,7 +196,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Is", "Affordable"]), value_null!("after coercion"))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -209,7 +212,7 @@ mod tests {
     let name = Name::new(&["Employment", "Status"]);
     assert_eq!(
       Some((name, Value::String("EMPLOYED".to_string()))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -224,7 +227,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Always", "Null"]), value_null!())),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -239,7 +242,7 @@ mod tests {
     let context = dsntk_feel_evaluator::evaluate_context(&Default::default(), context_str).unwrap();
     assert_eq!(
       Some((Name::new(&["Always", "Null"]), value_null!("after coercion"))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 
@@ -255,7 +258,7 @@ mod tests {
     let name = Name::new(&["Employment", "Status"]);
     assert_eq!(
       Some((name, value_null!("input data evaluator: item definition evaluator 'tEmploymentStatus' not found"))),
-      input_data_evaluator.evaluate(&def_key, &Value::Context(context), &item_definitions_evaluator)
+      input_data_evaluator.evaluate(&def_key, &context, &item_definitions_evaluator)
     );
   }
 }

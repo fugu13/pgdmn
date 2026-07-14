@@ -118,8 +118,9 @@ impl ModelEvaluator {
   fn evaluate_decision(&self, def_key: &DefKey, input_data: &FeelContext) -> Value {
     let mut evaluated_ctx = FeelContext::default();
     if let Some(output_variable_name) = self.decision_evaluator.evaluate(def_key, &self.global_context, input_data, self, &mut evaluated_ctx) {
-      if let Some(output_value) = evaluated_ctx.get_entry(&output_variable_name) {
-        output_value.clone()
+      // PGDMN (H5): move the result out of the evaluated context instead of cloning it.
+      if let Some(output_value) = evaluated_ctx.remove_entry(&output_variable_name) {
+        output_value
       } else {
         value_null!()
       }
@@ -134,7 +135,13 @@ impl ModelEvaluator {
     self
       .business_knowledge_model_evaluator
       .evaluate(def_key, &self.global_context, input_data, self, &mut evaluated_ctx);
-    if let Some(Value::FunctionDefinition(parameters, body, _external, _, closure_ctx, result_type)) = evaluated_ctx.get_entry(output_variable_name) {
+    // PGDMN (H12): take the function definition out of the evaluated context and move
+    // the remaining entries into the parameters context, instead of deep-cloning the
+    // whole evaluated context (including the function definition itself) via zip.
+    let Some(function_definition) = evaluated_ctx.remove_entry(output_variable_name) else {
+      return value_null!();
+    };
+    if let Value::FunctionDefinition(parameters, body, _external, _, closure_ctx, result_type) = &function_definition {
       //TODO Handle external functions.
       let mut parameters_ctx = FeelContext::default();
       parameters_ctx.zip(closure_ctx);
@@ -143,9 +150,17 @@ impl ModelEvaluator {
           parameters_ctx.set_entry(name, value.to_owned());
         }
       }
-      parameters_ctx.zip(&evaluated_ctx);
+      let body = body.clone();
+      let result_type = result_type.clone();
+      let remaining_names: Vec<Name> = evaluated_ctx.iter().map(|(name, _)| name.clone()).collect();
+      for name in remaining_names {
+        if let Some(value) = evaluated_ctx.remove_entry(&name) {
+          parameters_ctx.set_entry(&name, value);
+        }
+      }
+      parameters_ctx.set_entry(output_variable_name, function_definition);
       let result = body.evaluate(&parameters_ctx.into());
-      result.coerced(result_type)
+      result.coerced(&result_type)
     } else {
       value_null!()
     }
@@ -158,8 +173,9 @@ impl ModelEvaluator {
       .decision_service_evaluator
       .evaluate(def_key, &self.global_context, input_data, self, &mut evaluated_ctx)
     {
-      if let Some(output_value) = evaluated_ctx.get_entry(&output_variable_name) {
-        output_value.clone()
+      // PGDMN (H5): move the result out of the evaluated context instead of cloning it.
+      if let Some(output_value) = evaluated_ctx.remove_entry(&output_variable_name) {
+        output_value
       } else {
         value_null!()
       }
