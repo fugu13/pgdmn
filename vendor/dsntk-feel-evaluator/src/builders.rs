@@ -628,9 +628,12 @@ impl<'b> EvaluatorBuilder<'b> {
   fn build_filter(&mut self, lhs: &'b AstNode, rhs: &'b AstNode) -> Evaluator {
     let lhe = self.build(lhs);
     let rhe = self.build(rhs);
+    // PGDMN: H20 — classify the filter expression at build time, so filters that
+    // can never be a numeric index skip the per-call numeric-index probe evaluation.
+    let may_yield_number = filter_may_yield_number(rhs);
     Box::new(move |scope: &FeelScope| {
       let filter_expression_evaluator = FilterExpressionEvaluator::new();
-      filter_expression_evaluator.evaluate(scope, lhe(scope), &rhe)
+      filter_expression_evaluator.evaluate_with_hint(scope, lhe(scope), &rhe, may_yield_number)
     })
   }
 
@@ -2676,6 +2679,28 @@ fn eval_external_function_definition(scope: &FeelScope, arguments: &[Value], bod
   };
   // PGDMN: H6 — owned coercion, conformant results are returned without cloning
   result.coerced_owned(&result_type)
+}
+
+/// Returns `true` when a filter expression may evaluate to a number (numeric index).
+/// Conservative: comparisons, logical operators and boolean literals always yield
+/// boolean or null, every other node is assumed to possibly yield a number.
+// PGDMN: H20 — build-time classification used to skip the numeric-index probe.
+fn filter_may_yield_number(node: &AstNode) -> bool {
+  !matches!(
+    node,
+    AstNode::And(_, _)
+      | AstNode::Between(_, _, _)
+      | AstNode::Boolean(_)
+      | AstNode::Eq(_, _)
+      | AstNode::Ge(_, _)
+      | AstNode::Gt(_, _)
+      | AstNode::In(_, _)
+      | AstNode::InstanceOf(_, _)
+      | AstNode::Le(_, _)
+      | AstNode::Lt(_, _)
+      | AstNode::Nq(_, _)
+      | AstNode::Or(_, _)
+  )
 }
 
 fn build_err_msg(err_msg: String) -> Evaluator {
