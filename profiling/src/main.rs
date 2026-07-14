@@ -24,6 +24,7 @@ use dsntk_model_evaluator::ModelEvaluator;
 const CONCAT_DMN: &str = include_str!("../models/concat.dmn");
 const RISK_DMN: &str = include_str!("../models/risk.dmn");
 const LENDING_DMN: &str = include_str!("../../examples/lending.dmn");
+const LOANCOMP_DMN: &str = include_str!("../../examples/loan-comparison.dmn");
 
 // --- Conversion functions mirroring src/convert.rs (the pgrx-free parts). ---
 // Duplicated because the extension crate only compiles against pg_config
@@ -445,6 +446,92 @@ fn scenarios() -> Vec<Scenario> {
             scope.push(ctx);
             move || {
                 let node = parse_expression(&scope, "x + y", false).expect("parse");
+                black_box(evaluate(&scope, &node));
+            }
+        }
+    );
+
+    // -- Construct-specific scenarios: iteration, filters, regex BIFs --
+    scenario!(
+        "model_loancomp_eval",
+        "LoanComparison/RankedProducts: iteration + sorting over 10 products, BKMs",
+        || {
+            let evaluator = build_evaluator(LOANCOMP_DMN);
+            let ctx = json_to_context(&serde_json::json!({"RequestedAmt": 330000}));
+            let result = evaluator.evaluate_invocable(
+                "http://www.trisotech.com/definitions/_56c7d4a5-e6db-4bba-ac5f-dc082a16f719",
+                "0014-loan-comparison",
+                "RankedProducts",
+                &ctx,
+            );
+            assert!(
+                matches!(result, Value::Context(_)),
+                "unexpected: {result:?}"
+            );
+            move || {
+                black_box(evaluator.evaluate_invocable(
+                    "http://www.trisotech.com/definitions/_56c7d4a5-e6db-4bba-ac5f-dc082a16f719",
+                    "0014-loan-comparison",
+                    "RankedProducts",
+                    &ctx,
+                ));
+            }
+        }
+    );
+
+    scenario!(
+        "feel_for_100",
+        "prepared eval: for-expression over a 100-element list",
+        || {
+            let scope = FeelScope::default();
+            let mut ctx = FeelContext::new();
+            let items: Vec<Value> = (0..100).map(|i| Value::Number(i.into())).collect();
+            ctx.set_entry(&Name::from("items"), Value::List(items));
+            scope.push(ctx);
+            let node =
+                parse_expression(&scope, "for i in items return i * i", false).expect("parse");
+            let result = evaluate(&scope, &node);
+            assert!(matches!(&result, Value::List(l) if l.len() == 100));
+            move || {
+                black_box(evaluate(&scope, &node));
+            }
+        }
+    );
+
+    scenario!(
+        "feel_filter_100",
+        "prepared eval: filter expression over a 100-element list",
+        || {
+            let scope = FeelScope::default();
+            let mut ctx = FeelContext::new();
+            let items: Vec<Value> = (0..100).map(|i| Value::Number(i.into())).collect();
+            ctx.set_entry(&Name::from("items"), Value::List(items));
+            scope.push(ctx);
+            let node = parse_expression(&scope, "items[item > 50]", false).expect("parse");
+            let result = evaluate(&scope, &node);
+            assert!(matches!(&result, Value::List(l) if l.len() == 49));
+            move || {
+                black_box(evaluate(&scope, &node));
+            }
+        }
+    );
+
+    scenario!(
+        "feel_replace_regex",
+        "prepared eval: replace() regex BIF on a 40-char string",
+        || {
+            let scope = FeelScope::default();
+            let mut ctx = FeelContext::new();
+            ctx.set_entry(
+                &Name::from("text"),
+                Value::String("the quick brown fox jumps over lazy dogs".to_string()),
+            );
+            scope.push(ctx);
+            let node = parse_expression(&scope, r#"replace(text, "[aeiou]", "_")"#, false)
+                .expect("parse");
+            let result = evaluate(&scope, &node);
+            assert!(matches!(&result, Value::String(s) if s.contains("q__ck")));
+            move || {
                 black_box(evaluate(&scope, &node));
             }
         }
