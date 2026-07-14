@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
 use std::ops::Deref;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// Builds an evaluator from provided AST node.
 pub fn build_evaluator(node: &AstNode) -> Evaluator {
@@ -1397,11 +1397,16 @@ impl<'b> EvaluatorBuilder<'b> {
   }
 
   fn build_name(&mut self, name: Name) -> Evaluator {
+    // PGDMN: H19 — memoize the built-in function fallback, so repeated calls
+    // do not allocate a String and match ~90 names again (Bif::from_str also
+    // builds an error value for every non-BIF name). The scope lookup stays
+    // first, so user definitions still shadow BIF names.
+    let bif_cell: OnceLock<Option<Bif>> = OnceLock::new();
     Box::new(move |scope: &FeelScope| {
       if let Some(value) = scope.get_value(&name) {
         value
-      } else if let Ok(bif) = Bif::from_str(&name.to_string()) {
-        Value::BuiltInFunction(bif)
+      } else if let Some(bif) = bif_cell.get_or_init(|| Bif::from_str(&name.to_string()).ok()) {
+        Value::BuiltInFunction(bif.clone())
       } else {
         value_null!("context has no value for key '{}'", name)
       }
