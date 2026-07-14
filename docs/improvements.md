@@ -14,7 +14,36 @@ This has three serialization hops per row:
 2. JSONB binary -> `serde_json::Value` (pgrx deserializes the JSONB datum)
 3. `serde_json::Value` -> `FeelContext` with `Value::Number`, `Value::String`, etc.
 
-Each hop involves allocation, copying, and type-tag overhead. For bulk evaluation (thousands of rows), this dominates runtime.
+Each hop involves allocation, copying, and type-tag overhead. For bulk evaluation (thousands of rows), this was assumed to dominate runtime.
+
+## Measured: it does not dominate (2026-07-14)
+
+That assumption is wrong, and the numbers say so plainly. `dmn_record_eval` skips the JSONB path entirely (approach A, implemented) and is only **5–9% faster** than `dmn_eval` — 16.4 vs 18.1 µs/row on the simple model, 65.5 vs 69.0 µs/row on the complex one. If serialization were the bottleneck, removing it would not buy 5%.
+
+The time is going into FEEL evaluation itself. Approaches B through F all attack the serialization hops, so all of them are chasing at most a tenth of the runtime. **They should not be pursued for performance reasons** until FEEL evaluation is profiled and found to be cheaper than the numbers above suggest. Approach A remains worth having for ergonomics — mapping columns to inputs without hand-writing `jsonb_build_object` — but not as a speed play.
+
+### Where the wins actually are
+
+Reproduce with `make bench-shapes`, which times the same model and the same rows under different SQL. Ratios are against the naive per-row query; absolute figures are from a laptop under load and are only good for comparing shapes against each other.
+
+| Query shape | Speedup | Notes |
+|---|---|---|
+| Naive: evaluate once per row | 1.0× (baseline) | 18 µs/row simple, 68 µs/row complex |
+| **Permit parallelism** | **3.7–3.9×** | The functions are already `IMMUTABLE` and `PARALLEL SAFE`. Postgres simply will not parallelize a table this small by default. |
+| Deduplicate inputs, `MATERIALIZED` | 1.35–1.5× | Only when inputs repeat. Here 14,800 rows carried 10,000 distinct combinations. |
+| Deduplicate inputs, plain CTE | **1.0× — no effect** | See the trap below. |
+| Parallel *and* deduplicated | 1.3× | They do not compose; see below. |
+| Model from a table column vs. an inline literal | 1.0× | No penalty either way. |
+
+**Parallelism is the whole game.** A decision is pure, self-contained, per-row work — the ideal parallel workload — and nothing in pgdmn prevents it. The only reason the benchmark had to force it (`min_parallel_table_scan_size`, `parallel_setup_cost`) is that the table is small; a genuinely large table gets this from the planner for free.
+
+**The deduplication trap.** The obvious way to write "evaluate once per distinct input, then join the answers back" is a plain CTE — and it does *nothing*. The planner inlines the CTE and pulls `dmn_eval` back up above the join, so it evaluates once per output row exactly as before. The query looks like an optimization and measures like the baseline. Writing `WITH … AS MATERIALIZED` is what actually holds the evaluation down at the distinct-row count.
+
+**Parallelism and deduplication do not compose.** A `MATERIALIZED` CTE is scanned serially, which throws the parallelism away — the combination measures 1.3×, worse than parallelism alone at 3.8×. Materialising into a real table instead does not rescue it either (1.28×). Given the choice, take the parallelism.
+
+### What this suggests for pgdmn itself
+
+The evaluator cache is keyed on the **entire XML string** (`cache.rs`), so every call hashes the whole model to find it. On these small models that is a few percent at most, but it scales with model size rather than with the work being done. Fingerprinting the model once at `dmn_load` and keying the cache on that is tracked as PERF-002.
 
 ## Candidate Approaches
 

@@ -22,7 +22,9 @@ Create one file per major feature in `docs/`: the FEEL evaluation functions, the
 
 ### DOCS-002: UI behavioral descriptions for the website
 
-Add `docs/ux/{aspect}.md` behavioral descriptions covering the website's existing UI (navigation, page structure, code example presentation). Descriptions cover the full interaction lifecycle and must not reference implementation details.
+Add `docs/ux/{aspect}.md` behavioral descriptions covering the website's existing UI. Descriptions cover the full interaction lifecycle and must not reference implementation details.
+
+Navigation (`docs/ux/navigation.md`) and the Examples page's downloads, code blocks, and tables (`docs/ux/examples-and-code.md`) are written. Still to cover: the home page's hero and quick start, and the function reference's structure on the Docs page.
 
 ## Accessibility
 
@@ -59,23 +61,29 @@ Compares the input and output definitions of a named invocable across a new mode
 - Whether to support checking multiple invocables in one call or keep it single-invocable
 - How to handle invocables that exist in one model but not the other (report as incompatible vs. skip with warning)
 
-### FEAT-003: Syntax highlighting in code blocks
-
-Add syntax highlighting for SQL and DMN (XML) code examples on the website. The `SqlBlock` component should accept a language parameter to select the grammar.
-
-The client-side option (Prism.js or similar) is closed: WEB-001 ships zero JavaScript, and highlighting prose-level code samples does not justify reversing that. Highlight at build time in Rust — syntect is the obvious candidate — emitting styled markup into the prerendered HTML.
-
-### FEAT-004: Markdown-based blog infrastructure
-
-Build a blog system for the website that reads markdown files from a directory, renders them as pages, and generates an index with titles and dates.
-
-Must render at build time into the prerendered output (WEB-001), not per request: there is no server in production to read files at request time.
-
 ### FEAT-005: Mobile hamburger menu
 
 The site navigation needs a responsive hamburger menu for narrow viewports.
 
 The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which WEB-001 removed. Either implement it without script — a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert — or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
+
+### PERF-001: Tell people to let the planner parallelize
+
+Evaluating a decision is pure, per-row, self-contained work — the ideal parallel workload — and `make bench-shapes` measures a **3.8×** speedup from parallelism alone, far more than any other change to the query. The functions are already `IMMUTABLE` and `PARALLEL SAFE`, so this needs no code change; it needs a reader who knows to check that their plan actually has a Gather in it.
+
+Document this where someone doing bulk evaluation will read it: the Docs page and the README. Include the deduplication trap alongside it — the obvious "evaluate once per distinct input" CTE silently does nothing unless it is `MATERIALIZED`, because the planner pulls the call back up above the join. Both findings are recorded in `docs/improvements.md`.
+
+### PERF-002: Fingerprint models instead of hashing the XML per call
+
+`cache.rs` keys the evaluator cache on the entire XML string, so every `dmn_eval` hashes the whole model to find its evaluator, then compares the string on a hit. The cost scales with model size rather than with the decision being made. On the benchmark's small models it is a few percent; on a large model it would not be.
+
+Compute a fingerprint once, in `dmn_load`, store it on `DmnModel`, and key the cache on that. Measure before and after with `make bench` — this is worth doing only if the numbers say so, and the numbers currently say it is not the bottleneck (see PERF-001 and `docs/improvements.md`).
+
+### WEB-003: Respect prefers-color-scheme
+
+The site defines its palette once, in light colours, and never consults `prefers-color-scheme`. A visitor whose system is set to dark gets a bright white page regardless. CLAUDE.md already forbids a dark-mode *toggle* on the grounds that the system preference is the right signal — but the site does not currently honour that signal either way.
+
+Add a `prefers-color-scheme: dark` block redefining the custom properties in `style/main.scss`. Verify the dark palette holds 4.5:1 contrast for text and 3:1 for interface elements and focus indicators, which the highlighted table rows and the muted secondary text are the most likely to fail.
 
 ### WEB-002: Automated link checking for the website
 
@@ -88,6 +96,16 @@ This would have caught the trailing-slash problem WEB-001 fixed by hand (linking
 The website shipped a wasm hydration bundle (343 KB of wasm plus 19.5 KB of JS) to hydrate pages with no client-side interactivity at all — no signals, no server functions, no client state. The bundle bought nothing while forcing a `wasm-bindgen` crate/CLI version match on the build host and a server-capable host in production.
 
 Done 2026-07-13. Dropped the `hydrate` feature, `wasm-bindgen`, `console_error_panic_hook`, the `cdylib` crate type, the `wasm-release` profile, and `cargo-leptos` itself. Every route is now `SsrMode::Static` and rendered to `website/dist` by a `prerender` binary, which also compiles Sass in-process via `grass` and emits `404.html` and `.nojekyll`. Specification in `docs/specifications/WEB-001-static-prerender.md`; decision recorded in CLAUDE.md.
+
+### FEAT-003: Syntax highlighting in code blocks (done)
+
+Done 2026-07-14. SQL is highlighted at build time by syntect (`website/src/highlight.rs`), emitting CSS classes rather than inline colours — the palette lives in `style/main.scss`, in dark tones chosen to stay legible without colour. The client-side option was closed by WEB-001's no-JavaScript rule. Markdown code fences in blog posts are highlighted through the same path. DMN (XML) highlighting is not implemented: no XML is shown on the site.
+
+### FEAT-004: Markdown-based blog infrastructure (done)
+
+Done 2026-07-14. Posts are markdown files in `website/posts/`, embedded at compile time (`include_dir`) and rendered by `pulldown-cmark` during the prerender. A single `/blog/:slug` route enumerates its slugs from the files themselves via Leptos's `StaticRoute::prerender_params`, so adding a post is adding a file — no Rust change, no route to register. Front matter carries title, date, summary, and the example the post walks through. A malformed post fails the build, naming the file.
+
+The one convention the blog adds: a paragraph reading `Table: …` immediately above a markdown table becomes that table's caption, which is what lets the renderer give tables a caption, `scope`-d column headers, and a keyboard-reachable scroll wrapper that bare markdown would not have.
 
 ### FEAT-006: Website CI/CD deployment pipeline (done)
 

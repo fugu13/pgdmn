@@ -4,7 +4,9 @@ How a visitor moves between pages on the pgdmn website, and what they see when a
 
 ## Moving between pages
 
-Every page carries the same header: the site name on the left, acting as a link home, and a navigation list containing Why pgdmn, Docs, Examples, Blog, and a link out to the project on GitHub.
+Every page carries the same header: the site name on the left, acting as a link home, and a navigation list containing Home, Why pgdmn, Docs, Examples, Blog, and a link out to the project on GitHub.
+
+Home appears in the list as well as being reachable by the site name, because a visitor should not have to know that a wordmark is clickable to get back to the start.
 
 Choosing any of these loads that page whole. The browser performs an ordinary page load — the address in the location bar changes to the page's own address, the back button returns to the previous page, and the page can be reloaded, bookmarked, or opened in a new tab and will show the same content. Nothing is fetched or swapped in behind the scenes.
 

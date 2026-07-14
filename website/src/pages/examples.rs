@@ -1,44 +1,293 @@
 use leptos::prelude::*;
 use leptos_meta::Title;
 
+use crate::components::sql_block::SqlBlock;
+use crate::routes;
+
+/// A decision model — a document with rules in it.
+#[component]
+fn ModelIcon() -> impl IntoView {
+    view! {
+        <svg class="file-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M3.5 1h6L13 4.5V15H3.5z" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M9.25 1.25V4.75H12.75" fill="none" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M5.5 8h5M5.5 10.5h5" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+    }
+}
+
+/// A dataset — rows and columns.
+#[component]
+fn DataIcon() -> impl IntoView {
+    view! {
+        <svg class="file-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <rect
+                x="1.6"
+                y="2.6"
+                width="12.8"
+                height="10.8"
+                rx="1"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.2"
+            />
+            <path d="M1.6 6.2h12.8M6.2 6.2v7.2" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+    }
+}
+
+/// What a sample file is. Naming the kind beats sniffing the extension: the
+/// icon and the accessible name both follow from it, and neither can drift.
+#[derive(Clone, Copy)]
+enum FileKind {
+    Model,
+    Dataset,
+}
+
+impl FileKind {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Model => "DMN model",
+            Self::Dataset => "Dataset",
+        }
+    }
+}
+
+/// One downloadable file: an icon and its name.
+///
+/// The icon is decorative — the filename is the link text — so it is hidden from
+/// assistive technology rather than announced. The accessible name says what
+/// activating the link does, which a bare filename would not.
+#[component]
+fn Download(#[prop(into)] file: String, kind: FileKind) -> impl IntoView {
+    let href = format!("/examples/{file}");
+    let label = format!("Download {file} ({})", kind.label());
+    view! {
+        <li class="download">
+            <a href=href download aria-label=label>
+                {match kind {
+                    FileKind::Model => view! { <ModelIcon/> }.into_any(),
+                    FileKind::Dataset => view! { <DataIcon/> }.into_any(),
+                }}
+                <span>{file}</span>
+            </a>
+        </li>
+    }
+}
+
+/// The way out of an example and into its walkthrough.
+#[component]
+fn Walkthrough(#[prop(into)] slug: String, #[prop(into)] scenario: String) -> impl IntoView {
+    view! {
+        <p class="more">
+            <a href=routes::post(&slug)>
+                {format!("Read the complete walkthrough: {scenario}")}
+            </a>
+        </p>
+    }
+}
+
 #[component]
 pub fn ExamplesPage() -> impl IntoView {
     view! {
         <Title text="Examples — pgdmn"/>
         <h1>"Examples"</h1>
-        <p>"Real-world scenarios showing pgdmn in action."</p>
 
-        <div class="card-grid">
-            <div class="card">
-                <h3>"Loan Eligibility"</h3>
-                <p>
-                    "A multi-hit decision table evaluating applicant age, income, and credit score "
-                    "to produce eligibility and rate decisions."
-                </p>
-            </div>
-            <div class="card">
-                <h3>"Pricing Tiers"</h3>
-                <p>
-                    "Dynamic pricing rules that change by swapping the DMN model — no code deploy needed."
-                </p>
-            </div>
-            <div class="card">
-                <h3>"Compliance Checks"</h3>
-                <p>
-                    "Data-handling rules as a decision table, evaluated per-row on a customers table."
-                </p>
-            </div>
-            <div class="card">
-                <h3>"Routing Rules"</h3>
-                <p>
-                    "Route requests, tickets, or tasks based on structured decision logic "
-                    "co-located with your data."
-                </p>
-            </div>
-        </div>
+        <nav class="quicklinks" aria-label="The examples on this page">
+            <ul>
+                <li>
+                    <a href="#loan">"Loan eligibility"</a>
+                    <span>"Approve/deny, with a business-approved phrasing of the decision"</span>
+                </li>
+                <li>
+                    <a href="#pricing">"Order pricing"</a>
+                    <span>"Swap pricing models on the fly with the same queries"</span>
+                </li>
+                <li>
+                    <a href="#compliance">"Compliance checks"</a>
+                    <span>"Apply regulatory rules to determine data handling procedures"</span>
+                </li>
+                <li>
+                    <a href="#routing">"Ticket routing"</a>
+                    <span>"Control how tickets are assigned to support queues"</span>
+                </li>
+            </ul>
+        </nav>
 
-        <div class="placeholder-notice">
-            <p>"Full worked examples with SQL coming soon."</p>
-        </div>
+        <h2 id="loan">"Loan eligibility"</h2>
+        <p>
+            "A first-hit decision table evaluating applicant age, income, and prior bankruptcy to
+            produce an eligibility decision."
+        </p>
+
+        <ul class="download-list">
+            <Download file="loan-eligibility.dmn" kind=FileKind::Model/>
+            <Download file="applicants.csv" kind=FileKind::Dataset/>
+        </ul>
+
+        <SqlBlock
+            label="Loan eligibility: decide one applicant, then all of them"
+            code="-- One applicant.
+SELECT dmn_eval(model, 'Eligibility', '{
+           \"Age\": 34, \"Income\": 82000, \"Bankrupt\": false
+       }'::jsonb) #>> '{}' AS decision
+FROM models WHERE name = 'loan';
+--  Approved
+
+-- Now check it for everybody.
+SELECT a.name, a.age, a.income, a.bankrupt,
+       dmn_eval(m.model, 'Eligibility', jsonb_build_object(
+           'Age',      a.age,
+           'Income',   a.income,
+           'Bankrupt', a.bankrupt
+       )) #>> '{}' AS decision
+FROM applicants a
+CROSS JOIN models m
+WHERE m.name = 'loan'
+ORDER BY a.id;
+--      name      | age | income | bankrupt |        decision
+-- ---------------+-----+--------+----------+--------------------------
+--  Ada Okafor    |  34 |  82000 | f        | Approved
+--  Bo Zhang      |  17 |      0 | f        | Denied: underage
+--  Chen Ruiz     |  29 |  41000 | f        | Denied: low income
+--  Dara Singh    |  45 | 120000 | t        | Denied: prior bankruptcy
+--  Eli Novak     |  22 |  50000 | f        | Approved
+--  Fay Mbeki     |  19 |  49999 | f        | Denied: low income
+--  Gus Halvorsen |  64 |  68000 | f        | Approved
+--  Hana Ito      |  17 |  95000 | f        | Denied: underage"
+        />
+
+        <Walkthrough slug="loan-eligibility" scenario="Loan eligibility"/>
+
+        <h2 id="pricing">"Order pricing"</h2>
+        <p>
+            "Dynamic pricing rules that change by swapping the DMN model — no code deploy needed."
+        </p>
+
+        <ul class="download-list">
+            <Download file="order-pricing.dmn" kind=FileKind::Model/>
+            <Download file="order-pricing-promo.dmn" kind=FileKind::Model/>
+            <Download file="orders.csv" kind=FileKind::Dataset/>
+        </ul>
+
+        <SqlBlock
+            label="Order pricing: two policies, swapped by name"
+            code="-- Two policies live in `models` under different names. The promo
+-- model takes 10% off before tax; the standard one does not.
+-- Both answer to the same name, 'Total Price'.
+-- Identical queries get the right result for the current model.
+SELECT o.customer, o.base_price,
+       round((dmn_eval(s.model, 'Total Price', p.input)
+              #>> '{}')::numeric, 2) AS standard,
+       round((dmn_eval(t.model, 'Total Price', p.input)
+              #>> '{}')::numeric, 2) AS promo
+FROM orders o
+CROSS JOIN LATERAL (
+    SELECT jsonb_build_object(
+        'Base Price', o.base_price,
+        'Tax Rate',   o.tax_rate
+    ) AS input
+) p
+JOIN models s ON s.name = 'pricing-standard'
+JOIN models t ON t.name = 'pricing-promo'
+ORDER BY o.id;
+--      customer      | base_price | standard |  promo
+-- -------------------+------------+----------+---------
+--  Northwind Traders |     100.00 |   110.00 |   99.00
+--  Globex            |    2499.99 |  2706.24 | 2435.62
+--  Initech           |      45.50 |    54.60 |   49.14
+--  Umbrella Corp     |    1000.00 |  1000.00 |  900.00
+--  Acme Supply       |      19.99 |    21.49 |   19.34"
+        />
+
+        <Walkthrough slug="order-pricing" scenario="Order pricing"/>
+
+        <h2 id="compliance">"Compliance checks"</h2>
+        <p>
+            "Data-handling rules as a decision table, evaluated per-row on a customers table."
+        </p>
+
+        <ul class="download-list">
+            <Download file="compliance.dmn" kind=FileKind::Model/>
+            <Download file="customers.csv" kind=FileKind::Dataset/>
+        </ul>
+
+        <SqlBlock
+            label="Compliance: what we are obliged to do with each row"
+            code="-- With a view, always have the correct policy outcome as a column.
+CREATE VIEW obligations AS
+SELECT c.id, c.name, c.region, c.data_class,
+       dmn_eval(m.model, 'Handling', jsonb_build_object(
+           'Region',     c.region,
+           'Data Class', c.data_class
+       )) #>> '{}' AS handling
+FROM customers c
+CROSS JOIN models m
+WHERE m.name = 'compliance';
+
+SELECT name, region, data_class, handling
+FROM obligations ORDER BY id;
+--         name        | region | data_class |           handling
+-- --------------------+--------+------------+---------------------------
+--  Northwind Traders  | EU     | personal   | store in EU, retain 24 ...
+--  Globex             | US     | personal   | retain 24 months
+--  Initech            | US     | special    | encrypt, restrict acces...
+--  Umbrella Corp      | EU     | special    | encrypt, restrict acces...
+--  Acme Supply        | UK     | public     | standard handling
+--  Soylent Industries | EU     | public     | standard handling
+--  Tyrell Corp        | US     | public     | standard handling
+--  Wayne Enterprises  | UK     | personal   | retain 24 months
+
+SELECT handling, count(*), string_agg(name, ', ' ORDER BY id) AS who
+FROM obligations
+WHERE handling <> 'standard handling'
+GROUP BY handling
+ORDER BY count(*) DESC, handling;
+--            handling            | count |          who
+-- -------------------------------+-------+------------------------
+--  encrypt, restrict access, ... |     2 | Initech, Umbrella Corp
+--  retain 24 months              |     2 | Globex, Wayne Enterp...
+--  store in EU, retain 24 months |     1 | Northwind Traders"
+        />
+
+        <Walkthrough slug="compliance" scenario="Compliance checks"/>
+
+        <h2 id="routing">"Ticket routing"</h2>
+        <p>
+            "Route requests, tickets, or tasks based on structured decision logic co-located with
+            your data."
+        </p>
+
+        <ul class="download-list">
+            <Download file="ticket-routing.dmn" kind=FileKind::Model/>
+            <Download file="tickets.csv" kind=FileKind::Dataset/>
+        </ul>
+
+        <SqlBlock
+            label="Ticket routing: a view that routes every ticket"
+            code="-- Change the business requirements in the database and every ticket
+-- reroutes automatically.
+CREATE VIEW routed_tickets AS
+SELECT t.id, t.subject, t.priority, t.customer_tier,
+       dmn_eval(m.model, 'Queue', jsonb_build_object(
+           'Priority',      t.priority,
+           'Customer Tier', t.customer_tier
+       )) #>> '{}' AS queue
+FROM tickets t
+CROSS JOIN models m
+WHERE m.name = 'routing';
+
+SELECT queue, count(*), string_agg(subject, '; ' ORDER BY id) AS work
+FROM routed_tickets
+GROUP BY queue
+ORDER BY count(*) DESC, queue;
+--  queue  | count |                  work
+-- --------+-------+-----------------------------------------
+--  pager  |     3 | Cannot log in after SSO change; Bill...
+--  tier-1 |     3 | Feature request: dark mode; Typo in ...
+--  tier-2 |     2 | API latency spike in eu-west; Passwo..."
+        />
+
+        <Walkthrough slug="ticket-routing" scenario="Ticket routing"/>
     }
 }

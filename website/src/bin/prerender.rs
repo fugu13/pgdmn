@@ -9,6 +9,7 @@ use std::path::Path;
 use leptos::prelude::LeptosOptions;
 use leptos_axum::generate_route_list_with_ssg;
 use pgdmn_website::app::shell;
+use pgdmn_website::posts;
 use pgdmn_website::routes;
 
 type BoxError = Box<dyn std::error::Error>;
@@ -33,6 +34,20 @@ async fn main() -> Result<(), BoxError> {
     compile_stylesheet()?;
     copy_dir(Path::new(PUBLIC), Path::new(DIST))?;
 
+    // Parse the posts before rendering anything, so a broken post fails the
+    // build with a message naming the file, rather than quietly vanishing from
+    // the blog.
+    let posts = posts::load()?;
+    println!(
+        "{} post(s): {}",
+        posts.len(),
+        posts
+            .iter()
+            .map(|post| post.slug.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
     let options = LeptosOptions::builder()
         .output_name("pgdmn-website")
         .site_root(DIST)
@@ -41,7 +56,7 @@ async fn main() -> Result<(), BoxError> {
     let (_, static_routes) = generate_route_list_with_ssg(shell);
     static_routes.generate(&options).await;
 
-    clean_urls()?;
+    clean_urls(Path::new(DIST))?;
     strip_scripts(Path::new(DIST))?;
 
     // GitHub Pages runs the pages through Jekyll unless this file exists, which
@@ -81,23 +96,39 @@ fn copy_dir(from: &Path, to: &Path) -> Result<(), BoxError> {
 /// makes the extensionless URL resolve on any static host and in the local
 /// preview alike, instead of depending on one host's implicit `.html` lookup.
 ///
-/// `index.html` and `404.html` stay at the root: hosts look for them by name.
-fn clean_urls() -> Result<(), BoxError> {
-    for entry in fs::read_dir(DIST)? {
-        let path = entry?.path();
+/// Recurses, because nested routes land in nested directories:
+/// `blog/loan-eligibility.html` has to become `blog/loan-eligibility/index.html`
+/// for the same reason the top-level ones do.
+///
+/// `index.html` keeps its name everywhere. `404.html` keeps its name at the
+/// root, where hosts look for it by name.
+fn clean_urls(directory: &Path) -> Result<(), BoxError> {
+    // Collected up front: the loop creates directories as it goes, and reading
+    // the directory while rewriting it invites surprises.
+    let entries = fs::read_dir(directory)?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let at_root = directory == Path::new(DIST);
+
+    for path in entries {
+        if path.is_dir() {
+            clean_urls(&path)?;
+            continue;
+        }
         if path.extension().is_none_or(|extension| extension != "html") {
             continue;
         }
         let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
             continue;
         };
-        if stem == "index" || stem == routes::NOT_FOUND {
+        if stem == "index" || (at_root && stem == routes::NOT_FOUND) {
             continue;
         }
 
-        let directory = Path::new(DIST).join(stem);
-        fs::create_dir_all(&directory)?;
-        fs::rename(&path, directory.join("index.html"))?;
+        let target = directory.join(stem);
+        fs::create_dir_all(&target)?;
+        fs::rename(&path, target.join("index.html"))?;
     }
     Ok(())
 }

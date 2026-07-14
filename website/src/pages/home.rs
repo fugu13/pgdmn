@@ -11,7 +11,35 @@ pub fn HomePage() -> impl IntoView {
                 "Run DMN decision tables inside PostgreSQL. No network hop, no external engine — just SQL."
             </p>
         </div>
-        <h2>"Quick Start"</h2>
-        <SqlBlock code="-- Install the extension\nCREATE EXTENSION pgdmn;\n\n-- Evaluate a FEEL expression\nSELECT feel_eval('1 + 2');\n-- Returns: 3\n\n-- Load a DMN model and evaluate a decision\nSELECT dmn_eval(\n  dmn_load('<your DMN XML>'),\n  'Decision Name',\n  '{\"input\": \"value\"}'::jsonb\n);"/>
+
+        <h2>"Quick start"</h2>
+        <SqlBlock
+            label="Quick start SQL"
+            code="CREATE EXTENSION pgdmn;
+
+-- Evaluate a FEEL expression.
+SELECT feel_eval('1 + 2');
+--  3
+
+-- Load a DMN model and evaluate a decision.
+SELECT dmn_eval(
+    dmn_load('<your DMN XML>'),
+    'Eligibility',
+    '{\"Age\": 34, \"Income\": 82000}'::jsonb
+) #>> '{}';
+--  Approved"
+        />
+
+        <h2>"DMN in your database"</h2>
+        <p>
+            "DMN provides flexibility to update business rules on the fly, but right now that
+            flexibility usually lives in specialized platforms or custom applications. By
+            putting DMN in your database, you keep all the flexibility of DMN with the ease and
+            integration of PostgreSQL."
+        </p>
+        <p>
+            "See it run against a real table on the "<a href="/examples/">"Examples"</a>
+            " page — downloadable models, sample datasets, and the SQL that decides every row."
+        </p>
     }
 }

@@ -901,6 +901,255 @@ mod tests {
         );
     }
 
+    /// Does the *shape* of the SQL change what a DMN evaluation costs?
+    ///
+    /// Same model, same rows, same answers — only the query differs. Gated
+    /// behind `PGDMN_BENCH_SHAPES=1` (`make bench-shapes`) because it is a
+    /// measurement, not an assertion.
+    #[pg_test]
+    #[expect(clippy::too_many_lines, clippy::cast_precision_loss)]
+    fn bench_query_shapes() {
+        if std::env::var("PGDMN_BENCH_SHAPES").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let concat = CONCAT_DMN.replace('\'', "''");
+        let risk = RISK_DMN.replace('\'', "''");
+
+        Spi::run(
+            "CREATE TABLE shapes (\
+             first_name TEXT NOT NULL, last_name TEXT NOT NULL, \
+             age INT NOT NULL, income NUMERIC NOT NULL, credit_score INT NOT NULL, \
+             employment_status TEXT NOT NULL, years_employed INT NOT NULL)",
+        )
+        .expect("CREATE TABLE failed");
+        Spi::run(
+            "INSERT INTO shapes (first_name, last_name, age, income, credit_score, employment_status, years_employed)
+             SELECT 'First_' || lpad(f.n::text, 3, '0'),
+                    'Last_' || lpad(l.n::text, 3, '0'),
+                    18 + ((f.n * 7 + l.n * 3) % 50),
+                    25000 + ((f.n * 13 + l.n * 17) % 100) * 1000,
+                    500 + ((f.n * 11 + l.n * 7) % 350),
+                    (ARRAY['employed','self-employed','unemployed','retired'])[1 + ((f.n + l.n) % 4)],
+                    ((f.n * 3 + l.n * 5) % 20)
+             FROM generate_series(1, 100) AS f(n)
+             CROSS JOIN generate_series(1, 100) AS l(n)",
+        )
+        .expect("INSERT failed");
+        // The same skew the other benchmark uses: some inputs repeat a lot.
+        Spi::run(
+            "INSERT INTO shapes
+             SELECT b.* FROM shapes b, generate_series(5, 100) AS s(n), generate_series(1, 50)
+             WHERE b.first_name = 'First_001'
+               AND b.last_name = 'Last_' || lpad(s.n::text, 3, '0')",
+        )
+        .expect("skew INSERT failed");
+
+        let rows = Spi::get_one::<i64>("SELECT count(*) FROM shapes")
+            .expect("SPI failed")
+            .unwrap();
+        let distinct_names = Spi::get_one::<i64>(
+            "SELECT count(*) FROM (SELECT DISTINCT first_name, last_name FROM shapes) d",
+        )
+        .expect("SPI failed")
+        .unwrap();
+        let distinct_risk = Spi::get_one::<i64>(
+            "SELECT count(*) FROM (SELECT DISTINCT age, income, credit_score, \
+             employment_status, years_employed FROM shapes) d",
+        )
+        .expect("SPI failed")
+        .unwrap();
+
+        let time = |label: &str, sql: &str| -> std::time::Duration {
+            // Warm, then measure.
+            Spi::run(sql).unwrap_or_else(|e| panic!("{label} failed: {e}"));
+            let start = std::time::Instant::now();
+            Spi::run(sql).unwrap_or_else(|e| panic!("{label} failed: {e}"));
+            start.elapsed()
+        };
+
+        // (A) The shape the docs show: evaluate once per row.
+        let naive_concat = time(
+            "naive concat",
+            &format!(
+                "SELECT dmn_eval(dmn_load('{concat}'), 'FullName', \
+                 jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+                 FROM shapes"
+            ),
+        );
+
+        // (B) Evaluate once per DISTINCT input, then join the answers back on.
+        let dedup_concat = time(
+            "dedup concat",
+            &format!(
+                "WITH answers AS (\
+                   SELECT first_name, last_name, \
+                          dmn_eval(dmn_load('{concat}'), 'FullName', \
+                          jsonb_build_object('first_name', first_name, 'last_name', last_name)) AS r \
+                   FROM (SELECT DISTINCT first_name, last_name FROM shapes) d) \
+                 SELECT a.r FROM shapes s \
+                 JOIN answers a USING (first_name, last_name)"
+            ),
+        );
+
+        // (B2) The same dedup, but MATERIALIZED. Without this the planner inlines
+        // the CTE and pulls `dmn_eval` up above the join, evaluating it once per
+        // *output* row again — which silently undoes the deduplication.
+        let dedup_mat_concat = time(
+            "dedup materialized concat",
+            &format!(
+                "WITH answers AS MATERIALIZED (\
+                   SELECT first_name, last_name, \
+                          dmn_eval(dmn_load('{concat}'), 'FullName', \
+                          jsonb_build_object('first_name', first_name, 'last_name', last_name)) AS r \
+                   FROM (SELECT DISTINCT first_name, last_name FROM shapes) d) \
+                 SELECT a.r FROM shapes s \
+                 JOIN answers a USING (first_name, last_name)"
+            ),
+        );
+
+        // (C) The naive shape, but with parallelism actually permitted.
+        Spi::run("SET LOCAL max_parallel_workers_per_gather = 4").expect("SET failed");
+        Spi::run("SET LOCAL parallel_setup_cost = 0").expect("SET failed");
+        Spi::run("SET LOCAL parallel_tuple_cost = 0").expect("SET failed");
+        Spi::run("SET LOCAL min_parallel_table_scan_size = 0").expect("SET failed");
+        let parallel_concat = time(
+            "parallel concat",
+            &format!(
+                "SELECT dmn_eval(dmn_load('{concat}'), 'FullName', \
+                 jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+                 FROM shapes"
+            ),
+        );
+        let parallel_dedup_concat = time(
+            "parallel dedup concat",
+            &format!(
+                "WITH answers AS MATERIALIZED (\
+                   SELECT first_name, last_name, \
+                          dmn_eval(dmn_load('{concat}'), 'FullName', \
+                          jsonb_build_object('first_name', first_name, 'last_name', last_name)) AS r \
+                   FROM (SELECT DISTINCT first_name, last_name FROM shapes) d) \
+                 SELECT a.r FROM shapes s \
+                 JOIN answers a USING (first_name, last_name)"
+            ),
+        );
+        // (E) Both at once. A MATERIALIZED CTE is scanned serially, which throws
+        // parallelism away — so materialise into a real table instead, which the
+        // planner *can* fill in parallel, then join that.
+        let both_start = std::time::Instant::now();
+        Spi::run(&format!(
+            "CREATE UNLOGGED TABLE answers AS \
+             SELECT first_name, last_name, \
+                    dmn_eval(dmn_load('{concat}'), 'FullName', \
+                    jsonb_build_object('first_name', first_name, 'last_name', last_name)) AS r \
+             FROM (SELECT DISTINCT first_name, last_name FROM shapes) d"
+        ))
+        .expect("CTAS failed");
+        Spi::run("SELECT a.r FROM shapes s JOIN answers a USING (first_name, last_name)")
+            .expect("join failed");
+        let both_concat = both_start.elapsed();
+        Spi::run("DROP TABLE answers").expect("DROP failed");
+
+        Spi::run("RESET max_parallel_workers_per_gather").expect("RESET failed");
+        Spi::run("RESET parallel_setup_cost").expect("RESET failed");
+        Spi::run("RESET parallel_tuple_cost").expect("RESET failed");
+        Spi::run("RESET min_parallel_table_scan_size").expect("RESET failed");
+
+        // (D) Is dmn_load('<literal>') folded once, or re-parsed per row? Put the
+        // model in a table and force it to be a column reference to find out.
+        Spi::run("CREATE TABLE shape_models (name text PRIMARY KEY, model dmnmodel NOT NULL)")
+            .expect("CREATE TABLE failed");
+        Spi::run(&format!(
+            "INSERT INTO shape_models VALUES ('concat', dmn_load('{concat}'))"
+        ))
+        .expect("INSERT model failed");
+        let from_column_concat = time(
+            "model-from-column concat",
+            "SELECT dmn_eval(m.model, 'FullName', \
+             jsonb_build_object('first_name', s.first_name, 'last_name', s.last_name)) \
+             FROM shapes s CROSS JOIN shape_models m WHERE m.name = 'concat'",
+        );
+
+        // The complex model, naive vs deduplicated.
+        let naive_risk = time(
+            "naive risk",
+            &format!(
+                "SELECT dmn_eval(dmn_load('{risk}'), 'RiskScore', \
+                 jsonb_build_object('age', age, 'income', income, 'credit_score', credit_score, \
+                 'employment_status', employment_status, 'years_employed', years_employed)) \
+                 FROM shapes"
+            ),
+        );
+        let dedup_risk = time(
+            "dedup risk",
+            &format!(
+                "WITH answers AS MATERIALIZED (\
+                   SELECT age, income, credit_score, employment_status, years_employed, \
+                          dmn_eval(dmn_load('{risk}'), 'RiskScore', \
+                          jsonb_build_object('age', age, 'income', income, \
+                          'credit_score', credit_score, 'employment_status', employment_status, \
+                          'years_employed', years_employed)) AS r \
+                   FROM (SELECT DISTINCT age, income, credit_score, employment_status, \
+                         years_employed FROM shapes) d) \
+                 SELECT a.r FROM shapes s \
+                 JOIN answers a USING (age, income, credit_score, employment_status, years_employed)"
+            ),
+        );
+
+        let rc = rows as f64;
+        let per_row = |d: std::time::Duration| d.as_micros() as f64 / rc;
+        let speedup = |base: std::time::Duration, other: std::time::Duration| {
+            base.as_secs_f64() / other.as_secs_f64()
+        };
+
+        let report = format!(
+            "Query-shape benchmark: {rows} rows\n\
+             distinct name combos: {distinct_names} | distinct risk combos: {distinct_risk}\n\
+             \n\
+             --- Simple (concat) ---\n\
+             naive (per row):        {:.1} us/row ({:?})\n\
+             dedup, CTE inlined:     {:.1} us/row ({:?})  {:.2}x\n\
+             dedup, MATERIALIZED:    {:.1} us/row ({:?})  {:.2}x\n\
+             parallel (4 workers):   {:.1} us/row ({:?})  {:.2}x\n\
+             parallel + dedup (CTE): {:.1} us/row ({:?})  {:.2}x\n\
+             parallel + dedup (tbl): {:.1} us/row ({:?})  {:.2}x\n\
+             model from a column:    {:.1} us/row ({:?})  {:.2}x\n\
+             \n\
+             --- Complex (risk score) ---\n\
+             naive (per row):        {:.1} us/row ({:?})\n\
+             dedup, MATERIALIZED:    {:.1} us/row ({:?})  {:.2}x\n",
+            per_row(naive_concat),
+            naive_concat,
+            per_row(dedup_concat),
+            dedup_concat,
+            speedup(naive_concat, dedup_concat),
+            per_row(dedup_mat_concat),
+            dedup_mat_concat,
+            speedup(naive_concat, dedup_mat_concat),
+            per_row(parallel_concat),
+            parallel_concat,
+            speedup(naive_concat, parallel_concat),
+            per_row(parallel_dedup_concat),
+            parallel_dedup_concat,
+            speedup(naive_concat, parallel_dedup_concat),
+            per_row(both_concat),
+            both_concat,
+            speedup(naive_concat, both_concat),
+            per_row(from_column_concat),
+            from_column_concat,
+            speedup(naive_concat, from_column_concat),
+            per_row(naive_risk),
+            naive_risk,
+            per_row(dedup_risk),
+            dedup_risk,
+            speedup(naive_risk, dedup_risk),
+        );
+        if let Err(e) = std::fs::write("/pgdmn/benchmark_shapes.txt", &report) {
+            pgrx::warning!("Failed to write benchmark_shapes.txt: {}", e);
+        }
+        pgrx::warning!("{}", report);
+    }
+
     // --- Record-based evaluation tests ---
 
     #[pg_test]
@@ -1430,6 +1679,219 @@ mod tests {
         assert!(
             warm_a < cold_a / 2,
             "Model A was not faster on second call: cold={cold_a:?}, warm={warm_a:?}"
+        );
+    }
+
+    // The models published on the website, evaluated against the exact rows of
+    // the CSV datasets published alongside them. The site tells visitors what
+    // these produce; these tests are what make that claim true, and what will
+    // fail loudly if a model or an engine upgrade ever changes the answer.
+    const LOAN_DMN: &str = include_str!("../website/public/examples/loan-eligibility.dmn");
+    const PRICING_DMN: &str = include_str!("../website/public/examples/order-pricing.dmn");
+    const PROMO_DMN: &str = include_str!("../website/public/examples/order-pricing-promo.dmn");
+    const ROUTING_DMN: &str = include_str!("../website/public/examples/ticket-routing.dmn");
+    const COMPLIANCE_DMN: &str = include_str!("../website/public/examples/compliance.dmn");
+
+    fn eligibility(age: i32, income: i32, bankrupt: bool) -> serde_json::Value {
+        eval_example(
+            LOAN_DMN,
+            "Eligibility",
+            &format!(r#"{{"Age": {age}, "Income": {income}, "Bankrupt": {bankrupt}}}"#),
+        )
+    }
+
+    #[pg_test]
+    fn test_example_loan_applicants() {
+        // applicants.csv, row by row.
+        assert_eq!(eligibility(34, 82000, false), serde_json::json!("Approved")); // Ada
+        assert_eq!(
+            eligibility(17, 0, false),
+            serde_json::json!("Denied: underage")
+        ); // Bo
+        assert_eq!(
+            eligibility(29, 41000, false),
+            serde_json::json!("Denied: low income")
+        ); // Chen
+        assert_eq!(eligibility(64, 68000, false), serde_json::json!("Approved")); // Gus
+    }
+
+    #[pg_test]
+    fn test_example_loan_boundaries() {
+        // Income of exactly 50000 is approved; a pound short is not.
+        assert_eq!(eligibility(22, 50000, false), serde_json::json!("Approved")); // Eli
+        assert_eq!(
+            eligibility(19, 49999, false),
+            serde_json::json!("Denied: low income")
+        ); // Fay
+    }
+
+    #[pg_test]
+    fn test_example_loan_boolean_input() {
+        // Dara earns 120000 and would sail through on the numbers — but the
+        // boolean says otherwise, and its rule is listed above the income rules.
+        assert_eq!(
+            eligibility(45, 120_000, true),
+            serde_json::json!("Denied: prior bankruptcy")
+        );
+        // The same applicant without the bankruptcy is approved.
+        assert_eq!(
+            eligibility(45, 120_000, false),
+            serde_json::json!("Approved")
+        );
+    }
+
+    #[pg_test]
+    fn test_example_loan_first_hit_policy_wins() {
+        // Hana is 17 with a large income. The underage rule is listed first, and
+        // the table is FIRST, so it wins — this is the row that makes the hit
+        // policy visible on the website.
+        assert_eq!(
+            eligibility(17, 95000, false),
+            serde_json::json!("Denied: underage")
+        );
+    }
+
+    /// Evaluate a pricing decision exactly the way the website's SQL does —
+    /// unwrap the JSONB, cast to numeric, round to pennies — and return what
+    /// psql would print.
+    ///
+    /// Asserting on the rounded numeric rather than the raw FEEL number is
+    /// deliberate: whether a whole result serialises as `10` or `10.0` is an
+    /// engine detail, while `10.00` is what the page promises a reader.
+    fn priced(model: &str, base: &str, rate: &str, invocable: &str) -> String {
+        let escaped_xml = model.replace('\'', "''");
+        let query = format!(
+            "SELECT round((dmn_eval(dmn_load('{escaped_xml}'), '{invocable}', \
+             '{{\"Base Price\": {base}, \"Tax Rate\": {rate}}}'::jsonb) #>> '{{}}')::numeric, 2)::text"
+        );
+        Spi::get_one::<String>(&query)
+            .expect("SPI failed")
+            .expect("dmn_eval returned NULL")
+    }
+
+    #[pg_test]
+    fn test_example_order_pricing_chains_decisions() {
+        // Total Price depends on Tax Amount, which pgdmn resolves without the
+        // caller asking for it: we only ever request the decision we want.
+        assert_eq!(priced(PRICING_DMN, "100.00", "0.10", "Tax Amount"), "10.00");
+        assert_eq!(
+            priced(PRICING_DMN, "100.00", "0.10", "Total Price"),
+            "110.00"
+        );
+    }
+
+    #[pg_test]
+    fn test_example_orders_match_the_published_table() {
+        // Every row of orders.csv under the standard model, and every figure
+        // printed in the results table on the website.
+        let rows = [
+            ("100.00", "0.10", "10.00", "110.00"),      // Northwind Traders
+            ("2499.99", "0.0825", "206.25", "2706.24"), // Globex
+            ("45.50", "0.20", "9.10", "54.60"),         // Initech
+            ("1000.00", "0.00", "0.00", "1000.00"),     // Umbrella Corp
+            ("19.99", "0.075", "1.50", "21.49"),        // Acme Supply
+        ];
+
+        for (base, rate, tax, total) in rows {
+            assert_eq!(
+                priced(PRICING_DMN, base, rate, "Tax Amount"),
+                tax,
+                "tax for {base} @ {rate}"
+            );
+            assert_eq!(
+                priced(PRICING_DMN, base, rate, "Total Price"),
+                total,
+                "total for {base} @ {rate}"
+            );
+        }
+    }
+
+    #[pg_test]
+    fn test_example_promo_model_prices_the_same_orders_differently() {
+        // The promotional model takes 10% off first, then taxes the net price.
+        // Same orders, same query, same invocable name — a different model row.
+        let rows = [
+            ("100.00", "0.10", "99.00"),      // Northwind Traders
+            ("2499.99", "0.0825", "2435.62"), // Globex
+            ("45.50", "0.20", "49.14"),       // Initech
+            ("1000.00", "0.00", "900.00"),    // Umbrella Corp
+            ("19.99", "0.075", "19.34"),      // Acme Supply
+        ];
+
+        for (base, rate, total) in rows {
+            assert_eq!(
+                priced(PROMO_DMN, base, rate, "Total Price"),
+                total,
+                "promo total for {base} @ {rate}"
+            );
+        }
+
+        // And it exposes the same invocable names, which is what lets one query
+        // serve both models.
+        assert_eq!(priced(PROMO_DMN, "100.00", "0.10", "Net Price"), "90.00");
+        assert_eq!(priced(PROMO_DMN, "100.00", "0.10", "Tax Amount"), "9.00");
+    }
+
+    fn queue(priority: &str, tier: &str) -> serde_json::Value {
+        eval_example(
+            ROUTING_DMN,
+            "Queue",
+            &format!(r#"{{"Priority": "{priority}", "Customer Tier": "{tier}"}}"#),
+        )
+    }
+
+    #[pg_test]
+    fn test_example_ticket_routing() {
+        // tickets.csv, row by row.
+        assert_eq!(queue("critical", "startup"), serde_json::json!("pager"));
+        assert_eq!(queue("high", "enterprise"), serde_json::json!("pager"));
+        assert_eq!(queue("low", "startup"), serde_json::json!("tier-1"));
+        assert_eq!(queue("high", "startup"), serde_json::json!("tier-2"));
+        assert_eq!(queue("normal", "enterprise"), serde_json::json!("tier-2"));
+        assert_eq!(queue("low", "free"), serde_json::json!("tier-1"));
+        assert_eq!(queue("critical", "enterprise"), serde_json::json!("pager"));
+        assert_eq!(queue("normal", "free"), serde_json::json!("tier-1"));
+    }
+
+    fn handling(region: &str, data_class: &str) -> serde_json::Value {
+        eval_example(
+            COMPLIANCE_DMN,
+            "Handling",
+            &format!(r#"{{"Region": "{region}", "Data Class": "{data_class}"}}"#),
+        )
+    }
+
+    #[pg_test]
+    fn test_example_compliance_handling() {
+        // customers.csv, row by row. "special" is caught first regardless of
+        // region, so Umbrella's EU residency never gets a say.
+        assert_eq!(
+            handling("EU", "personal"),
+            serde_json::json!("store in EU, retain 24 months")
+        );
+        assert_eq!(
+            handling("US", "personal"),
+            serde_json::json!("retain 24 months")
+        );
+        assert_eq!(
+            handling("US", "special"),
+            serde_json::json!("encrypt, restrict access, retain 6 months")
+        );
+        assert_eq!(
+            handling("EU", "special"),
+            serde_json::json!("encrypt, restrict access, retain 6 months")
+        );
+        assert_eq!(
+            handling("UK", "public"),
+            serde_json::json!("standard handling")
+        );
+        assert_eq!(
+            handling("EU", "public"),
+            serde_json::json!("standard handling")
+        );
+        assert_eq!(
+            handling("UK", "personal"),
+            serde_json::json!("retain 24 months")
         );
     }
 }
