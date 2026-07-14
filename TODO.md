@@ -45,6 +45,25 @@ per fix, `PGDMN:` markers). Offer them upstream to dsntk; each accepted
 PR shrinks the maintained delta. The perf report's scope-vs-speed table
 is the negotiation sheet.
 
+Audited against upstream 0.3.0 (released 2026-04-29) by source-diffing
+the published crates against pristine 0.2.0: it contains none of this
+performance work and does not fix BUG-003 (the `?` input-entry bug —
+lead with that PR). It does fix the H21 latent defect (FeelNumber
+integer comparisons via FFI string round trips) that we left untouched.
+H20 and H3 must be offered as a pair (measured interaction).
+
+### CHORE-005: Evaluate re-vendoring on dsntk 0.3.0
+
+0.3.0 is mostly FEEL range/interval rework (`IntervalType` replaces
+bools in AST/Value variants), new built-ins, expanded `in` semantics,
+and Rust 2024 let-chain restyling. Port costs identified: the H13 AST
+walker must add the new variants (fails the build by design), H14/H19
+need manual rebases over heavily-restyled builders/bifs files, and the
+Docker toolchain must move from Rust 1.85 to ≥1.88 for let-chains
+(re-test the dev-profile LTO ICE while at it). Everything else rebases
+near-clean — decision_table.rs, model_definitions.rs, context.rs and
+the model-evaluator files are functionally unchanged upstream.
+
 ## Conversions
 
 ### CONVERT-001: Integers above i64::MAX lose precision in feel_to_json
