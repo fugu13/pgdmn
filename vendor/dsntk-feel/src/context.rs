@@ -148,7 +148,7 @@ impl FeelContext {
   // kept untouched for compatibility.
   /// Sets a value for specified entry name, taking ownership of the name.
   pub fn insert(&mut self, name: Name, value: Value) {
-    self.0.insert(name, value);
+    self.entries_mut().insert(name, value);
   }
 
   /// Removes a value of an entry with specified name.
