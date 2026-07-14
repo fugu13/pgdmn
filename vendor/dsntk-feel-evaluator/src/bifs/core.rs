@@ -2002,8 +2002,11 @@ static RG_REPLACE_NUM: Lazy<Regex> = Lazy::new(|| Regex::new("\\$([1-9][0-9]*)")
 // are cheap. Least-recently-used eviction by stamp keeps the cache bounded.
 const REGEX_CACHE_CAPACITY: usize = 64;
 
+/// Compiled regex with the stamp of its last use (for LRU eviction).
+type CachedRegex = (u64, Regex);
+
 thread_local! {
-  static REGEX_CACHE: RefCell<(u64, HashMap<String, (u64, Regex)>)> = RefCell::new((0, HashMap::new()));
+  static REGEX_CACHE: RefCell<(u64, HashMap<String, CachedRegex>)> = RefCell::new((0, HashMap::new()));
 }
 
 /// Returns the compiled regular expression for a pattern, using a thread-local cache.
