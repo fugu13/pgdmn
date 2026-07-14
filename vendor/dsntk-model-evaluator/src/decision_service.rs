@@ -60,8 +60,9 @@ impl DecisionServiceEvaluator {
             let decision_service_evaluator = evaluator.decision_service_evaluator();
             let opt_out_variable_name = decision_service_evaluator.evaluate(&decision_service_id, &global_context, &input_data, &evaluator, &mut output_data);
             if let Some(out_variable_name) = opt_out_variable_name {
-              if let Some(result_value) = output_data.get_entry(&out_variable_name) {
-                return result_value.clone();
+              // PGDMN (H5): move the result out instead of cloning it.
+              if let Some(result_value) = output_data.remove_entry(&out_variable_name) {
+                return result_value;
               }
             }
             value_null!()
@@ -175,20 +176,20 @@ fn build_decision_service_evaluator(decision_service: &DefDecisionService, model
       // now evaluate input data for encapsulated and output decisions and store them in separate context
       let mut evaluated_input_data = FeelContext::default();
       // first take values from evaluated input decisions...
-      let input_decision_results_value = Value::Context(input_decisions_results);
+      // PGDMN (H5): variable evaluators take the context directly, so no Value
+      // wrappers (and no input data clone) are needed here.
       for evaluator in &input_decision_results_evaluators {
-        let (name, value) = evaluator(&input_decision_results_value, item_definition_evaluator);
+        let (name, value) = evaluator(&input_decisions_results, item_definition_evaluator);
         evaluated_input_data.set_entry(&name, value);
       }
       // ...and then take values from provided input data
-      let input_data_values = Value::Context(input_data.clone());
       for evaluator in &input_decision_results_evaluators {
-        let (name, value) = evaluator(&input_data_values, item_definition_evaluator);
+        let (name, value) = evaluator(input_data, item_definition_evaluator);
         evaluated_input_data.set_entry(&name, value);
       }
       // evaluate required inputs (from required input data references)
       input_data_references.iter().for_each(|input_data_id| {
-        if let Some((name, value)) = input_data_evaluator.evaluate(input_data_id, &input_data_values, item_definition_evaluator) {
+        if let Some((name, value)) = input_data_evaluator.evaluate(input_data_id, input_data, item_definition_evaluator) {
           evaluated_input_data.set_entry(&name, value);
         }
       });
@@ -206,17 +207,17 @@ fn build_decision_service_evaluator(decision_service: &DefDecisionService, model
         }
       });
       // prepare the result from this decision service
+      // PGDMN (H5): move results out of the evaluated context instead of cloning.
       if output_names.len() == 1 {
-        if let Some(value) = evaluated_ctx.get_entry(&output_names[0]) {
-          let single_result = value.to_owned();
+        if let Some(single_result) = evaluated_ctx.remove_entry(&output_names[0]) {
           let coerced_single_result = single_result.coerced(&output_variable_type);
           output_data.set_entry(&output_variable_name, coerced_single_result);
         }
       } else {
         let mut output_ctx = FeelContext::default();
         output_names.iter().for_each(|output_name| {
-          if let Some(value) = evaluated_ctx.get_entry(output_name) {
-            output_ctx.set_entry(output_name, value.to_owned());
+          if let Some(value) = evaluated_ctx.remove_entry(output_name) {
+            output_ctx.set_entry(output_name, value);
           }
         });
         let complex_result = Value::Context(output_ctx);

@@ -118,8 +118,9 @@ impl ModelEvaluator {
   fn evaluate_decision(&self, def_key: &DefKey, input_data: &FeelContext) -> Value {
     let mut evaluated_ctx = FeelContext::default();
     if let Some(output_variable_name) = self.decision_evaluator.evaluate(def_key, &self.global_context, input_data, self, &mut evaluated_ctx) {
-      if let Some(output_value) = evaluated_ctx.get_entry(&output_variable_name) {
-        output_value.clone()
+      // PGDMN (H5): move the result out of the evaluated context instead of cloning it.
+      if let Some(output_value) = evaluated_ctx.remove_entry(&output_variable_name) {
+        output_value
       } else {
         value_null!()
       }
@@ -158,8 +159,9 @@ impl ModelEvaluator {
       .decision_service_evaluator
       .evaluate(def_key, &self.global_context, input_data, self, &mut evaluated_ctx)
     {
-      if let Some(output_value) = evaluated_ctx.get_entry(&output_variable_name) {
-        output_value.clone()
+      // PGDMN (H5): move the result out of the evaluated context instead of cloning it.
+      if let Some(output_value) = evaluated_ctx.remove_entry(&output_variable_name) {
+        output_value
       } else {
         value_null!()
       }
