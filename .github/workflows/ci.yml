@@ -41,11 +41,12 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # The image is a single stage (CHORE-004 collapsed the old base/test split),
+      # so there is no target to select — this matches `make test-image`.
       - name: Build the test image
         uses: docker/build-push-action@v6
         with:
           context: .
-          target: test
           tags: pgdmn-test
           load: true
           cache-from: type=local,src=/tmp/.docker-cache
