@@ -1,8 +1,9 @@
 use leptos::prelude::*;
-use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
+use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
+    SsrMode, StaticSegment,
     components::{Route, Router, Routes},
-    StaticSegment,
+    static_routes::StaticRoute,
 };
 
 use crate::components::footer::Footer;
@@ -16,15 +17,19 @@ use crate::pages::not_found::NotFoundPage;
 use crate::pages::why::WhyPage;
 use crate::routes;
 
-pub fn shell(options: LeptosOptions) -> impl IntoView {
+/// Every route is rendered once at build time and written to disk. Nothing is
+/// rendered per request, so no route may depend on request state.
+fn prerendered() -> SsrMode {
+    SsrMode::Static(StaticRoute::new())
+}
+
+pub fn shell() -> impl IntoView {
     view! {
         <!DOCTYPE html>
         <html lang="en">
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-                <AutoReload options=options.clone()/>
-                <HydrationScripts options/>
                 <MetaTags/>
             </head>
             <body>
@@ -39,18 +44,27 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <Stylesheet id="leptos" href="/pkg/pgdmn-website.css"/>
+        <Stylesheet id="leptos" href="/style.css"/>
         <Title text="pgdmn — DMN for PostgreSQL"/>
         <Router>
             <SkipLink/>
             <Header/>
             <main id="main-content" tabindex="-1">
                 <Routes fallback=|| view! { <NotFoundPage/> }>
-                    <Route path=StaticSegment("") view=HomePage/>
-                    <Route path=StaticSegment(routes::WHY) view=WhyPage/>
-                    <Route path=StaticSegment(routes::DOCS) view=DocsPage/>
-                    <Route path=StaticSegment(routes::EXAMPLES) view=ExamplesPage/>
-                    <Route path=StaticSegment(routes::BLOG) view=BlogPage/>
+                    <Route path=StaticSegment("") view=HomePage ssr=prerendered()/>
+                    <Route path=StaticSegment(routes::WHY) view=WhyPage ssr=prerendered()/>
+                    <Route path=StaticSegment(routes::DOCS) view=DocsPage ssr=prerendered()/>
+                    <Route
+                        path=StaticSegment(routes::EXAMPLES)
+                        view=ExamplesPage
+                        ssr=prerendered()
+                    />
+                    <Route path=StaticSegment(routes::BLOG) view=BlogPage ssr=prerendered()/>
+                    <Route
+                        path=StaticSegment(routes::NOT_FOUND)
+                        view=NotFoundPage
+                        ssr=prerendered()
+                    />
                 </Routes>
             </main>
             <Footer/>
