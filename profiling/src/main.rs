@@ -34,10 +34,16 @@ fn json_to_feel(json: &serde_json::Value) -> Value {
         serde_json::Value::Null => Value::Null(None),
         serde_json::Value::Bool(b) => Value::Boolean(*b),
         serde_json::Value::Number(n) => {
-            let s = n.to_string();
-            match s.parse::<dsntk_feel::FeelNumber>() {
-                Ok(num) => Value::Number(num),
-                Err(_) => Value::Null(Some(format!("cannot convert number: {s}"))),
+            if let Some(i) = n.as_i64() {
+                Value::Number(dsntk_feel::FeelNumber::from(i))
+            } else if let Some(u) = n.as_u64() {
+                Value::Number(dsntk_feel::FeelNumber::from(u))
+            } else {
+                let s = n.to_string();
+                match s.parse::<dsntk_feel::FeelNumber>() {
+                    Ok(num) => Value::Number(num),
+                    Err(_) => Value::Null(Some(format!("cannot convert number: {s}"))),
+                }
             }
         }
         serde_json::Value::String(s) => Value::String(s.clone()),
@@ -45,10 +51,26 @@ fn json_to_feel(json: &serde_json::Value) -> Value {
         serde_json::Value::Object(map) => {
             let mut ctx = FeelContext::new();
             for (key, val) in map {
-                ctx.set_entry(&Name::from(key.as_str()), json_to_feel(val));
+                ctx.insert(Name::from(key.as_str()), json_to_feel(val));
             }
             Value::Context(ctx)
         }
+    }
+}
+
+fn feel_number_to_json(n: &dsntk_feel::FeelNumber) -> serde_json::Value {
+    if n.is_integer() {
+        if let Ok(i) = i64::try_from(n) {
+            return serde_json::Value::Number(serde_json::Number::from(i));
+        }
+    }
+    let s = n.to_string();
+    if let Ok(i) = s.parse::<i64>() {
+        serde_json::Value::Number(serde_json::Number::from(i))
+    } else if let Ok(f) = s.parse::<f64>() {
+        serde_json::json!(f)
+    } else {
+        serde_json::Value::String(s)
     }
 }
 
@@ -56,16 +78,7 @@ fn feel_to_json(value: &Value) -> serde_json::Value {
     match value {
         Value::Null(_) => serde_json::Value::Null,
         Value::Boolean(b) => serde_json::Value::Bool(*b),
-        Value::Number(n) => {
-            let s = n.to_string();
-            if let Ok(i) = s.parse::<i64>() {
-                serde_json::Value::Number(serde_json::Number::from(i))
-            } else if let Ok(f) = s.parse::<f64>() {
-                serde_json::json!(f)
-            } else {
-                serde_json::Value::String(s)
-            }
-        }
+        Value::Number(n) => feel_number_to_json(n),
         Value::String(s) => serde_json::Value::String(s.clone()),
         Value::List(items) => serde_json::Value::Array(items.iter().map(feel_to_json).collect()),
         Value::Context(ctx) => {
@@ -88,7 +101,7 @@ fn json_to_context(json: &serde_json::Value) -> FeelContext {
     if let serde_json::Value::Object(map) = json {
         let mut ctx = FeelContext::new();
         for (key, val) in map {
-            ctx.set_entry(&Name::from(key.as_str()), json_to_feel(val));
+            ctx.insert(Name::from(key.as_str()), json_to_feel(val));
         }
         ctx
     } else {
