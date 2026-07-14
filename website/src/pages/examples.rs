@@ -205,9 +205,8 @@ ORDER BY o.id;
 
         <h2 id="compliance">"Compliance checks"</h2>
         <p>
-            "Write regulatory requirements where the people who own them can read and check them,
-            rather than burying them in application logic. The obligation for every row becomes a
-            column, computed from the rules in force whenever anyone asks."
+            "Keep regulatory requirements in separately auditable business rules rather than
+            burying them in application logic."
         </p>
 
         <ul class="download-list">
