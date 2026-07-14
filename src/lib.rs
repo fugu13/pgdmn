@@ -2006,6 +2006,64 @@ mod tests {
         assert_eq!(priced(PROMO_DMN, "100.00", "0.10", "Tax Amount"), "9.00");
     }
 
+    /// The aggregate figures printed in the "Going further" sections of the
+    /// articles — approval rate, book values, promotion cost — computed by the
+    /// real engine over the published datasets, exactly as the articles' SQL
+    /// does. Hand-computed aggregates are the easy place for a wrong number to
+    /// slip onto the site; this is what keeps them honest.
+    #[pg_test]
+    fn test_article_aggregate_figures() {
+        let loan = LOAN_DMN.replace('\'', "''");
+        let standard = PRICING_DMN.replace('\'', "''");
+        let promo = PROMO_DMN.replace('\'', "''");
+
+        // Loan approval rate over applicants.csv: 3 approved of 8 -> 37.5%.
+        let approval = Spi::get_one::<pgrx::AnyNumeric>(&format!(
+            "WITH applicants(age, income, bankrupt) AS (VALUES \
+               (34, 82000, false), (17, 0, false), (29, 41000, false), \
+               (45, 120000, true), (22, 50000, false), (19, 49999, false), \
+               (64, 68000, false), (17, 95000, false)) \
+             SELECT round(100.0 * count(*) FILTER (WHERE dmn_eval_text(dmn_load('{loan}'), \
+               'Eligibility', jsonb_build_object('Age', age, 'Income', income, \
+               'Bankrupt', bankrupt)) = 'Approved') / count(*), 1) \
+             FROM applicants"
+        ))
+        .expect("SPI failed")
+        .expect("null");
+        assert_eq!(approval.to_string(), "37.5");
+
+        // Pricing book values over orders.csv, summed unrounded then rounded —
+        // the shape the order-pricing article's query uses.
+        let orders = "orders(base_price, tax_rate) AS (VALUES \
+             (100.00, 0.10), (2499.99, 0.0825), (45.50, 0.20), \
+             (1000.00, 0.00), (19.99, 0.075))";
+        let book = |model: &str| -> String {
+            Spi::get_one::<pgrx::AnyNumeric>(&format!(
+                "WITH {orders} \
+                 SELECT round(sum(dmn_eval_numeric(dmn_load('{model}'), 'Total Price', \
+                   jsonb_build_object('Base Price', base_price, 'Tax Rate', tax_rate))), 2) \
+                 FROM orders"
+            ))
+            .expect("SPI failed")
+            .expect("null")
+            .to_string()
+        };
+        assert_eq!(book(&standard), "3892.33", "standard book value");
+        assert_eq!(book(&promo), "3503.10", "promo book value");
+
+        let given_away = Spi::get_one::<pgrx::AnyNumeric>(&format!(
+            "WITH {orders} \
+             SELECT round(sum(dmn_eval_numeric(dmn_load('{standard}'), 'Total Price', \
+                   jsonb_build_object('Base Price', base_price, 'Tax Rate', tax_rate)) \
+                 - dmn_eval_numeric(dmn_load('{promo}'), 'Total Price', \
+                   jsonb_build_object('Base Price', base_price, 'Tax Rate', tax_rate))), 2) \
+             FROM orders"
+        ))
+        .expect("SPI failed")
+        .expect("null");
+        assert_eq!(given_away.to_string(), "389.23", "promotion cost");
+    }
+
     fn queue(priority: &str, tier: &str) -> serde_json::Value {
         eval_example(
             ROUTING_DMN,

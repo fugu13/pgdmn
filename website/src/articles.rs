@@ -1,4 +1,4 @@
-//! Blog posts: markdown files in `posts/`, embedded at compile time and
+//! Blog articles: markdown files in `articles/`, embedded at compile time and
 //! rendered to HTML during the prerender.
 //!
 //! Nothing here runs at request time, because there are no requests — the site
@@ -11,11 +11,11 @@ use std::sync::OnceLock;
 use include_dir::{Dir, include_dir};
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd, html};
 
-static POSTS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/posts");
+static POSTS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/articles");
 
 /// A post, ready to render.
-pub struct Post {
-    /// From the filename: `loan-eligibility.md` is served at `/blog/loan-eligibility/`.
+pub struct Article {
+    /// From the filename: `loan-eligibility.md` is served at `/articles/loan-eligibility/`.
     pub slug: String,
     pub title: String,
     /// `YYYY-MM-DD`, as written in the front matter.
@@ -31,12 +31,12 @@ pub struct Post {
 ///
 /// Parsed once. `prerender` calls [`load`] first and stops the build on a bad
 /// post, so by the time a page renders, this has already been proven to parse.
-pub fn all() -> &'static [Post] {
-    static CACHE: OnceLock<Vec<Post>> = OnceLock::new();
+pub fn all() -> &'static [Article] {
+    static CACHE: OnceLock<Vec<Article>> = OnceLock::new();
     CACHE.get_or_init(|| load().unwrap_or_default())
 }
 
-pub fn by_slug(slug: &str) -> Option<&'static Post> {
+pub fn by_slug(slug: &str) -> Option<&'static Article> {
     all().iter().find(|post| post.slug == slug)
 }
 
@@ -46,7 +46,7 @@ pub fn slugs() -> Vec<String> {
 
 /// Parse every embedded markdown file. The error names the file, because the
 /// person who sees it is the person who just wrote the post.
-pub fn load() -> Result<Vec<Post>, String> {
+pub fn load() -> Result<Vec<Article>, String> {
     let mut posts = POSTS
         .files()
         .filter(|file| file.path().extension().is_some_and(|ext| ext == "md"))
@@ -69,7 +69,7 @@ pub fn load() -> Result<Vec<Post>, String> {
     Ok(posts)
 }
 
-fn parse(slug: &str, source: &str) -> Result<Post, String> {
+fn parse(slug: &str, source: &str) -> Result<Article, String> {
     let (front_matter, body) = split_front_matter(source)?;
 
     let field = |key: &str| -> Result<String, String> {
@@ -80,7 +80,7 @@ fn parse(slug: &str, source: &str) -> Result<Post, String> {
             .ok_or_else(|| format!("front matter is missing `{key}`"))
     };
 
-    Ok(Post {
+    Ok(Article {
         slug: slug.to_string(),
         title: field("title")?,
         date: field("date")?,

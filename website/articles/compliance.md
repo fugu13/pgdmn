@@ -24,6 +24,41 @@ Special-category data is caught by the first rule **regardless of region** — a
 
 That ordering is the policy. Move the special-category rule below the EU rule and you have quietly decided that an EU customer's special-category data is governed by residency rather than by sensitivity — which is very likely not what your legal team said.
 
+## Set up
+
+Load the model and the customers. Run this from the directory holding the two downloaded files.
+
+```sql
+\set compliance `cat compliance.dmn`
+
+CREATE TABLE models (name text PRIMARY KEY, model dmnmodel NOT NULL);
+INSERT INTO models VALUES ('compliance', dmn_load(:'compliance'));
+
+CREATE TABLE customers (
+    id         int PRIMARY KEY,
+    name       text,
+    region     text,
+    data_class text
+);
+\copy customers FROM 'customers.csv' WITH (FORMAT csv, HEADER true)
+```
+
+The obligation for every row becomes a column, computed from the rules in force whenever anyone looks — so make it a view:
+
+```sql
+CREATE VIEW obligations AS
+SELECT c.id, c.name, c.region, c.data_class,
+    dmn_eval_text(m.model, 'Handling', jsonb_build_object(
+        'Region',     c.region,
+        'Data Class', c.data_class
+    )) AS handling
+FROM customers c
+CROSS JOIN models m
+WHERE m.name = 'compliance';
+
+SELECT name, region, data_class, handling FROM obligations ORDER BY id;
+```
+
 ## Every customer
 
 Table: What we owe each customer
@@ -45,6 +80,34 @@ Umbrella is the row worth pausing on. They are an EU customer with special-categ
 
 The obligation is a `view` over the customers table. It is not a report that was true last Tuesday; it is computed from the current rules and the current rows, every time anyone looks.
 
-That changes the sort of question you can answer. *Who must we encrypt?* is a `WHERE` clause. *What breaks if we tighten the retention rule?* is the same query against a second model row, diffed against the first. *What were we obliged to do on the day of the breach?* is answerable too, if you version the model rows — because the old rules are still just values in a table.
+That changes the sort of question you can answer. *Who must we encrypt?* is a `WHERE` clause on the view:
+
+```sql
+SELECT handling, count(*), string_agg(name, ', ' ORDER BY id) AS who
+FROM obligations
+WHERE handling <> 'standard handling'
+GROUP BY handling
+ORDER BY count(*) DESC, handling;
+
+--            handling            | count |          who
+-- -------------------------------+-------+------------------------
+--  encrypt, restrict access, ... |     2 | Initech, Umbrella Corp
+--  retain 24 months              |     2 | Globex, Wayne Enterp...
+--  store in EU, retain 24 months |     1 | Northwind Traders
+```
+
+*What data may not leave the EU?* is another:
+
+```sql
+SELECT name, region FROM obligations
+WHERE handling LIKE 'store in EU%'
+ORDER BY id;
+
+--        name        | region
+-- -------------------+--------
+--  Northwind Traders | EU
+```
+
+*What breaks if we tighten the retention rule?* is the same query against a second model row, diffed against the first. *What were we obliged to do on the day of the breach?* is answerable too, if you version the model rows — because the old rules are still just values in a table.
 
 None of that requires exporting a single customer record to anywhere.

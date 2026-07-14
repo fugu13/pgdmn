@@ -24,7 +24,58 @@ The dash is a wildcard: the first rule does not care what you earn, and the seco
 
 The hit policy is **first**, which means the rules are tried top to bottom and the first one that matches wins. No rule further down gets a say. That is a design decision, not an implementation detail, and it is visible right here in the model.
 
+## Set up
+
+Load the model into a table and load the applicants alongside it. The model is an ordinary value, so it lives in a column like anything else. Run this from the directory you downloaded the two files into.
+
+```sql
+-- The model, read from the downloaded file into a psql variable.
+\set loan `cat loan-eligibility.dmn`
+
+CREATE TABLE models (name text PRIMARY KEY, model dmnmodel NOT NULL);
+INSERT INTO models VALUES ('loan', dmn_load(:'loan'));
+
+CREATE TABLE applicants (
+    id       int PRIMARY KEY,
+    name     text,
+    age      int,
+    income   numeric,
+    bankrupt boolean
+);
+\copy applicants FROM 'applicants.csv' WITH (FORMAT csv, HEADER true)
+```
+
+## One applicant
+
+No table is needed to ask a single question. Hand the decision a JSON object and get a native text answer back — `dmn_eval_text` unwraps the result, so there are no JSONB quotes to strip.
+
+```sql
+SELECT dmn_eval_text(model, 'Eligibility', '{
+        "Age": 34, "Income": 82000, "Bankrupt": false
+    }'::jsonb) AS decision
+FROM models WHERE name = 'loan';
+
+--  decision
+-- ----------
+--  Approved
+```
+
 ## Every applicant
+
+The same decision, evaluated against every row of the table. This is the whole point: no export, no service call, no loop in application code — one call per row, and Postgres is free to run it across parallel workers.
+
+```sql
+SELECT a.name, a.age, a.income, a.bankrupt,
+    dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+        'Age',      a.age,
+        'Income',   a.income,
+        'Bankrupt', a.bankrupt
+    )) AS decision
+FROM applicants a
+CROSS JOIN models m
+WHERE m.name = 'loan'
+ORDER BY a.id;
+```
 
 Table: Every applicant, decided
 
@@ -38,6 +89,8 @@ Table: Every applicant, decided
 | Fay Mbeki | 19 | 49999 | false | Denied: low income |
 | Gus Halvorsen | 64 | 68000 | false | Approved |
 | Hana Ito | 17 | 95000 | false | Denied: underage |
+
+Three rows earn a second look.
 
 ### Eli and Fay: the boundary
 
@@ -61,6 +114,18 @@ Move the underage rule to the bottom and Hana gets approved. The rules would loo
 
 Because the decision is just an expression, the outcome is groupable, aggregatable, joinable — anything SQL can do to a column, it can do to a decision.
 
+```sql
+SELECT dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+        'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
+    )) AS decision,
+    count(*)
+FROM applicants a
+CROSS JOIN models m
+WHERE m.name = 'loan'
+GROUP BY 1
+ORDER BY count(*) DESC, 1;
+```
+
 Table: The book, by outcome
 
 | Decision | Applicants |
@@ -71,3 +136,49 @@ Table: The book, by outcome
 | Denied: prior bankruptcy | 1 |
 
 Nothing left the database to work that out.
+
+## Going further
+
+Because the decision is just a column, everything SQL already does to a column works on it. A `boolean` variant reads even more directly in a filter — here, the approval rate as a single number:
+
+```sql
+SELECT round(
+        100.0 * count(*) FILTER (
+            WHERE dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+                'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
+            )) = 'Approved'
+        ) / count(*), 1) AS approval_pct
+FROM applicants a
+CROSS JOIN models m
+WHERE m.name = 'loan';
+
+--  approval_pct
+-- --------------
+--          37.5
+```
+
+Or pull just the declines, with the reason the model gave, straight into a work queue:
+
+```sql
+SELECT a.name,
+    dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+        'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
+    )) AS reason
+FROM applicants a
+CROSS JOIN models m
+WHERE m.name = 'loan'
+  AND dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+          'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
+      )) <> 'Approved'
+ORDER BY a.id;
+
+--       name      |          reason
+-- ---------------+--------------------------
+--  Bo Zhang      | Denied: underage
+--  Chen Ruiz     | Denied: low income
+--  Dara Singh    | Denied: prior bankruptcy
+--  Fay Mbeki     | Denied: low income
+--  Hana Ito      | Denied: underage
+```
+
+When the lending policy changes, you load a new model under the same name and every one of these queries reports against the new rules — no redeploy, and the old model is still a value you can keep for the audit.

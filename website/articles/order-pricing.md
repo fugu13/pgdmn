@@ -20,6 +20,41 @@ Table: The standard pricing model
 
 You never tell pgdmn about that dependency. You ask for `Total Price`, and it works backwards: to answer that, it needs `Tax Amount`; to answer that, it needs the two inputs you supplied. The order of evaluation falls out of the model.
 
+## Set up
+
+Load both models into the `models` table under different names, and load the orders. Run this from the directory holding the three downloaded files.
+
+```sql
+\set standard `cat order-pricing.dmn`
+\set promo    `cat order-pricing-promo.dmn`
+
+CREATE TABLE models (name text PRIMARY KEY, model dmnmodel NOT NULL);
+INSERT INTO models VALUES
+    ('pricing-standard', dmn_load(:'standard')),
+    ('pricing-promo',    dmn_load(:'promo'));
+
+CREATE TABLE orders (
+    id         int PRIMARY KEY,
+    customer   text,
+    base_price numeric,
+    tax_rate   numeric
+);
+\copy orders FROM 'orders.csv' WITH (FORMAT csv, HEADER true)
+```
+
+A single order prices in one call. `dmn_eval_numeric` hands back a `numeric`, so it drops straight into `round` with no cast:
+
+```sql
+SELECT round(dmn_eval_numeric(model, 'Total Price', '{
+        "Base Price": 100.00, "Tax Rate": 0.10
+    }'::jsonb), 2) AS total
+FROM models WHERE name = 'pricing-standard';
+
+--  total
+-- --------
+--  110.00
+```
+
 ## The promotion is a different model, not a different query
 
 The promotional policy takes ten percent off first, and taxes the discounted price. It is a *three*-decision graph rather than two.
@@ -34,7 +69,23 @@ Table: The promotional pricing model
 
 Here is the part that matters: **both models answer to the name `Total Price`**. The caller asks the same question of both. The shape of the graph behind that question is entirely the model's business — one has an extra decision in the middle, and no query has to know.
 
-So both live in the `models` table under different names, and choosing a policy is choosing a row.
+So both live in the `models` table under different names, and choosing a policy is choosing a row. One query prices the whole book under both, and the only thing that differs between the two columns is which model row it reached for:
+
+```sql
+SELECT o.customer, o.base_price,
+    round(dmn_eval_numeric(s.model, 'Total Price', p.input), 2) AS standard,
+    round(dmn_eval_numeric(t.model, 'Total Price', p.input), 2) AS promo
+FROM orders o
+CROSS JOIN LATERAL (
+    SELECT jsonb_build_object(
+        'Base Price', o.base_price,
+        'Tax Rate',   o.tax_rate
+    ) AS input
+) p
+JOIN models s ON s.name = 'pricing-standard'
+JOIN models t ON t.name = 'pricing-promo'
+ORDER BY o.id;
+```
 
 Table: The same orders, under both policies
 
@@ -57,3 +108,34 @@ Globex's standard tax is not 206.25. It is **206.249175**, and their total is 27
 That is the right default. Rounding is a business rule — half-up, banker's, per line or per invoice — and a decision engine guessing at it is a decision engine introducing a bug. So the rounding lives in the query, in `round(…, 2)`, where you can see it and argue about it.
 
 It matters more than it looks. Round each line and sum, and you get one number; sum and then round, and you can get another. Which one you want is a decision. Make it deliberately, somewhere a reviewer can find it.
+
+## Going further
+
+What does the promotion cost the business? The saving is just the difference between the two columns, summed — a single query, no application code:
+
+```sql
+SELECT round(sum(dmn_eval_numeric(s.model, 'Total Price', p.input)), 2) AS standard_book,
+    round(sum(dmn_eval_numeric(t.model, 'Total Price', p.input)), 2) AS promo_book,
+    round(sum(dmn_eval_numeric(s.model, 'Total Price', p.input)
+        - dmn_eval_numeric(t.model, 'Total Price', p.input)), 2) AS given_away
+FROM orders o
+CROSS JOIN LATERAL (
+    SELECT jsonb_build_object('Base Price', o.base_price, 'Tax Rate', o.tax_rate) AS input
+) p
+JOIN models s ON s.name = 'pricing-standard'
+JOIN models t ON t.name = 'pricing-promo';
+
+--  standard_book | promo_book | given_away
+-- ---------------+------------+------------
+--        3892.33 |    3503.10 |     389.23
+```
+
+Making the promotion the live policy is one statement — and because the old model is still a value in the table, last quarter's prices remain reproducible exactly:
+
+```sql
+-- Point the everyday name at the promotional model.
+UPDATE models
+SET model = (SELECT model FROM models WHERE name = 'pricing-promo')
+WHERE name = 'pricing-standard';
+```
+

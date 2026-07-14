@@ -9,7 +9,7 @@ use std::path::Path;
 use leptos::prelude::LeptosOptions;
 use leptos_axum::generate_route_list_with_ssg;
 use pgdmn_website::app::shell;
-use pgdmn_website::posts;
+use pgdmn_website::articles;
 use pgdmn_website::routes;
 
 type BoxError = Box<dyn std::error::Error>;
@@ -34,16 +34,16 @@ async fn main() -> Result<(), BoxError> {
     compile_stylesheet()?;
     copy_dir(Path::new(PUBLIC), Path::new(DIST))?;
 
-    // Parse the posts before rendering anything, so a broken post fails the
+    // Parse the articles before rendering anything, so a broken one fails the
     // build with a message naming the file, rather than quietly vanishing from
-    // the blog.
-    let posts = posts::load()?;
+    // the site.
+    let articles = articles::load()?;
     println!(
-        "{} post(s): {}",
-        posts.len(),
-        posts
+        "{} article(s): {}",
+        articles.len(),
+        articles
             .iter()
-            .map(|post| post.slug.as_str())
+            .map(|article| article.slug.as_str())
             .collect::<Vec<_>>()
             .join(", ")
     );

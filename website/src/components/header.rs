@@ -20,7 +20,7 @@ pub fn Header() -> impl IntoView {
                         <li><A href=format!("/{}/", routes::WHY)>"Why pgdmn"</A></li>
                         <li><A href=format!("/{}/", routes::DOCS)>"Docs"</A></li>
                         <li><A href=format!("/{}/", routes::EXAMPLES)>"Examples"</A></li>
-                        <li><A href=format!("/{}/", routes::BLOG)>"Blog"</A></li>
+                        <li><A href=format!("/{}/", routes::ARTICLES)>"Articles"</A></li>
                         <li>
                             <a
                                 href="https://github.com/fugu13/pgdmn"

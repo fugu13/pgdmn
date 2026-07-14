@@ -37,8 +37,8 @@ SELECT dmn_eval_text(
             integration of PostgreSQL."
         </p>
         <p>
-            "See it run against a real table on the "<a href="/examples/">"Examples"</a>
-            " page — downloadable models, sample datasets, and the SQL that decides every row."
+            "See it run against realistic data on the "<a href="/examples/">"Examples"</a>
+            " page — downloadable models, sample datasets, and complete SQL examples."
         </p>
     }
 }

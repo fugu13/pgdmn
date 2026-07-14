@@ -35,7 +35,11 @@ pub fn WhyPage() -> impl IntoView {
 
         <h2>"Standards-based"</h2>
         <p>
-            "DMN is an OMG standard supported by tools from Camunda, Trisotech, and others. "
+            "DMN is an "
+            <a href="https://www.omg.org/dmn/" rel="noopener noreferrer" target="_blank">
+                "OMG standard"
+            </a>
+            " supported by tools from Camunda, Trisotech, and others. "
             "Author models visually, test them independently, and deploy to PostgreSQL."
         </p>
     }

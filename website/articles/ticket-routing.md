@@ -25,7 +25,43 @@ Table: Queue — hit policy: F (first)
 
 Read it as a policy and it is legible to someone who does not write SQL: wake somebody for anything critical; wake somebody for an enterprise customer with an urgent problem; everything else queues by severity, and enterprise jumps the line. That is a conversation you can have with the person who owns the support budget.
 
-## Every ticket
+## Set up
+
+Load the model and the tickets. Run this from the directory holding the two downloaded files.
+
+```sql
+\set routing `cat ticket-routing.dmn`
+
+CREATE TABLE models (name text PRIMARY KEY, model dmnmodel NOT NULL);
+INSERT INTO models VALUES ('routing', dmn_load(:'routing'));
+
+CREATE TABLE tickets (
+    id            int PRIMARY KEY,
+    subject       text,
+    priority      text,
+    customer_tier text
+);
+\copy tickets FROM 'tickets.csv' WITH (FORMAT csv, HEADER true)
+```
+
+## The view is the point
+
+Rather than run the decision by hand each time, make it part of the schema. A view routes every ticket, and everything downstream — dashboards, alerting, the on-call rota — reads the view rather than knowing the rules.
+
+```sql
+CREATE VIEW routed_tickets AS
+SELECT t.id, t.subject, t.priority, t.customer_tier,
+    dmn_eval_text(m.model, 'Queue', jsonb_build_object(
+        'Priority',      t.priority,
+        'Customer Tier', t.customer_tier
+    )) AS queue
+FROM tickets t
+CROSS JOIN models m
+WHERE m.name = 'routing';
+
+SELECT subject, priority, customer_tier, queue
+FROM routed_tickets ORDER BY id;
+```
 
 Table: Every ticket, routed
 
@@ -42,10 +78,31 @@ Table: Every ticket, routed
 
 The startup with the login outage gets woken up for, and the enterprise customer with a billing question does too — but the enterprise password reset does not. The rules say so, in five lines, and you can hand those five lines to someone and ask whether they agree.
 
-## The view is the point
+## Who is on the hook tonight?
 
-The model sits in a column of a `models` table, and `routed_tickets` is a view over `tickets` that evaluates it per row. Everything downstream — dashboards, alerting, the on-call rota — reads the view.
+Because the routing is a column in a view, the questions you actually ask are ordinary SQL. Group by queue and the pager list falls out:
 
-When the policy changes, you `UPDATE` one row. No migration, no deploy, no redeploying the consumers, and no window during which half the system triages by the old rules and half by the new. The next query sees the new policy, because the policy *is* data.
+```sql
+SELECT queue, count(*), string_agg(subject, '; ' ORDER BY id) AS work
+FROM routed_tickets
+GROUP BY queue
+ORDER BY count(*) DESC, queue;
+
+--  queue  | count |                        work
+-- --------+-------+------------------------------------------------------
+--  pager  |     3 | Cannot log in after SSO change; Billing discrepan...
+--  tier-1 |     3 | Feature request: dark mode; Typo in the docs; Onb...
+--  tier-2 |     2 | API latency spike in eu-west; Password reset not ...
+```
+
+## Change the policy, not the code
+
+When the routing changes, you `UPDATE` one row. No migration, no deploy, no redeploying the consumers, and no window during which half the system triages by the old rules and half by the new. The next query against the view sees the new policy, because the policy *is* data.
+
+```sql
+-- Swap in a revised model; every consumer of routed_tickets follows at once.
+\set routing_v2 `cat ticket-routing-v2.dmn`
+UPDATE models SET model = dmn_load(:'routing_v2') WHERE name = 'routing';
+```
 
 And because the old model is still just a value, you can keep it. Version the rows, timestamp them, and you can answer the question every audit eventually asks: not *what would this ticket be routed to now*, but *what rule routed it that night, and who changed it*.

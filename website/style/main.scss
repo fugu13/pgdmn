@@ -15,6 +15,7 @@
   // still readable without it.
   --hl-comment: #57606a;
   --hl-keyword: #a40e26;
+  --hl-type: #0b6b5e;
   --hl-string: #0a3069;
   --hl-number: #0550ae;
   --hl-name: #6639ba;
@@ -186,6 +187,14 @@ ul, ol {
 .hl-keyword,
 .hl-storage {
   color: var(--hl-keyword);
+}
+
+// Type names. In SQL blocks syntect tags them `hl-storage hl-type`; in a
+// function signature the dedicated highlighter tags them `hl-type` alone. Both
+// land here, so a type is one colour everywhere on the site.
+.hl-type,
+.hl-storage.hl-type {
+  color: var(--hl-type);
 }
 
 .hl-string,
@@ -414,6 +423,30 @@ ul, ol {
 }
 
 // Function reference (docs page)
+// A heading that links to itself. It looks like an ordinary heading; a "#"
+// affordance appears on hover or keyboard focus, and the whole heading is the
+// click target for copying a deep link.
+.anchored a {
+  color: inherit;
+  text-decoration: none;
+
+  &::after {
+    content: " #";
+    color: var(--color-primary);
+    opacity: 0;
+  }
+
+  &:hover::after,
+  &:focus::after {
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
 .fn-list {
   margin-bottom: 2rem;
 
@@ -423,13 +456,17 @@ ul, ol {
 
     code {
       display: block;
-      overflow-x: auto;
       background: var(--color-code-bg);
       border: 1px solid var(--color-border);
       border-radius: 0.35rem;
       padding: 0.5rem 0.75rem;
       font-size: 0.9rem;
-      white-space: pre;
+      // Wrap rather than scroll: a signature stays readable on a narrow screen,
+      // and the hanging indent keeps a wrapped argument list visually grouped.
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      padding-left: 1.75rem;
+      text-indent: -1rem;
     }
   }
 
