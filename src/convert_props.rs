@@ -81,9 +81,8 @@ fn json_strategy() -> impl Strategy<Value = serde_json::Value> {
     leaf.prop_recursive(3, 48, 6, |inner| {
         prop_oneof![
             prop::collection::vec(inner.clone(), 0..6).prop_map(serde_json::Value::Array),
-            prop::collection::btree_map(key_strategy(), inner, 0..6).prop_map(|m| {
-                serde_json::Value::Object(m.into_iter().collect())
-            }),
+            prop::collection::btree_map(key_strategy(), inner, 0..6)
+                .prop_map(|m| { serde_json::Value::Object(m.into_iter().collect()) }),
         ]
     })
 }
