@@ -416,7 +416,16 @@ fn evaluate_parsed_decision_table<'a>(scope: &FeelScope, parsed_decision_table: 
 
 pub fn build_decision_table_evaluator(scope: &FeelScope, decision_table: &DecisionTable) -> Result<Evaluator> {
   let hit_policy = decision_table.hit_policy();
-  let parsed_decision_table = parse_decision_table(scope, decision_table)?;
+  // PGDMN: input entries may reference the tested input value as `?` (DMN spec
+  // unary tests); make the name resolvable while entries are parsed — it is
+  // bound to the actual input value at evaluation time. Pushed and popped
+  // around the whole parse so error returns don't leak it into the shared
+  // model-build scope.
+  scope.push(FeelContext::default());
+  scope.set_name(Name::from("?"));
+  let parsed = parse_decision_table(scope, decision_table);
+  scope.pop();
+  let parsed_decision_table = parsed?;
   Ok(Box::new(move |scope: &FeelScope| {
     let evaluated_decision_table = evaluate_parsed_decision_table(scope, &parsed_decision_table, hit_policy);
     match hit_policy {

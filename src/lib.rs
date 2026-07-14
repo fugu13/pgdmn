@@ -521,6 +521,57 @@ mod tests {
         assert_eq!(result.unwrap().0, serde_json::json!("Denied: low income"));
     }
 
+    // A decision table whose input entries use the special `?` variable,
+    // which the DMN spec binds to the tested input value.
+    const QMARK_TABLE_DMN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="qmark_table"
+             name="QmarkTable"
+             namespace="https://example.org/qmark">
+    <inputData id="Age" name="Age">
+        <variable name="Age" typeRef="number"/>
+    </inputData>
+    <decision id="Adult" name="Adult">
+        <variable name="Adult" typeRef="string"/>
+        <informationRequirement>
+            <requiredInput href="#Age"/>
+        </informationRequirement>
+        <decisionTable hitPolicy="FIRST">
+            <input>
+                <inputExpression typeRef="number"><text>Age</text></inputExpression>
+            </input>
+            <output name="Adult" typeRef="string"/>
+            <rule>
+                <inputEntry><text>? >= 18</text></inputEntry>
+                <outputEntry><text>"adult"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"minor"</text></outputEntry>
+            </rule>
+        </decisionTable>
+    </decision>
+</definitions>"##;
+
+    #[pg_test]
+    fn test_dmn_decision_table_question_mark_binding() {
+        // `?` in an input entry must see the column's input value (DMN spec);
+        // guards the input-expression hoisting in the vendored decision-table
+        // evaluator (H10) against binding regressions.
+        let escaped = QMARK_TABLE_DMN.replace('\'', "''");
+        for (age, expected) in [(20, "adult"), (16, "minor"), (18, "adult")] {
+            let query = format!(
+                "SELECT dmn_eval(dmn_load('{escaped}'), 'Adult', '{{\"Age\": {age}}}'::jsonb)"
+            );
+            let result = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+            assert_eq!(
+                result.unwrap().0,
+                serde_json::json!(expected),
+                "Age {age} misclassified"
+            );
+        }
+    }
+
     // --- Multi-decision (dependent decisions) tests ---
 
     #[pg_test]
