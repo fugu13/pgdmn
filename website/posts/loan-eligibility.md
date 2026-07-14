@@ -11,14 +11,14 @@ Four rules, eight applicants, and three of them show you why the order of the ru
 
 A decision table takes inputs across the top and tries each rule in turn. This one asks three questions — how old is the applicant, what do they earn, and have they been bankrupt — and answers a fourth.
 
-Table: The Eligibility decision table
+Table: Eligibility — hit policy: F (first)
 
-| Age | Income | Bankrupt | Eligibility |
-| --- | --- | --- | --- |
-| < 18 | — | — | Denied: underage |
-| — | — | true | Denied: prior bankruptcy |
-| ≥ 18 | ≥ 50000 | false | Approved |
-| ≥ 18 | < 50000 | false | Denied: low income |
+| F | Age | Income | Bankrupt | Eligibility |
+| --- | --- | --- | --- | --- |
+| 1 | `< 18` | — | — | Denied: underage |
+| 2 | — | — | `true` | Denied: prior bankruptcy |
+| 3 | `>= 18` | `>= 50000` | `false` | Approved |
+| 4 | `>= 18` | `< 50000` | `false` | Denied: low income |
 
 The dash is a wildcard: the first rule does not care what you earn, and the second does not care how old you are or how much you make. The third input is a plain boolean, and it is treated exactly like the numbers — a column in, a rule matched.
 
@@ -41,7 +41,7 @@ Table: Every applicant, decided
 
 ### Eli and Fay: the boundary
 
-Eli earns exactly 50000 and is approved. Fay earns 49999 and is not. The rule says `≥ 50000`, so the boundary falls between them — and a boundary is the single most common place for a rule to be wrong.
+Eli earns exactly 50000 and is approved. Fay earns 49999 and is not. The rule says `>= 50000`, so the boundary falls between them — and a boundary is the single most common place for a rule to be wrong.
 
 Written as a table, it is one line to check. Buried in application code as `income > 50000` it is a bug nobody notices until Eli complains.
 

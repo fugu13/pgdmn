@@ -11,15 +11,17 @@ A decision model is a value. Store it in a column, wrap it in a view, and triage
 
 Two string inputs — how urgent, and who is asking — and a queue to land in. Same *first* hit policy, with a catch-all at the bottom so nothing falls through the floor.
 
-Table: The Queue decision table
+This is the model itself, drawn the way a DMN tool draws it: the hit policy in the corner, one numbered row per rule, inputs on the left and the output on the right. It is not a picture *of* the rules — it is the rules, and it is what runs.
 
-| Priority | Customer Tier | Queue |
-| --- | --- | --- |
-| "critical" | — | pager |
-| "high" | "enterprise" | pager |
-| "high" | — | tier-2 |
-| — | "enterprise" | tier-2 |
-| — | — | tier-1 |
+Table: Queue — hit policy: F (first)
+
+| F | Priority | Customer Tier | Queue |
+| --- | --- | --- | --- |
+| 1 | `"critical"` | — | pager |
+| 2 | `"high"` | `"enterprise"` | pager |
+| 3 | `"high"` | — | tier-2 |
+| 4 | — | `"enterprise"` | tier-2 |
+| 5 | — | — | tier-1 |
 
 Read it as a policy and it is legible to someone who does not write SQL: wake somebody for anything critical; wake somebody for an enterprise customer with an urgent problem; everything else queues by severity, and enterprise jumps the line. That is a conversation you can have with the person who owns the support budget.
 

@@ -9,14 +9,14 @@ Every row of customer data carries an obligation. Where it may live, how long yo
 
 ## The rules
 
-Table: The Handling decision table
+Table: Handling — hit policy: F (first)
 
-| Region | Data Class | Handling |
-| --- | --- | --- |
-| — | "special" | encrypt, restrict access, retain 6 months |
-| "EU" | "personal" | store in EU, retain 24 months |
-| — | "personal" | retain 24 months |
-| — | — | standard handling |
+| F | Region | Data Class | Handling |
+| --- | --- | --- | --- |
+| 1 | — | `"special"` | encrypt, restrict access, retain 6 months |
+| 2 | `"EU"` | `"personal"` | store in EU, retain 24 months |
+| 3 | — | `"personal"` | retain 24 months |
+| 4 | — | — | standard handling |
 
 Read top to bottom, because the hit policy is *first* and the order carries meaning.
 

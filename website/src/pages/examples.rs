@@ -256,9 +256,9 @@ ORDER BY count(*) DESC, handling;
 
         <h2 id="routing">"Ticket routing"</h2>
         <p>
-            "Automatically visualize the ticket routing decision flowchart with DMN then put the
-            same flowchart directly into the database. What the documentation site says is what
-            happens because they're the same rules."
+            "Automatically visualize the ticket routing decision table with DMN then put the same
+            logic directly into the database. What the documentation site says is what happens
+            because they're the same rules."
         </p>
 
         <ul class="download-list">
