@@ -1,0 +1,43 @@
+[package]
+name = "pgdmn-profiling"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Host-side benchmark and profiling harness for the vendored dsntk engine (no PostgreSQL required)"
+
+# Standalone workspace: this tool is intentionally outside the pgdmn extension
+# workspace so it can be built natively on the host (the extension itself only
+# builds inside Docker where pg_config exists).
+[workspace]
+
+[dependencies]
+dsntk-feel = { path = "../vendor/dsntk-feel" }
+dsntk-feel-parser = { path = "../vendor/dsntk-feel-parser" }
+dsntk-feel-evaluator = { path = "../vendor/dsntk-feel-evaluator" }
+dsntk-feel-temporal = { path = "../vendor/dsntk-feel-temporal" }
+dsntk-model = { path = "../vendor/dsntk-model" }
+dsntk-model-evaluator = { path = "../vendor/dsntk-model-evaluator" }
+serde_json = "1"
+
+# Same patch as the root Cargo.toml: dsntk's internal cross-dependencies must
+# also resolve to the vendored sources, not crates.io (patches are per-workspace).
+[patch.crates-io]
+dsntk-common = { path = "../vendor/dsntk-common" }
+dsntk-examples = { path = "../vendor/dsntk-examples" }
+dsntk-feel = { path = "../vendor/dsntk-feel" }
+dsntk-feel-evaluator = { path = "../vendor/dsntk-feel-evaluator" }
+dsntk-feel-grammar = { path = "../vendor/dsntk-feel-grammar" }
+dsntk-feel-number = { path = "../vendor/dsntk-feel-number" }
+dsntk-feel-parser = { path = "../vendor/dsntk-feel-parser" }
+dsntk-feel-regex = { path = "../vendor/dsntk-feel-regex" }
+dsntk-feel-temporal = { path = "../vendor/dsntk-feel-temporal" }
+dsntk-macros = { path = "../vendor/dsntk-macros" }
+dsntk-model = { path = "../vendor/dsntk-model" }
+dsntk-model-evaluator = { path = "../vendor/dsntk-model-evaluator" }
+
+[profile.release]
+# Match the extension's release profile (opt-level 3, thin LTO); debug symbols
+# added for profilers, which does not affect codegen.
+opt-level = 3
+lto = "thin"
+debug = true
