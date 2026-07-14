@@ -3,3 +3,4 @@
 *.swp
 *.swo
 benchmark_results.txt
+/target-host

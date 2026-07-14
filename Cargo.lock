@@ -376,6 +376,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "difference"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "524cbf6897b527295dff137cec09ecf3a05f4fddffd7dfcd1585403449e74198"
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -412,6 +418,9 @@ dependencies = [
 [[package]]
 name = "dsntk-examples"
 version = "0.2.0"
+dependencies = [
+ "walkdir",
+]
 
 [[package]]
 name = "dsntk-feel"
@@ -423,6 +432,7 @@ dependencies = [
  "dsntk-feel-number",
  "dsntk-feel-temporal",
  "dsntk-macros",
+ "once_cell",
  "regex",
  "serde",
  "serde_json",
@@ -467,6 +477,7 @@ name = "dsntk-feel-parser"
 version = "0.2.0"
 dependencies = [
  "antex",
+ "difference",
  "dsntk-common",
  "dsntk-feel",
  "dsntk-feel-grammar",
@@ -523,13 +534,18 @@ dependencies = [
 name = "dsntk-model-evaluator"
 version = "0.2.0"
 dependencies = [
+ "antex",
  "dsntk-common",
+ "dsntk-examples",
  "dsntk-feel",
  "dsntk-feel-evaluator",
  "dsntk-feel-parser",
  "dsntk-feel-temporal",
  "dsntk-macros",
  "dsntk-model",
+ "dsntk-recognizer",
+ "once_cell",
+ "walkdir",
 ]
 
 [[package]]

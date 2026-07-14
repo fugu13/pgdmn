@@ -1,3 +1,24 @@
+# Vendored dsntk crates are explicit workspace members so their own test
+# suites can run in-tree (`cargo test -p dsntk-feel` etc.) — the safety net
+# for in-tree engine optimizations. Cargo commands in the root still default
+# to the pgdmn package; profiling/ is a separate host-native workspace.
+[workspace]
+members = [
+    "vendor/dsntk-common",
+    "vendor/dsntk-examples",
+    "vendor/dsntk-feel",
+    "vendor/dsntk-feel-evaluator",
+    "vendor/dsntk-feel-grammar",
+    "vendor/dsntk-feel-number",
+    "vendor/dsntk-feel-parser",
+    "vendor/dsntk-feel-regex",
+    "vendor/dsntk-feel-temporal",
+    "vendor/dsntk-macros",
+    "vendor/dsntk-model",
+    "vendor/dsntk-model-evaluator",
+]
+exclude = ["profiling"]
+
 [package]
 name = "pgdmn"
 version = "0.1.0"
