@@ -161,7 +161,8 @@ ORDER BY a.id;
 
         <h2 id="pricing">"Order pricing"</h2>
         <p>
-            "Dynamic pricing rules that change by swapping the DMN model — no code deploy needed."
+            "Dynamic pricing rules can change with no code deploy. Swap the DMN model for another
+            with the same inputs while the SQL stays the same."
         </p>
 
         <ul class="download-list">
