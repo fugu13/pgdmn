@@ -19,10 +19,10 @@ pub fn HomePage() -> impl IntoView {
 
 -- Load a DMN model and evaluate a decision.
 SELECT dmn_eval(
-           dmn_load('<your DMN XML>'),
-           'Eligibility',
-           '{\"Age\": 34, \"Income\": 82000, \"Bankrupt\": false}'::jsonb
-       ) #>> '{}' AS decision;
+    dmn_load('<your DMN XML>'),
+    'Eligibility',
+    '{\"Age\": 34, \"Income\": 82000, \"Bankrupt\": false}'::jsonb
+) #>> '{}' AS decision;
 
 --  decision
 -- ----------
