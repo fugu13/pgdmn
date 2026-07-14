@@ -17,12 +17,10 @@ pub fn HomePage() -> impl IntoView {
             label="Quick start SQL"
             code="CREATE EXTENSION pgdmn;
 
--- Your DMN models live in a table, like any other value.
-SELECT dmn_eval(dmn_load(xml), 'Eligibility', '{
+-- Load a DMN model and evaluate a decision.
+SELECT dmn_eval(dmn_load('<your DMN XML>'), 'Eligibility', '{
            \"Age\": 34, \"Income\": 82000, \"Bankrupt\": false
-       }'::jsonb) #>> '{}' AS decision
-FROM models
-WHERE name = 'loan';
+       }'::jsonb) #>> '{}' AS decision;
 --  Approved"
         />
 
