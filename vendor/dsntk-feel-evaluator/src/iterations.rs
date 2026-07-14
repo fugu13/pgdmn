@@ -340,9 +340,11 @@ impl FeelIterator {
   }
 
   /// Iterates over all iteration states.
+  /// The handler returns `false` to stop the iteration early.
+  // PGDMN: H13 — the handler controls early exit, so `some`/`every` stop when decided.
   pub fn iterate<F>(&mut self, mut handler: F)
   where
-    F: FnMut(&FeelContext),
+    F: FnMut(&FeelContext) -> bool,
   {
     if self.states.is_empty() {
       return;
@@ -357,8 +359,8 @@ impl FeelIterator {
         state.bind_value(&ctx);
         state.set_value(&mut ctx);
       }
-      if !self.states.iter().any(|state| state.is_empty()) {
-        handler(&ctx);
+      if !self.states.iter().any(|state| state.is_empty()) && !handler(&ctx) {
+        return;
       }
       for (state_index, state) in self.states.iter_mut().rev().enumerate() {
         if state_index == last_state_index && !state.has_next() {
@@ -376,6 +378,9 @@ impl FeelIterator {
 pub struct ForExpressionEvaluator {
   iterator: FeelIterator,
   partial: Name,
+  /// When `false`, the loop body does not reference `partial` and binding it is skipped.
+  // PGDMN: H13 — avoids copying the accumulated results on every iteration.
+  bind_partial: bool,
 }
 
 impl Default for ForExpressionEvaluator {
@@ -391,7 +396,14 @@ impl ForExpressionEvaluator {
     Self {
       iterator: FeelIterator::default(),
       partial: "partial".into(),
+      bind_partial: true,
     }
+  }
+
+  /// Sets whether the `partial` variable is bound on each iteration (default `true`).
+  // PGDMN: H13 — build_for disables the binding when the body cannot reference `partial`.
+  pub fn set_bind_partial(&mut self, bind_partial: bool) {
+    self.bind_partial = bind_partial;
   }
 
   /// Adds an interval of values to iterate over.
@@ -415,13 +427,20 @@ impl ForExpressionEvaluator {
 
   pub fn evaluate(&mut self, scope: &FeelScope, evaluator: &Evaluator) -> Values {
     let mut results = vec![];
+    // PGDMN: H13 — bind `partial` only when referenced (its binding copies the
+    // accumulated results, making the loop quadratic), and push the iteration
+    // context without the previous redundant clone.
+    let bind_partial = self.bind_partial;
     self.iterator.iterate(|ctx| {
       let mut iteration_context = ctx.clone();
-      iteration_context.set_entry(&self.partial, Value::List(results.clone()));
-      scope.push(iteration_context.clone());
+      if bind_partial {
+        iteration_context.set_entry(&self.partial, Value::List(results.clone()));
+      }
+      scope.push(iteration_context);
       let iteration_value = evaluator(scope);
       scope.pop();
       results.push(iteration_value);
+      true
     });
     results
   }
@@ -450,23 +469,21 @@ impl SomeExpressionEvaluator {
 
   pub fn evaluate(&mut self, scope: &FeelScope, evaluator: &Evaluator) -> Value {
     let mut result = VALUE_FALSE;
-    let mut skip = false;
+    // PGDMN: H13 — stop iterating as soon as the result is decided.
     self.iterator.iterate(|ctx| {
-      if !skip {
-        scope.push(ctx.clone());
-        let value = evaluator(scope);
-        match value {
-          Value::Boolean(true) => {
-            result = VALUE_TRUE;
-            skip = true;
-          }
-          Value::Boolean(false) => {}
-          _ => {
-            result = value_null!();
-            skip = true;
-          }
+      scope.push(ctx.clone());
+      let value = evaluator(scope);
+      scope.pop();
+      match value {
+        Value::Boolean(true) => {
+          result = VALUE_TRUE;
+          false
         }
-        scope.pop();
+        Value::Boolean(false) => true,
+        _ => {
+          result = value_null!();
+          false
+        }
       }
     });
     result
@@ -496,22 +513,20 @@ impl EveryExpressionEvaluator {
 
   pub fn evaluate(&mut self, scope: &FeelScope, evaluator: &Evaluator) -> Value {
     let mut result = VALUE_TRUE;
-    let mut skip = false;
+    // PGDMN: H13 — stop iterating as soon as the result is decided.
     self.iterator.iterate(|ctx| {
-      if !skip {
-        scope.push(ctx.clone());
-        let value = evaluator(scope);
-        scope.pop();
-        match value {
-          Value::Boolean(false) => {
-            result = VALUE_FALSE;
-            skip = true;
-          }
-          Value::Boolean(true) => {}
-          _ => {
-            result = value_null!();
-            skip = true
-          }
+      scope.push(ctx.clone());
+      let value = evaluator(scope);
+      scope.pop();
+      match value {
+        Value::Boolean(false) => {
+          result = VALUE_FALSE;
+          false
+        }
+        Value::Boolean(true) => true,
+        _ => {
+          result = value_null!();
+          false
         }
       }
     });

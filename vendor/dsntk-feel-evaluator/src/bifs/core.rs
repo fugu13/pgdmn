@@ -10,7 +10,9 @@ use dsntk_feel_temporal::{DayOfWeek, DayOfYear, FeelDate, FeelDateTime, FeelDays
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::borrow::Borrow;
+use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::str::FromStr;
 
 /// Returns the absolute value of the argument.
@@ -1994,6 +1996,38 @@ pub fn remove(list: &Value, position_value: &Value) -> Value {
 // Rust implementation is eager when parsing matching groups, so place numbers in square brackets.
 static RG_REPLACE_NUM: Lazy<Regex> = Lazy::new(|| Regex::new("\\$([1-9][0-9]*)").unwrap());
 
+// PGDMN: H14 — replace/split recompiled their regular expression on every call
+// (upstream TODO defers pre-compilation). Small thread-local cache keyed by the
+// final pattern string; regex::Regex clones share the compiled program, so hits
+// are cheap. Least-recently-used eviction by stamp keeps the cache bounded.
+const REGEX_CACHE_CAPACITY: usize = 64;
+
+thread_local! {
+  static REGEX_CACHE: RefCell<(u64, HashMap<String, (u64, Regex)>)> = RefCell::new((0, HashMap::new()));
+}
+
+/// Returns the compiled regular expression for a pattern, using a thread-local cache.
+/// Returns `None` when the pattern is invalid (invalid patterns are not cached).
+// PGDMN: H14
+fn cached_regex(pattern: &str) -> Option<Regex> {
+  REGEX_CACHE.with(|cell| {
+    let (stamp, cache) = &mut *cell.borrow_mut();
+    *stamp += 1;
+    if let Some((last_used, regex)) = cache.get_mut(pattern) {
+      *last_used = *stamp;
+      return Some(regex.clone());
+    }
+    let regex = Regex::new(pattern).ok()?;
+    if cache.len() >= REGEX_CACHE_CAPACITY {
+      if let Some(oldest) = cache.iter().min_by_key(|(_, (last_used, _))| *last_used).map(|(key, _)| key.clone()) {
+        cache.remove(&oldest);
+      }
+    }
+    cache.insert(pattern.to_string(), (*stamp, regex.clone()));
+    Some(regex)
+  })
+}
+
 /// ???
 pub fn replace(input_string_value: &Value, pattern_string_value: &Value, replacement_string_value: &Value, flags_string_value: &Value) -> Value {
   if let Value::String(input_string) = input_string_value {
@@ -2026,18 +2060,19 @@ pub fn replace(input_string_value: &Value, pattern_string_value: &Value, replace
             }
             patt.push(ch);
           }
+          // PGDMN: H14 — cached compilation
           if flags.is_empty() {
-            if let Ok(re) = Regex::new(&patt) {
+            if let Some(re) = cached_regex(&patt) {
               let result = re.replace_all(input_string.as_str(), repl.as_str()).to_string();
               return Value::String(result);
             }
-          } else if let Ok(re) = Regex::new(format!("(?{flags}){patt}").as_str()) {
+          } else if let Some(re) = cached_regex(format!("(?{flags}){patt}").as_str()) {
             let result = re.replace_all(input_string.as_str(), repl.as_str()).to_string();
             return Value::String(result);
           }
         }
         // replace without any flags
-        if let Ok(re) = Regex::new(pattern_string) {
+        if let Some(re) = cached_regex(pattern_string) {
           let result = re.replace_all(input_string.as_str(), repl.as_str()).to_string();
           Value::String(result)
         } else {
@@ -2162,7 +2197,8 @@ pub fn sort(list: &Value, ordering_function: &Value) -> Value {
 pub fn split(input_string_value: &Value, delimiter_string_value: &Value) -> Value {
   if let Value::String(input_string) = input_string_value {
     if let Value::String(delimiter_string) = delimiter_string_value {
-      if let Ok(re) = Regex::new(delimiter_string) {
+      // PGDMN: H14 — cached compilation
+      if let Some(re) = cached_regex(delimiter_string) {
         Value::List(re.split(input_string).map(|s| Value::String(s.to_string())).collect())
       } else {
         value_null!("split: invalid delimiter")
