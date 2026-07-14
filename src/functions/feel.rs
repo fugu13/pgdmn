@@ -1,10 +1,9 @@
 use pgrx::prelude::*;
 
-use dsntk_feel::FeelScope;
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
 
-use crate::cache::{context_shape_digest, get_or_prepare_feel_evaluator};
+use crate::cache::prepared_feel_evaluator;
 use crate::convert::{feel_to_json, json_to_context, tuple_to_context};
 
 /// Evaluate a FEEL expression with a pre-built FeelContext.
@@ -13,11 +12,8 @@ use crate::convert::{feel_to_json, json_to_context, tuple_to_context};
 /// evaluator is cached per (expression, context shape) — see cache.rs — so a
 /// cache hit costs one shape digest, one map probe, and the evaluation itself.
 fn eval_feel_ctx(expression: &str, ctx: FeelContext) -> Value {
-    let shape = context_shape_digest(&ctx);
-    let scope = FeelScope::default();
-    scope.push(ctx);
-    let evaluator = get_or_prepare_feel_evaluator(expression, shape, &scope)
-        .unwrap_or_else(|e| pgrx::error!("{}", e));
+    let (evaluator, scope) =
+        prepared_feel_evaluator(expression, ctx).unwrap_or_else(|e| pgrx::error!("{}", e));
     evaluator(&scope)
 }
 

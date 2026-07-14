@@ -26,89 +26,12 @@ const RISK_DMN: &str = include_str!("../models/risk.dmn");
 const LENDING_DMN: &str = include_str!("../../examples/lending.dmn");
 const LOANCOMP_DMN: &str = include_str!("../../examples/loan-comparison.dmn");
 
-// --- Conversion functions mirroring src/convert.rs (the pgrx-free parts). ---
-// Duplicated because the extension crate only compiles against pg_config
-// inside Docker; keep in sync with src/convert.rs when it changes.
-
-fn json_to_feel(json: &serde_json::Value) -> Value {
-    match json {
-        serde_json::Value::Null => Value::Null(None),
-        serde_json::Value::Bool(b) => Value::Boolean(*b),
-        serde_json::Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Value::Number(dsntk_feel::FeelNumber::from(i))
-            } else if let Some(u) = n.as_u64() {
-                Value::Number(dsntk_feel::FeelNumber::from(u))
-            } else {
-                let s = n.to_string();
-                match s.parse::<dsntk_feel::FeelNumber>() {
-                    Ok(num) => Value::Number(num),
-                    Err(_) => Value::Null(Some(format!("cannot convert number: {s}"))),
-                }
-            }
-        }
-        serde_json::Value::String(s) => Value::String(s.clone()),
-        serde_json::Value::Array(arr) => Value::List(arr.iter().map(json_to_feel).collect()),
-        serde_json::Value::Object(map) => {
-            let mut ctx = FeelContext::new();
-            for (key, val) in map {
-                ctx.insert(Name::from(key.as_str()), json_to_feel(val));
-            }
-            Value::Context(ctx)
-        }
-    }
-}
-
-fn feel_number_to_json(n: &dsntk_feel::FeelNumber) -> serde_json::Value {
-    if n.is_integer() {
-        if let Ok(i) = i64::try_from(n) {
-            return serde_json::Value::Number(serde_json::Number::from(i));
-        }
-    }
-    let s = n.to_string();
-    if let Ok(i) = s.parse::<i64>() {
-        serde_json::Value::Number(serde_json::Number::from(i))
-    } else if let Ok(f) = s.parse::<f64>() {
-        serde_json::json!(f)
-    } else {
-        serde_json::Value::String(s)
-    }
-}
-
-fn feel_to_json(value: &Value) -> serde_json::Value {
-    match value {
-        Value::Null(_) => serde_json::Value::Null,
-        Value::Boolean(b) => serde_json::Value::Bool(*b),
-        Value::Number(n) => feel_number_to_json(n),
-        Value::String(s) => serde_json::Value::String(s.clone()),
-        Value::List(items) => serde_json::Value::Array(items.iter().map(feel_to_json).collect()),
-        Value::Context(ctx) => {
-            let mut map = serde_json::Map::new();
-            for (name, val) in ctx.iter() {
-                map.insert(name.to_string(), feel_to_json(val));
-            }
-            serde_json::Value::Object(map)
-        }
-        Value::Date(d) => serde_json::Value::String(d.to_string()),
-        Value::Time(t) => serde_json::Value::String(t.to_string()),
-        Value::DateTime(dt) => serde_json::Value::String(dt.to_string()),
-        Value::DaysAndTimeDuration(d) => serde_json::Value::String(d.to_string()),
-        Value::YearsAndMonthsDuration(d) => serde_json::Value::String(d.to_string()),
-        _ => serde_json::Value::String(value.to_string()),
-    }
-}
-
-fn json_to_context(json: &serde_json::Value) -> FeelContext {
-    if let serde_json::Value::Object(map) = json {
-        let mut ctx = FeelContext::new();
-        for (key, val) in map {
-            ctx.insert(Name::from(key.as_str()), json_to_feel(val));
-        }
-        ctx
-    } else {
-        FeelContext::new()
-    }
-}
+// The extension's pgrx-free conversion layer, included as shared source so
+// benchmark numbers always describe the shipping conversion code (the
+// extension crate itself only compiles against pg_config inside Docker).
+#[path = "../../src/convert_core.rs"]
+mod convert_core;
+use convert_core::{feel_to_json, json_to_context};
 
 // --- Input generation ------------------------------------------------------
 
@@ -224,36 +147,39 @@ struct Scenario {
     hot: Box<dyn Fn(Duration)>,
 }
 
+/// Register a scenario from a setup factory. Each factory call builds fresh
+/// state; the returned closure runs one logical operation. The factory is
+/// non-capturing (hence Copy), so both the bench and the profiler hot loop
+/// get their own instance.
+fn scenario<Op: FnMut() + 'static>(
+    list: &mut Vec<Scenario>,
+    name: &'static str,
+    desc: &'static str,
+    setup: impl Fn() -> Op + Copy + 'static,
+) {
+    list.push(Scenario {
+        name,
+        desc,
+        run: Box::new(move |samples| bench(name, samples, setup())),
+        hot: Box::new(move |dur| {
+            let mut op = setup();
+            let start = Instant::now();
+            while start.elapsed() < dur {
+                for _ in 0..1000 {
+                    op();
+                }
+            }
+        }),
+    });
+}
+
 #[expect(clippy::too_many_lines)]
 fn scenarios() -> Vec<Scenario> {
     let mut list: Vec<Scenario> = Vec::new();
 
-    // Helper to register a scenario from a closure factory. Each factory call
-    // builds fresh state; the closure runs one logical operation.
-    macro_rules! scenario {
-        ($name:literal, $desc:literal, $setup:expr) => {{
-            list.push(Scenario {
-                name: $name,
-                desc: $desc,
-                run: Box::new(move |samples| {
-                    let mut op = $setup();
-                    bench($name, samples, move || op())
-                }),
-                hot: Box::new(move |dur| {
-                    let mut op = $setup();
-                    let start = Instant::now();
-                    while start.elapsed() < dur {
-                        for _ in 0..1000 {
-                            op();
-                        }
-                    }
-                }),
-            });
-        }};
-    }
-
     // -- Model evaluation: engine only (prebuilt contexts) --
-    scenario!(
+    scenario(
+        &mut list,
         "model_concat_eval",
         "ConcatDecision/FullName: engine-only eval, prebuilt FeelContext",
         || {
@@ -280,10 +206,11 @@ fn scenarios() -> Vec<Scenario> {
                     ctx,
                 ));
             }
-        }
+        },
     );
 
-    scenario!(
+    scenario(
+        &mut list,
         "model_risk_eval",
         "RiskAssessment/RiskScore: engine-only eval (decision table + literal chain)",
         || {
@@ -308,10 +235,11 @@ fn scenarios() -> Vec<Scenario> {
                     ctx,
                 ));
             }
-        }
+        },
     );
 
-    scenario!(
+    scenario(
+        &mut list,
         "model_lending_eval",
         "Lending/Strategy: deep DRG with BKMs and nested contexts",
         || {
@@ -332,11 +260,12 @@ fn scenarios() -> Vec<Scenario> {
                     &ctx,
                 ));
             }
-        }
+        },
     );
 
     // -- Full pgdmn-equivalent path (minus PostgreSQL) --
-    scenario!(
+    scenario(
+        &mut list,
         "e2e_risk_json",
         "risk model: serde_json parse -> json_to_context -> eval -> feel_to_json -> to_string",
         || {
@@ -360,11 +289,12 @@ fn scenarios() -> Vec<Scenario> {
                 let out = serde_json::to_string(&feel_to_json(&result)).expect("serialize");
                 black_box(out);
             }
-        }
+        },
     );
 
     // -- Conversion layers in isolation --
-    scenario!(
+    scenario(
+        &mut list,
         "convert_json_to_context",
         "risk inputs: serde_json::Value -> FeelContext",
         || {
@@ -375,10 +305,11 @@ fn scenarios() -> Vec<Scenario> {
                 i += 1;
                 black_box(json_to_context(json));
             }
-        }
+        },
     );
 
-    scenario!(
+    scenario(
+        &mut list,
         "convert_feel_to_json",
         "risk result Value -> serde_json::Value",
         || {
@@ -400,11 +331,12 @@ fn scenarios() -> Vec<Scenario> {
                 i += 1;
                 black_box(feel_to_json(v));
             }
-        }
+        },
     );
 
     // -- FEEL parsing and evaluation --
-    scenario!(
+    scenario(
+        &mut list,
         "feel_parse_short",
         "parse 'x + y' against a 2-name scope",
         || {
@@ -416,10 +348,11 @@ fn scenarios() -> Vec<Scenario> {
             move || {
                 black_box(parse_expression(&scope, "x + y", false).expect("parse"));
             }
-        }
+        },
     );
 
-    scenario!(
+    scenario(
+        &mut list,
         "feel_eval_short",
         "evaluate prebuilt AST for 'x + y'",
         || {
@@ -432,12 +365,13 @@ fn scenarios() -> Vec<Scenario> {
             move || {
                 black_box(evaluate(&scope, &node));
             }
-        }
+        },
     );
 
-    scenario!(
+    scenario(
+        &mut list,
         "feel_parse_eval_short",
-        "parse + evaluate 'x + y' (pgdmn feel_eval per-call behavior)",
+        "parse + evaluate 'x + y' (pgdmn feel_eval cold/evicted-cache path; warm path adds only digest+probe)",
         || {
             let scope = FeelScope::default();
             let mut ctx = FeelContext::new();
@@ -448,11 +382,12 @@ fn scenarios() -> Vec<Scenario> {
                 let node = parse_expression(&scope, "x + y", false).expect("parse");
                 black_box(evaluate(&scope, &node));
             }
-        }
+        },
     );
 
     // -- Construct-specific scenarios: iteration, filters, regex BIFs --
-    scenario!(
+    scenario(
+        &mut list,
         "model_loancomp_eval",
         "LoanComparison/RankedProducts: iteration + sorting over 10 products, BKMs",
         || {
@@ -476,10 +411,11 @@ fn scenarios() -> Vec<Scenario> {
                     &ctx,
                 ));
             }
-        }
+        },
     );
 
-    scenario!(
+    scenario(
+        &mut list,
         "feel_for_100",
         "prepared eval: for-expression over a 100-element list",
         || {
@@ -495,10 +431,11 @@ fn scenarios() -> Vec<Scenario> {
             move || {
                 black_box(evaluate(&scope, &node));
             }
-        }
+        },
     );
 
-    scenario!(
+    scenario(
+        &mut list,
         "feel_filter_100",
         "prepared eval: filter expression over a 100-element list",
         || {
@@ -513,10 +450,11 @@ fn scenarios() -> Vec<Scenario> {
             move || {
                 black_box(evaluate(&scope, &node));
             }
-        }
+        },
     );
 
-    scenario!(
+    scenario(
+        &mut list,
         "feel_replace_regex",
         "prepared eval: replace() regex BIF on a 40-char string",
         || {
@@ -527,24 +465,29 @@ fn scenarios() -> Vec<Scenario> {
                 Value::String("the quick brown fox jumps over lazy dogs".to_string()),
             );
             scope.push(ctx);
-            let node = parse_expression(&scope, r#"replace(text, "[aeiou]", "_")"#, false)
-                .expect("parse");
+            let node =
+                parse_expression(&scope, r#"replace(text, "[aeiou]", "_")"#, false).expect("parse");
             let result = evaluate(&scope, &node);
             assert!(matches!(&result, Value::String(s) if s.contains("q__ck")));
             move || {
                 black_box(evaluate(&scope, &node));
             }
-        }
+        },
     );
 
     // -- Micro: FeelNumber --
-    scenario!("num_parse", "parse '123.45' into FeelNumber", || {
-        move || {
-            black_box("123.45".parse::<dsntk_feel::FeelNumber>().expect("parse"));
-        }
-    });
+    scenario(
+        &mut list,
+        "num_parse",
+        "parse '123.45' into FeelNumber",
+        || {
+            move || {
+                black_box("123.45".parse::<dsntk_feel::FeelNumber>().expect("parse"));
+            }
+        },
+    );
 
-    scenario!("num_add", "FeelNumber addition", || {
+    scenario(&mut list, "num_add", "FeelNumber addition", || {
         let a: dsntk_feel::FeelNumber = "123.45".parse().expect("parse");
         let b: dsntk_feel::FeelNumber = "67.89".parse().expect("parse");
         move || {
@@ -552,7 +495,7 @@ fn scenarios() -> Vec<Scenario> {
         }
     });
 
-    scenario!("num_mul", "FeelNumber multiplication", || {
+    scenario(&mut list, "num_mul", "FeelNumber multiplication", || {
         let a: dsntk_feel::FeelNumber = "123.45".parse().expect("parse");
         let b: dsntk_feel::FeelNumber = "67.89".parse().expect("parse");
         move || {
@@ -560,7 +503,7 @@ fn scenarios() -> Vec<Scenario> {
         }
     });
 
-    scenario!("num_to_string", "FeelNumber -> String", || {
+    scenario(&mut list, "num_to_string", "FeelNumber -> String", || {
         let a: dsntk_feel::FeelNumber = "123.45".parse().expect("parse");
         move || {
             black_box(black_box(a).to_string());
@@ -568,13 +511,19 @@ fn scenarios() -> Vec<Scenario> {
     });
 
     // -- Micro: names and contexts --
-    scenario!("name_from", "Name::from(\"employment_status\")", || {
-        move || {
-            black_box(Name::from(black_box("employment_status")));
-        }
-    });
+    scenario(
+        &mut list,
+        "name_from",
+        "Name::from(\"employment_status\")",
+        || {
+            move || {
+                black_box(Name::from(black_box("employment_status")));
+            }
+        },
+    );
 
-    scenario!(
+    scenario(
+        &mut list,
         "ctx_build_5",
         "build 5-entry FeelContext (prebuilt Names)",
         || {
@@ -595,7 +544,7 @@ fn scenarios() -> Vec<Scenario> {
                 }
                 black_box(ctx);
             }
-        }
+        },
     );
 
     list

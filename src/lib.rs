@@ -2,6 +2,7 @@
 
 mod cache;
 mod convert;
+mod convert_core;
 #[cfg(test)]
 mod convert_props;
 mod functions;
@@ -810,6 +811,16 @@ mod tests {
     </decision>
 </definitions>"##;
 
+    /// Warm (LIMIT 1) then time a per-row benchmark query. Warmup keeps
+    /// parse/cache-miss cost out of the timed run.
+    fn timed_query(label: &str, sql: &str) -> std::time::Duration {
+        Spi::run(&format!("{sql} LIMIT 1"))
+            .unwrap_or_else(|e| panic!("{label} warmup failed: {e}"));
+        let start = std::time::Instant::now();
+        Spi::run(sql).unwrap_or_else(|e| panic!("{label} query failed: {e}"));
+        start.elapsed()
+    }
+
     #[pg_test]
     // Benchmark: long inline scenario setup; float division only for human-readable reporting
     #[expect(clippy::too_many_lines, clippy::cast_precision_loss)]
@@ -1053,41 +1064,35 @@ mod tests {
         let dmn_record_risk_dur = dmn_record_risk_start.elapsed();
 
         // --- Benchmark 3: FEEL expression evaluation per row ---
-        let feel_concat_sql = "SELECT feel_eval('first_name + \" \" + last_name', \
+        let feel_concat_dur = timed_query(
+            "FEEL concat",
+            "SELECT feel_eval('first_name + \" \" + last_name', \
              jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
-             FROM bench_names";
-        let feel_numeric_sql = "SELECT feel_eval_numeric(\
+             FROM bench_names",
+        );
+        let feel_numeric_dur = timed_query(
+            "FEEL numeric",
+            "SELECT feel_eval_numeric(\
              'credit_score * 0.3 + income / 2000 + years_employed * 5', \
              jsonb_build_object('income', income, 'credit_score', credit_score, \
-             'years_employed', years_employed)) FROM bench_names";
-        Spi::run(&format!("{feel_concat_sql} LIMIT 1")).expect("FEEL concat warmup failed");
-        Spi::run(&format!("{feel_numeric_sql} LIMIT 1")).expect("FEEL numeric warmup failed");
-
-        let feel_concat_start = std::time::Instant::now();
-        Spi::run(feel_concat_sql).expect("FEEL concat query failed");
-        let feel_concat_dur = feel_concat_start.elapsed();
-
-        let feel_numeric_start = std::time::Instant::now();
-        Spi::run(feel_numeric_sql).expect("FEEL numeric query failed");
-        let feel_numeric_dur = feel_numeric_start.elapsed();
+             'years_employed', years_employed)) FROM bench_names",
+        );
 
         // --- Benchmark 4: large model (85KB lending DMN) per-row overhead ---
         let escaped_lending = EXAMPLE_LENDING.replace('\'', "''");
-        let lending_sql = format!(
-            "SELECT dmn_eval(dmn_load('{escaped_lending}'), 'Strategy', jsonb_build_object(\
-             'ApplicantData', jsonb_build_object('Age', 51, 'MaritalStatus', 'M', \
-             'EmploymentStatus', 'EMPLOYED', 'ExistingCustomer', false, \
-             'Monthly', jsonb_build_object('Income', income / 10, 'Expenses', 3000, 'Repayments', 0)), \
-             'RequestedProduct', jsonb_build_object('ProductType', 'STANDARD LOAN', \
-             'Amount', income, 'Rate', 0.06, 'Term', 36), \
-             'BureauData', jsonb_build_object('CreditScore', credit_score, 'Bankrupt', false))) \
-             FROM bench_names"
+        let dmn_lending_dur = timed_query(
+            "DMN lending",
+            &format!(
+                "SELECT dmn_eval(dmn_load('{escaped_lending}'), 'Strategy', jsonb_build_object(\
+                 'ApplicantData', jsonb_build_object('Age', 51, 'MaritalStatus', 'M', \
+                 'EmploymentStatus', 'EMPLOYED', 'ExistingCustomer', false, \
+                 'Monthly', jsonb_build_object('Income', income / 10, 'Expenses', 3000, 'Repayments', 0)), \
+                 'RequestedProduct', jsonb_build_object('ProductType', 'STANDARD LOAN', \
+                 'Amount', income, 'Rate', 0.06, 'Term', 36), \
+                 'BureauData', jsonb_build_object('CreditScore', credit_score, 'Bankrupt', false))) \
+                 FROM bench_names"
+            ),
         );
-        Spi::run(&format!("{lending_sql} LIMIT 1")).expect("DMN lending warmup failed");
-
-        let dmn_lending_start = std::time::Instant::now();
-        Spi::run(&lending_sql).expect("DMN lending query failed");
-        let dmn_lending_dur = dmn_lending_start.elapsed();
 
         let rc = row_count as f64;
 

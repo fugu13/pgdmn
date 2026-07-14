@@ -16,7 +16,7 @@
 
 use proptest::prelude::*;
 
-use crate::convert::{feel_to_json, json_to_feel};
+use crate::convert_core::{feel_to_json, json_to_feel};
 
 /// Structural equality with numeric-value comparison for numbers.
 fn json_value_eq(left: &serde_json::Value, right: &serde_json::Value) -> bool {
@@ -57,7 +57,8 @@ fn key_strategy() -> impl Strategy<Value = String> {
     ]
 }
 
-/// Finite f64s that survive serde_json's Number representation.
+/// Finite f64s (every branch below generates finite values only, which
+/// serde_json's Number representation requires).
 fn float_strategy() -> impl Strategy<Value = f64> {
     prop_oneof![
         -1.0e12..1.0e12f64,
@@ -66,7 +67,6 @@ fn float_strategy() -> impl Strategy<Value = f64> {
         Just(-0.5),
         Just(0.1),
     ]
-    .prop_filter("serde_json requires finite", |f| f.is_finite())
 }
 
 fn json_strategy() -> impl Strategy<Value = serde_json::Value> {

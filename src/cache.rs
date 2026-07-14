@@ -104,6 +104,23 @@ pub fn get_or_build_evaluator(model: &DmnModel) -> Result<Arc<ModelEvaluator>, S
     Ok(evaluator)
 }
 
+/// Get the prepared evaluator for a FEEL expression under the given context,
+/// together with the scope to evaluate it in.
+///
+/// Owning the whole digest-then-probe sequence here keeps the cache-key
+/// invariant unexpressible-wrong for callers: the shape that keys the cache is
+/// always derived from the very context pushed onto the returned scope.
+pub fn prepared_feel_evaluator(
+    expression: &str,
+    ctx: FeelContext,
+) -> Result<(Rc<Evaluator>, FeelScope), String> {
+    let shape = context_shape_digest(&ctx);
+    let scope = FeelScope::default();
+    scope.push(ctx);
+    let evaluator = get_or_prepare_feel_evaluator(expression, shape, &scope)?;
+    Ok((evaluator, scope))
+}
+
 /// Get or build the prepared evaluator for a FEEL expression.
 ///
 /// `shape` must be `context_shape_digest` of the context pushed onto `scope`.
@@ -113,7 +130,7 @@ pub fn get_or_build_evaluator(model: &DmnModel) -> Result<Arc<ModelEvaluator>, S
 /// The full expression string is kept verbatim in the key, so a wrong hit
 /// additionally requires two distinct shapes colliding in all 128 digest bits
 /// (see `content_hash128`) under the very same expression.
-pub fn get_or_prepare_feel_evaluator(
+fn get_or_prepare_feel_evaluator(
     expression: &str,
     shape: [u64; 2],
     scope: &FeelScope,
@@ -154,10 +171,17 @@ pub fn get_or_prepare_feel_evaluator(
 /// (recursed via `Value::type_of`, exactly as the parser does), or a plain
 /// variable. Leaf values never affect the digest, so rows differing only in
 /// data share one cache entry; any change to the key structure changes it.
-pub fn context_shape_digest(ctx: &FeelContext) -> [u64; 2] {
-    let mut bytes = Vec::with_capacity(128);
-    write_context_shape(ctx, &mut bytes);
-    content_hash128(&bytes)
+fn context_shape_digest(ctx: &FeelContext) -> [u64; 2] {
+    // Thread-local scratch buffer: the digest runs on every feel_eval row
+    // (cache hits included), so it must not allocate per call.
+    thread_local! {
+        static SHAPE_SCRATCH: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    }
+    SHAPE_SCRATCH.with_borrow_mut(|bytes| {
+        bytes.clear();
+        write_context_shape(ctx, bytes);
+        content_hash128(bytes)
+    })
 }
 
 /// Serialize a context's shape canonically: `{` entries `}` with each entry as
@@ -170,7 +194,18 @@ fn write_context_shape(ctx: &FeelContext, out: &mut Vec<u8>) {
         write_name(name, out);
         match value {
             Value::Context(sub_ctx) => write_context_shape(sub_ctx, out),
-            list @ Value::List(_) => write_type_shape(&list.type_of(), out),
+            list @ Value::List(items) => {
+                // type_of() materializes a FeelType tree for every element —
+                // data-proportional allocation. Only a list whose FIRST element
+                // is a context can unify to a context type (anything else
+                // unifies to a non-context and renders as a variable), so all
+                // other lists short-circuit to 'v' with the same digest.
+                if matches!(items.first(), Some(Value::Context(_))) {
+                    write_type_shape(&list.type_of(), out);
+                } else {
+                    out.push(b'v');
+                }
+            }
             Value::FeelType(feel_type) => write_type_shape(feel_type, out),
             _ => out.push(b'v'),
         }
@@ -291,6 +326,22 @@ mod tests {
         let empty = ctx_of(vec![("items", Value::List(vec![]))]);
         let scalars = ctx_of(vec![("items", Value::List(vec![num(1)]))]);
         assert_eq!(context_shape_digest(&empty), context_shape_digest(&scalars));
+    }
+
+    #[test]
+    fn mixed_list_matches_scalar_list() {
+        // A list starting with a context but containing a scalar unifies to a
+        // non-context type in the parser, i.e. an opaque variable — the same
+        // as a scalar list. Locks in the first-element short-circuit.
+        let mixed = ctx_of(vec![(
+            "items",
+            Value::List(vec![
+                Value::Context(ctx_of(vec![("price", num(2))])),
+                num(3),
+            ]),
+        )]);
+        let scalars = ctx_of(vec![("items", Value::List(vec![num(1)]))]);
+        assert_eq!(context_shape_digest(&mixed), context_shape_digest(&scalars));
     }
 
     #[test]
