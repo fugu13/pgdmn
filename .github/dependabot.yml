@@ -1,0 +1,50 @@
+# Dependabot configuration.
+#
+# Minor/patch Rust dependency bumps are grouped into a single PR per crate
+# (rust-minor-patch / website-minor-patch) to reduce PR noise; major bumps
+# are left ungrouped so they surface individually and get reviewed on their
+# own.
+
+version: 2
+updates:
+  # Root pgrx PostgreSQL extension crate.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      rust-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Leptos website crate (separate lockfile under website/).
+  - package-ecosystem: "cargo"
+    directory: "/website"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      website-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Root Dockerfile base image (rust:1.85-bookworm).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+
+  # GitHub Actions workflow action pins.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
