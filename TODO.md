@@ -244,7 +244,7 @@ The site navigation needs a responsive hamburger menu for narrow viewports.
 
 The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which WEB-001 removed. Either implement it without script — a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert — or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
 
-### PERF-001: Tell people to let the planner parallelize
+### PERF-009: Tell people to let the planner parallelize
 
 Evaluating a decision is pure, per-row, self-contained work — the ideal parallel workload — and parallelism is worth more than every other change to the query put together. The functions are already `IMMUTABLE` and `PARALLEL SAFE`, so this needs no code change; it needs a reader who knows to check that their plan actually has a Gather in it.
 
@@ -264,7 +264,7 @@ Two findings worth writing down for users, on the Docs page and in the README.
 
 **They do not compose.** A `MATERIALIZED` CTE is scanned serially, throwing the parallelism away. Given the choice, take the parallelism.
 
-### PERF-002: Fingerprint models instead of hashing the XML per call
+### PERF-010: Fingerprint models instead of hashing the XML per call
 
 `cache.rs` keys the evaluator cache on the entire XML string, so every `dmn_eval` hashes the whole model to find its evaluator, then compares the string on a hit. The cost scales with model size rather than with the decision being made. On the benchmark's small models it is a few percent; on a large model it would not be.
 
