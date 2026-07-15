@@ -1407,15 +1407,18 @@ impl<'b> EvaluatorBuilder<'b> {
   }
 
   fn build_name(&mut self, name: Name) -> Evaluator {
-    // PGDMN: H19 — resolve the built-in function fallback once at build time,
-    // so repeated calls do not allocate a String and match ~90 names again
-    // (Bif::from_str also builds an error value for every non-BIF name). The
-    // scope lookup stays first, so user definitions still shadow BIF names.
-    let bif = Bif::from_str(name.as_str()).ok();
+    // PGDMN: H19 — memoize the built-in function fallback lazily, so repeated
+    // scope misses do not match ~90 names again (Bif::from_str also builds an
+    // error value for every non-BIF name — which is also why this must NOT be
+    // resolved eagerly at build time: names that always resolve in scope would
+    // pay that construction on every evaluator build). Scope lookup stays
+    // first, so user definitions still shadow BIF names; 0.3's Name::as_str
+    // avoids the per-call String of the original code.
+    let bif: std::sync::OnceLock<Option<Bif>> = std::sync::OnceLock::new();
     Box::new(move |scope: &FeelScope| {
       if let Some(value) = scope.get_value(&name) {
         value
-      } else if let Some(bif) = &bif {
+      } else if let Some(bif) = bif.get_or_init(|| Bif::from_str(name.as_str()).ok()) {
         Value::BuiltInFunction(bif.clone())
       } else {
         value_null!("context has no value for key '{}'", name)
