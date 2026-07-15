@@ -2,6 +2,7 @@
 title: Loan eligibility, row by row
 date: 2026-07-13
 summary: Four rules and eight applicants. Two sit either side of the boundary, one is a 17-year-old earning 95000, and one out-earns the lot and is declined anyway — because the order of the rules is part of the decision.
+files: loan-eligibility.dmn, applicants.csv
 example: loan
 ---
 
@@ -26,7 +27,7 @@ The hit policy is **first**, which means the rules are tried top to bottom and t
 
 ## Set up
 
-Load the model into a table and load the applicants alongside it. The model is an ordinary value, so it lives in a column like anything else. Run this from the directory you downloaded the two files into.
+Load the model, [`loan-eligibility.dmn`](/examples/loan-eligibility.dmn), into a table, and load the applicants from [`applicants.csv`](/examples/applicants.csv) alongside it. The model is an ordinary value, so it lives in a column like anything else. Run this from the directory the two files are in.
 
 ```sql
 -- The model, read from the downloaded file into a psql variable.

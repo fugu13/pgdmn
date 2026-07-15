@@ -2,6 +2,7 @@
 title: The obligation is a column
 date: 2026-07-10
 summary: Data-handling rules as a decision table, evaluated per row. What must we encrypt, what may not leave the EU — answered by a query rather than by a policy document nobody has read since the audit.
+files: compliance.dmn, customers.csv
 example: compliance
 ---
 
@@ -26,7 +27,7 @@ That ordering is the policy. Move the special-category rule below the EU rule an
 
 ## Set up
 
-Load the model and the customers. Run this from the directory holding the two downloaded files.
+Load the model, [`compliance.dmn`](/examples/compliance.dmn), and the customers from [`customers.csv`](/examples/customers.csv). Run this from the directory the two files are in.
 
 ```sql
 \set compliance `cat compliance.dmn`

@@ -2,6 +2,7 @@
 title: Put the rules in the schema
 date: 2026-07-11
 summary: A decision model is a value. Store it in a column, wrap it in a view, and changing how every ticket is triaged becomes an UPDATE of one row — with the old rules still there to audit.
+files: ticket-routing.dmn, tickets.csv
 example: routing
 ---
 
@@ -27,7 +28,7 @@ Read it as a policy and it is legible to someone who does not write SQL: wake so
 
 ## Set up
 
-Load the model and the tickets. Run this from the directory holding the two downloaded files.
+Load the model, [`ticket-routing.dmn`](/examples/ticket-routing.dmn), and the tickets from [`tickets.csv`](/examples/tickets.csv). Run this from the directory the two files are in.
 
 ```sql
 \set routing `cat ticket-routing.dmn`

@@ -2,6 +2,7 @@
 title: Two pricing policies, one query
 date: 2026-07-12
 summary: The rules are a row in a table. Put two pricing models side by side, price the same orders under both, and switching everybody to the promotion becomes an UPDATE rather than a deploy.
+files: order-pricing.dmn, order-pricing-promo.dmn, orders.csv
 example: pricing
 ---
 
@@ -22,7 +23,7 @@ You never tell pgdmn about that dependency. You ask for `Total Price`, and it wo
 
 ## Set up
 
-Load both models into the `models` table under different names, and load the orders. Run this from the directory holding the three downloaded files.
+Load both models — [`order-pricing.dmn`](/examples/order-pricing.dmn) and [`order-pricing-promo.dmn`](/examples/order-pricing-promo.dmn) — into the `models` table under different names, and load the orders from [`orders.csv`](/examples/orders.csv). Run this from the directory the three files are in.
 
 ```sql
 \set standard `cat order-pricing.dmn`

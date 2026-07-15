@@ -13,17 +13,20 @@ use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd, html};
 
 static POSTS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/articles");
 
-/// A post, ready to render.
+/// An article, ready to render.
 pub struct Article {
     /// From the filename: `loan-eligibility.md` is served at `/articles/loan-eligibility/`.
     pub slug: String,
     pub title: String,
     /// `YYYY-MM-DD`, as written in the front matter.
     pub date: String,
-    /// Shown on the blog index.
+    /// Shown on the articles index.
     pub summary: String,
-    /// The anchor on the Examples page this post walks through, if any.
+    /// The anchor on the Examples page this article walks through, if any.
     pub example: Option<String>,
+    /// The downloadable files this article uses (model and dataset filenames),
+    /// in front-matter order. Shown as download links at the top of the article.
+    pub files: Vec<String>,
     pub body: String,
 }
 
@@ -80,12 +83,23 @@ fn parse(slug: &str, source: &str) -> Result<Article, String> {
             .ok_or_else(|| format!("front matter is missing `{key}`"))
     };
 
+    let files = field("files").map_or_else(
+        |_| Vec::new(),
+        |list| {
+            list.split(',')
+                .map(|f| f.trim().to_string())
+                .filter(|f| !f.is_empty())
+                .collect()
+        },
+    );
+
     Ok(Article {
         slug: slug.to_string(),
         title: field("title")?,
         date: field("date")?,
         summary: field("summary")?,
         example: field("example").ok(),
+        files,
         body: to_html(body),
     })
 }
@@ -135,6 +149,10 @@ fn to_html(markdown: &str) -> String {
         &mut rendered,
         highlight_sql_blocks(Parser::new_ext(markdown, options)).into_iter(),
     );
+    // A link to a sample file should download it, not render it in the tab. The
+    // inline file references in an article are written as ordinary markdown
+    // links; this gives them the `download` attribute the markup can't.
+    let rendered = rendered.replace("<a href=\"/examples/", "<a download href=\"/examples/");
     tables_accessible(&rendered)
 }
 

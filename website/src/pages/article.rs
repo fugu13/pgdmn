@@ -34,9 +34,23 @@ pub fn ArticlePage() -> impl IntoView {
         <p>
             "Everything to run this is below. You need pgdmn installed (see "
             <a href="/docs/#install">"Install"</a>
-            ") and the model and dataset for this example, which you can download from the "
-            <a href="/examples/">"Examples"</a>" page."
+            "); the files it uses are here."
         </p>
+
+        <ul class="file-links">
+            {article
+                .files
+                .iter()
+                .map(|file| {
+                    let href = format!("/examples/{file}");
+                    view! {
+                        <li>
+                            <a href=href download><code>{file.clone()}</code></a>
+                        </li>
+                    }
+                })
+                .collect_view()}
+        </ul>
 
         // The article body is markdown we authored and rendered at build time —
         // there is no user input anywhere near this.
