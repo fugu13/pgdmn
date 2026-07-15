@@ -198,40 +198,5 @@ SELECT feel_eval('1 + 2');
             "A model is not re-parsed per row. Parsed models are cached, keyed by the XML
             itself, so evaluating one model against a whole table parses it once."
         </p>
-
-        <H3 id="writing-for-parallelism" title="Writing for parallelism"/>
-        <p>
-            "Evaluating a decision is pure, per-row work — the ideal parallel workload, and where
-            nearly all the speed is. Write the query as a plain scan so the planner can split it
-            across workers: one call per row, no wrapping subquery that forces the evaluation to
-            run in a single serial step."
-        </p>
-        <SqlBlock
-            label="A query the planner can parallelize"
-            code="-- One call per row over a plain scan. On a large table PostgreSQL
--- runs this across parallel workers on its own.
-SELECT t.id,
-    dmn_eval_text(m.model, 'Decision', jsonb_build_object('x', t.x))
-FROM big_table t
-CROSS JOIN models m
-WHERE m.name = 'my-model';
-
--- Check that it actually parallelized: the plan should contain a
--- Gather node. If it does not and the table is large, nudge the planner.
-EXPLAIN (ANALYZE)
-SELECT dmn_eval_text(m.model, 'Decision', jsonb_build_object('x', t.x))
-FROM big_table t CROSS JOIN models m WHERE m.name = 'my-model';
-
-SET max_parallel_workers_per_gather = 4;"
-        />
-        <p>
-            "Two things to avoid. Postgres will not parallelize a small table by default, so a
-            quick test on a few rows can look slower than it is — measure on a realistic size.
-            And if the same inputs recur many times, it is tempting to evaluate the distinct set
-            once and join the answers back; that only helps when the intermediate is "
-            <code>"MATERIALIZED"</code>", because otherwise the planner folds the call back above
-            the join and evaluates it per row anyway — and materializing gives up the parallelism,
-            which is usually the worse trade."
-        </p>
     }
 }
