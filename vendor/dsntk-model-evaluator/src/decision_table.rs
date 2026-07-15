@@ -41,14 +41,16 @@ struct EvaluatedRule {
 /// Evaluated decision table.
 /// All evaluation clauses from [ParsedDecisionTable] are executed
 /// in specified context and results are stored as [Values](Value) in this structure.
-struct EvaluatedDecisionTable {
-  component_names: Vec<Name>,
+// PGDMN: component names are borrowed from the parsed decision table instead of
+// being cloned on every evaluation.
+struct EvaluatedDecisionTable<'a> {
+  component_names: &'a [Name],
   output_values: Vec<Value>,
   default_output_values: Vec<Value>,
   evaluated_rules: Vec<EvaluatedRule>,
 }
 
-impl EvaluatedDecisionTable {
+impl EvaluatedDecisionTable<'_> {
   /// Returns all matching rules in rule order.
   fn get_matching_rules(&self) -> Vec<&EvaluatedRule> {
     self.evaluated_rules.iter().filter(|evaluated_rule| evaluated_rule.matches).collect()
@@ -332,7 +334,7 @@ fn parse_decision_table(scope: &FeelScope, decision_table: &DecisionTable) -> Re
   })
 }
 
-fn evaluate_parsed_decision_table(scope: &FeelScope, parsed_decision_table: &ParsedDecisionTable, hit_policy: HitPolicy) -> EvaluatedDecisionTable {
+fn evaluate_parsed_decision_table<'a>(scope: &FeelScope, parsed_decision_table: &'a ParsedDecisionTable, hit_policy: HitPolicy) -> EvaluatedDecisionTable<'a> {
   // PGDMN (H10): evaluate each input expression once per call; every rule entry then
   // tests against the value bound to '?', instead of re-evaluating the input
   // expression for each of the N x M input entries.
@@ -405,7 +407,7 @@ fn evaluate_parsed_decision_table(scope: &FeelScope, parsed_decision_table: &Par
     }
   }
   EvaluatedDecisionTable {
-    component_names: parsed_decision_table.component_names.clone(),
+    component_names: &parsed_decision_table.component_names,
     output_values,
     default_output_values,
     evaluated_rules,
