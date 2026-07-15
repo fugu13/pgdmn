@@ -264,14 +264,6 @@ Two findings worth writing down for users, on the Docs page and in the README.
 
 **They do not compose.** A `MATERIALIZED` CTE is scanned serially, throwing the parallelism away. Given the choice, take the parallelism.
 
-### PERF-010: Fingerprint models instead of hashing the XML per call
-
-`cache.rs` keys the evaluator cache on the entire XML string, so every `dmn_eval` hashes the whole model to find its evaluator, then compares the string on a hit. The cost scales with model size rather than with the decision being made. On the benchmark's small models it is a few percent; on a large model it would not be.
-
-Compute a fingerprint once, in `dmn_load`, store it on `DmnModel`, and key the cache on that. Measure before and after with `make bench` — worth doing only if the numbers say so, and the numbers currently say it is not the bottleneck.
-
-**What is the bottleneck: FEEL evaluation itself.** `dmn_record_eval` skips the JSONB path entirely and is only **5–9% faster** than `dmn_eval` (16.4 vs 18.1 µs/row simple, 65.5 vs 69.0 complex). Any future work aimed at the serialization hops — direct datum conversion, SPI batch functions, hstore or variadic inputs — is chasing at most a tenth of the runtime. Profile FEEL evaluation before spending effort there.
-
 ### WEB-003: Respect prefers-color-scheme
 
 The site defines its palette once, in light colours, and never consults `prefers-color-scheme`. A visitor whose system is set to dark gets a bright white page regardless. CLAUDE.md already forbids a dark-mode *toggle* on the grounds that the system preference is the right signal — but the site does not currently honour that signal either way.
@@ -322,6 +314,10 @@ Set up automated builds and deployment for the website. Hosting is GitHub Pages,
 Done 2026-07-13. The `Website` workflow (`.github/workflows/website.yml`) lints, prerenders, asserts the output ships no scripts or wasm and that the deployable artifact is complete, then publishes `website/dist` to Pages on every push to `main`. The prerender emits `CNAME`, `404.html`, and `.nojekyll`.
 
 Going live still needs three manual steps, recorded in RELEASEPLAN.md: a paid plan for Pages from a private repo, the Route 53 A/AAAA/CNAME records, and enforcing HTTPS once the certificate is issued.
+
+### PERF-010: Fingerprint models instead of hashing the XML per call (done)
+
+Done 2026-07-15, delivered by the dsntk 0.3 vendoring merge rather than by dedicated work here. `cache.rs` now keys the evaluator cache on the model's 128-bit XML content hash, computed once when the model is loaded and stored on `DmnModel`, so `dmn_eval` no longer rehashes or memcmp's the whole XML per call to find its evaluator. The residual datum-side cost — the full XML is still CBOR-decoded from the datum on every row — is tracked separately as PERF-001 (zero-copy DmnModel datum layout). The finding that motivated deferring this stands: FEEL evaluation itself is the bottleneck (`dmn_record_eval` is only 5–9% faster than `dmn_eval`), so the serialization hops were never where the time went.
 
 ## CI
 
