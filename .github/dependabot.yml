@@ -14,6 +14,11 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    ignore:
+      # dsntk is vendored under vendor/ via [patch.crates-io]; a version bump
+      # here would make the patch silently unused and resolve dsntk from the
+      # registry (cargo only warns). Upgrades go through `make vendor-upgrade`.
+      - dependency-name: "dsntk-*"
     groups:
       rust-minor-patch:
         update-types:

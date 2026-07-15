@@ -19,7 +19,7 @@ members = [
     "vendor/dsntk-model-evaluator",
     "vendor/dsntk-recognizer",
 ]
-exclude = ["profiling"]
+exclude = ["profiling", "website"]
 
 [package]
 name = "pgdmn"

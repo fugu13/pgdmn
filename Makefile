@@ -34,7 +34,7 @@ bench: test-image ## Run DMN eval benchmark and print results (gated by PGDMN_BE
 	docker run --rm -e USER=pgdmn -e PGDMN_BENCH=1 -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test cargo pgrx test pg17 -- bench_dmn_eval_vs_pg_concat
 	@cat benchmark_results.txt 2>/dev/null
 
-lint: test-image ## Run clippy (deny warnings) and rustfmt check
+lint: test-image vendor-check ## Run clippy (deny warnings), rustfmt check, and vendor integrity
 	$(DOCKER_RUN) sh -c 'cargo clippy --all-targets -- -D warnings && cargo fmt -- --check'
 
 fmt: test-image ## Auto-format code
