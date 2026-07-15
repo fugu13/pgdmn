@@ -41,7 +41,9 @@ pub fn DocsPage() -> impl IntoView {
     view! {
         <Title text="Documentation — pgdmn"/>
         <h1 id="documentation">"Documentation"</h1>
-        <p class="lede">"Every function pgdmn installs, with its arguments."</p>
+        <p class="lede">
+            "Install instructions, and every function pgdmn installs, with its arguments."
+        </p>
         <p>
             "Worked examples, with models and datasets you can download and run, are on the "
             <a href="/examples/">"Examples"</a>" page."
@@ -49,24 +51,26 @@ pub fn DocsPage() -> impl IntoView {
 
         <H2 id="install" title="Install"/>
         <p>
-            "pgdmn is a PostgreSQL extension. Once the files are in place on the server, one
-            statement per database installs it:"
+            "pgdmn is a PostgreSQL extension. To install it, you build it from source, then copy
+            the compiled extension into place."
+        </p>
+        <pre class="sql-block" role="region" aria-label="Build and install commands" tabindex="0">
+            <code>"# Build pgdmn and copy it into your PostgreSQL installation.\ncargo pgrx install --release"</code>
+        </pre>
+        <p>
+            "That needs the pgrx toolchain; the full setup is in the "
+            <a href="https://github.com/fugu13/pgdmn#readme" rel="noopener noreferrer" target="_blank">
+                "project README"
+            </a>". Next, enable it and verify it works."
         </p>
         <SqlBlock
-            label="Install the extension"
+            label="Enable and verify"
             code="CREATE EXTENSION pgdmn;
 
--- Confirm it is there.
+-- Execute a simple function from the extension.
 SELECT feel_eval('1 + 2');
 --  3"
         />
-        <p>
-            "Everything below is then available in that database. Building the extension from
-            source is covered in the "
-            <a href="https://github.com/fugu13/pgdmn#readme" rel="noopener noreferrer" target="_blank">
-                "project README"
-            </a>"."
-        </p>
 
         <H2 id="dmn-functions" title="DMN functions"/>
         <dl class="fn-list">
