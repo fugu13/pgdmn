@@ -38,82 +38,13 @@ pub fn sql(code: &str) -> String {
             return escape(code);
         }
     }
-    patch_missing_keywords(&generator.finalize())
-}
-
-/// syntect's default SQL grammar does not know a few Postgres-specific keywords
-/// and leaves them unhighlighted — `CREATE EXTENSION` most visibly. Each such
-/// phrase survives highlighting as contiguous plain text (the phrases the
-/// grammar *does* know come back split across spans), so wrapping the literal is
-/// safe and targeted.
-fn patch_missing_keywords(html: &str) -> String {
-    html.replace(
-        "CREATE EXTENSION",
-        "<span class=\"hl-keyword\">CREATE EXTENSION</span>",
-    )
+    generator.finalize()
 }
 
 fn escape(code: &str) -> String {
     code.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
-}
-
-/// Words a signature colours as keywords, and as types. Kept small and explicit
-/// because the vocabulary of a signature is small and known.
-const SIG_KEYWORDS: &[&str] = &["DEFAULT", "NULL", "RETURNS", "setof"];
-const SIG_TYPES: &[&str] = &[
-    "dmnmodel",
-    "text",
-    "jsonb",
-    "record",
-    "numeric",
-    "boolean",
-    "date",
-    "timestamp",
-    "interval",
-];
-
-/// Highlight a function signature: every type and keyword, nothing else.
-///
-/// syntect's SQL grammar only knows a subset of Postgres types — it will not
-/// colour `dmnmodel`, `record`, or `setof` — so a signature gets a dedicated
-/// pass over a fixed vocabulary. The output is plain word spans, which wrap
-/// cleanly at the spaces between arguments on a narrow screen (a single syntect
-/// wrapper element did not).
-pub fn signature(sig: &str) -> String {
-    let mut out = String::new();
-    let mut word = String::new();
-    for ch in sig.chars() {
-        if ch.is_alphanumeric() || ch == '_' {
-            word.push(ch);
-            continue;
-        }
-        push_word(&word, &mut out);
-        word.clear();
-        match ch {
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '&' => out.push_str("&amp;"),
-            other => out.push(other),
-        }
-    }
-    push_word(&word, &mut out);
-    out
-}
-
-fn push_word(word: &str, out: &mut String) {
-    use std::fmt::Write as _;
-    if word.is_empty() {
-        return;
-    }
-    if SIG_KEYWORDS.contains(&word) {
-        let _ = write!(out, "<span class=\"hl-keyword\">{word}</span>");
-    } else if SIG_TYPES.contains(&word) {
-        let _ = write!(out, "<span class=\"hl-type\">{word}</span>");
-    } else {
-        out.push_str(word);
-    }
 }
 
 #[cfg(test)]

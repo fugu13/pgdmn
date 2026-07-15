@@ -1,0 +1,80 @@
+name: CI
+
+# The extension builds only in Docker (the pgrx toolchain and PostgreSQL 17 live
+# in the image, not on the host), so CI runs the exact targets a contributor
+# runs. See CONTRIBUTING.md.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'website/**'
+  pull_request:
+    paths-ignore:
+      - 'website/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    name: Lint and test (PostgreSQL 17)
+    runs-on: ubuntu-latest
+    # Building the image (pgrx toolchain + PG17) and running the pgrx suite is
+    # not fast; the ceiling is generous rather than tight.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cache the Docker build layers across runs. Keyed on the files that change
+      # what the image contains, so a run that only touches src/ reuses the whole
+      # toolchain layer and just recompiles.
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/.docker-cache
+          key: docker-${{ hashFiles('Dockerfile', 'Cargo.lock', 'Cargo.toml') }}
+          restore-keys: docker-
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: test
+          tags: pgdmn-test
+          load: true
+          cache-from: type=local,src=/tmp/.docker-cache
+          cache-to: type=local,dest=/tmp/.docker-cache-new,mode=max
+
+      # actions/cache cannot update a key it restored, so buildx writes to a new
+      # directory and we swap it in for the save step.
+      - name: Rotate the build cache
+        run: |
+          rm -rf /tmp/.docker-cache
+          mv /tmp/.docker-cache-new /tmp/.docker-cache
+
+      # Run the commands directly rather than through `make lint` / `make test`:
+      # those targets depend on `test-image`, which would rebuild the image
+      # instead of using the cached one built above.
+      #
+      # CARGO_TARGET_DIR points at the pgdmn user's home, not the mounted repo.
+      # On a Linux runner the bind mount keeps the host's ownership (the runner
+      # uid), so the container's pgdmn user cannot create `/pgdmn/target` — cargo
+      # only needs to *read* the source from the mount and *write* artifacts
+      # somewhere it owns. Docker Desktop hides this locally by mapping uids.
+      - name: Lint (clippy + rustfmt)
+        run: |
+          docker run --rm -e USER=pgdmn -e CARGO_TARGET_DIR=/home/pgdmn/target \
+            -v "$PWD":/pgdmn -w /pgdmn pgdmn-test \
+            sh -c 'cargo clippy --all-targets -- -D warnings && cargo fmt -- --check'
+
+      - name: Test (pgrx suite against PG17)
+        run: |
+          docker run --rm -e USER=pgdmn -e CARGO_TARGET_DIR=/home/pgdmn/target \
+            -v "$PWD":/pgdmn -w /pgdmn pgdmn-test \
+            cargo pgrx test pg17
