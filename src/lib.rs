@@ -272,6 +272,8 @@ mod tests {
             .expect("SPI failed");
         let f = result.unwrap().0.as_f64().expect("expected f64 result");
         assert!((f - 2f64.powi(63)).abs() < 1.0, "unexpected value: {f}");
+    }
+
     // dsntk 0.3 behavior pins: these lock in SQL-visible upstream behavior that
     // changed in the 0.2 -> 0.3 bump, so the next dsntk upgrade cannot shift it
     // silently. If one of these fails after a dependency bump, treat it as a
@@ -422,7 +424,7 @@ mod tests {
         error = "business knowledge model 'CosFn' uses an external Java function, which pgdmn does not support"
     )]
     fn test_dmn_load_rejects_java_bkm() {
-        const JAVA_BKM_DMN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+        const JAVA_BKM_DMN: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
              id="java_bkm_model"
              name="JavaBkmModel"
@@ -443,7 +445,7 @@ mod tests {
             </context>
         </encapsulatedLogic>
     </businessKnowledgeModel>
-</definitions>"##;
+</definitions>"#;
         Spi::get_one::<String>(&format!("SELECT dmn_name(dmn_load('{JAVA_BKM_DMN}'))"))
             .expect("SPI failed");
     }
@@ -452,7 +454,7 @@ mod tests {
         error = "decision 'UsesJava' uses an external Java function, which pgdmn does not support"
     )]
     fn test_dmn_load_rejects_java_function_boxed_in_decision() {
-        const JAVA_BOXED_DMN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+        const JAVA_BOXED_DMN: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
              id="java_boxed_model"
              name="JavaBoxedModel"
@@ -481,7 +483,7 @@ mod tests {
             </contextEntry>
         </context>
     </decision>
-</definitions>"##;
+</definitions>"#;
         Spi::get_one::<String>(&format!("SELECT dmn_name(dmn_load('{JAVA_BOXED_DMN}'))"))
             .expect("SPI failed");
     }

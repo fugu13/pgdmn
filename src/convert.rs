@@ -22,7 +22,6 @@ pub fn feel_to_json(value: &Value) -> serde_json::Value {
     crate::convert_core::try_feel_to_json(value).unwrap_or_else(|e| pgrx::error!("{}", e))
 }
 
-
 /// Convert a single PG datum from a PgHeapTuple to a FEEL Value, dispatching on the type OID.
 #[expect(clippy::too_many_lines)] // OID dispatch match; one arm per supported PG type
 fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
