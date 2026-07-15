@@ -642,6 +642,9 @@ impl<'b> EvaluatorBuilder<'b> {
       Variable((Name, Name)),
     }
     let rhe = self.build(rhs);
+    // PGDMN: H13 — bind `partial` only when the body may reference it; binding it
+    // copies the accumulated results into the scope on every iteration (quadratic).
+    let bind_partial = ast_references_name(rhs, &"partial".into());
     let mut evaluators = vec![];
     let mut binding_variables = HashSet::new();
     if let AstNode::IterationContexts(items) = lhs {
@@ -681,6 +684,7 @@ impl<'b> EvaluatorBuilder<'b> {
     }
     Box::new(move |scope: &FeelScope| {
       let mut for_expression_evaluator = ForExpressionEvaluator::new();
+      for_expression_evaluator.set_bind_partial(bind_partial); // PGDMN: H13
       for iterator_type in &evaluators {
         match iterator_type {
           IteratorType::Interval((name, interval_start_evaluator, interval_end_evaluator)) => {
@@ -2738,6 +2742,89 @@ fn eval_external_function_definition(scope: &FeelScope, arguments: &[Value], bod
   };
   // PGDMN: H6 — owned coercion, conformant results are returned without cloning
   result.coerced_owned(&result_type)
+}
+
+/// Returns `true` when the AST may reference the specified name.
+/// Conservative: qualified-name segments and path tails count as references.
+// PGDMN: H13 — detects whether a for-expression body references `partial`.
+// Also used by the decision-table evaluator to classify `?`-referencing
+// input entries (exported in lib.rs). Exhaustive match, so a new AST node
+// variant fails the build instead of being silently classified.
+pub fn ast_references_name(node: &AstNode, name: &Name) -> bool {
+  match node {
+    AstNode::Name(n) | AstNode::QualifiedNameSegment(n) => n == name,
+    AstNode::At(_)
+    | AstNode::Boolean(_)
+    | AstNode::ContextEntryKey(_)
+    | AstNode::ContextTypeEntryKey(_)
+    | AstNode::FeelType(_)
+    | AstNode::Irrelevant
+    | AstNode::Null
+    | AstNode::Numeric(_, _, _, _)
+    | AstNode::ParameterName(_)
+    | AstNode::String(_) => false,
+    AstNode::EvaluatedExpression(lhs)
+    | AstNode::FunctionBody(lhs, _)
+    | AstNode::IntervalEnd(lhs, _)
+    | AstNode::IntervalStart(lhs, _)
+    | AstNode::ListType(lhs)
+    | AstNode::Neg(lhs)
+    | AstNode::RangeType(lhs)
+    | AstNode::Satisfies(lhs)
+    | AstNode::UnaryEq(lhs)
+    | AstNode::UnaryGe(lhs)
+    | AstNode::UnaryGt(lhs)
+    | AstNode::UnaryLe(lhs)
+    | AstNode::UnaryLt(lhs)
+    | AstNode::UnaryNe(lhs) => ast_references_name(lhs, name),
+    AstNode::Add(lhs, rhs)
+    | AstNode::And(lhs, rhs)
+    | AstNode::ContextEntry(lhs, rhs)
+    | AstNode::ContextTypeEntry(lhs, rhs)
+    | AstNode::Div(lhs, rhs)
+    | AstNode::Eq(lhs, rhs)
+    | AstNode::Every(lhs, rhs)
+    | AstNode::Exp(lhs, rhs)
+    | AstNode::Filter(lhs, rhs)
+    | AstNode::For(lhs, rhs)
+    | AstNode::FormalParameter(lhs, rhs)
+    | AstNode::FunctionDefinition(lhs, rhs)
+    | AstNode::FunctionInvocation(lhs, rhs)
+    | AstNode::FunctionType(lhs, rhs)
+    | AstNode::Ge(lhs, rhs)
+    | AstNode::Gt(lhs, rhs)
+    | AstNode::In(lhs, rhs)
+    | AstNode::InstanceOf(lhs, rhs)
+    | AstNode::IterationContextSingle(lhs, rhs)
+    | AstNode::Le(lhs, rhs)
+    | AstNode::Lt(lhs, rhs)
+    | AstNode::Mul(lhs, rhs)
+    | AstNode::NamedParameter(lhs, rhs)
+    | AstNode::Nq(lhs, rhs)
+    | AstNode::Or(lhs, rhs)
+    | AstNode::Out(lhs, rhs)
+    | AstNode::Path(lhs, rhs)
+    | AstNode::QuantifiedContext(lhs, rhs)
+    | AstNode::Range(lhs, rhs)
+    | AstNode::Some(lhs, rhs)
+    | AstNode::Sub(lhs, rhs) => ast_references_name(lhs, name) || ast_references_name(rhs, name),
+    AstNode::Between(lhs, mhs, rhs) | AstNode::If(lhs, mhs, rhs) | AstNode::IterationContextInterval(lhs, mhs, rhs) => {
+      ast_references_name(lhs, name) || ast_references_name(mhs, name) || ast_references_name(rhs, name)
+    }
+    AstNode::CommaList(items)
+    | AstNode::Context(items)
+    | AstNode::ContextType(items)
+    | AstNode::ExpressionList(items)
+    | AstNode::FormalParameters(items)
+    | AstNode::IterationContexts(items)
+    | AstNode::List(items)
+    | AstNode::NamedParameters(items)
+    | AstNode::NegatedList(items)
+    | AstNode::ParameterTypes(items)
+    | AstNode::PositionalParameters(items)
+    | AstNode::QualifiedName(items)
+    | AstNode::QuantifiedContexts(items) => items.iter().any(|item| ast_references_name(item, name)),
+  }
 }
 
 /// Returns `true` when a filter expression may evaluate to a number (numeric index).
