@@ -21,6 +21,8 @@ Table: Handling — hit policy: F (first)
 | 3 | — | `"personal"` | retain 24 months |
 | 4 | — | — | standard handling |
 
+This is a standard DMN file — [open it in dmn-js →](/dmn-viewer.html?model=compliance.dmn), or in any DMN tool.
+
 Read top to bottom, because the hit policy is *first* and the order carries meaning.
 
 Special-category data is caught by the first rule **regardless of region** — a stricter obligation wins before anything more specific gets a look in. Only then does region matter, and only for personal data: EU personal data has to stay in the EU, personal data elsewhere merely has a retention clock. Everything else is ordinary.

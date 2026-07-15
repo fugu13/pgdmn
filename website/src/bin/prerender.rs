@@ -23,6 +23,9 @@ const STYLESHEET: &str = "style/main.scss";
 /// redirects the apex (pgdmn.com) here. Pages are linked with absolute paths,
 /// so the site must be served from a domain root — not a `github.io` subpath.
 const DOMAIN: &str = "www.pgdmn.com";
+/// The one page that keeps its scripts: an interactive DMN viewer, copied
+/// verbatim from `public/`. See `strip_scripts`.
+const DMN_VIEWER: &str = "dmn-viewer.html";
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -122,7 +125,10 @@ fn clean_urls(directory: &Path) -> Result<(), BoxError> {
         let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
             continue;
         };
-        if stem == "index" || (at_root && stem == routes::NOT_FOUND) {
+        let is_viewer = path.file_name().is_some_and(|name| name == DMN_VIEWER);
+        // index.html and 404.html keep their names by convention; the DMN viewer
+        // keeps its `.html` so it stays a single file with a stable URL.
+        if stem == "index" || (at_root && (stem == routes::NOT_FOUND || is_viewer)) {
             continue;
         }
 
@@ -139,6 +145,10 @@ fn clean_urls(directory: &Path) -> Result<(), BoxError> {
 /// be a property of the output rather than an aspiration.
 ///
 /// A page that genuinely needs a script would have to reverse WEB-001 first.
+///
+/// The one exception is [`DMN_VIEWER`]: a deliberate, isolated interactive page
+/// that loads dmn-js to show a model in standard DMN tooling. It is not a content
+/// page, and it keeps its scripts.
 fn strip_scripts(directory: &Path) -> Result<(), BoxError> {
     for entry in fs::read_dir(directory)? {
         let path = entry?.path();
@@ -146,10 +156,11 @@ fn strip_scripts(directory: &Path) -> Result<(), BoxError> {
             strip_scripts(&path)?;
             continue;
         }
-        if path
+        let is_html = path
             .extension()
-            .is_some_and(|extension| extension == "html")
-        {
+            .is_some_and(|extension| extension == "html");
+        let is_viewer = path.file_name().is_some_and(|name| name == DMN_VIEWER);
+        if is_html && !is_viewer {
             let html = fs::read_to_string(&path)?;
             fs::write(&path, without_script_elements(&html))?;
         }

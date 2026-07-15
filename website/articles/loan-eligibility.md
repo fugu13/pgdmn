@@ -23,6 +23,8 @@ Table: Eligibility — hit policy: F (first)
 | 3   | `>= 18` | `>= 50000` | `false`  | Approved                 |
 | 4   | `>= 18` | `< 50000`  | `false`  | Denied: low income       |
 
+These rules live in a standard DMN file — [open it in dmn-js →](/dmn-viewer.html?model=loan-eligibility.dmn), or in any DMN tool.
+
 The dash is a wildcard: the first rule does not care what you earn, and the second does not care how old you are or how much you make.
 
 The hit policy is **first**, which means the rules are tried top to bottom and the first one that matches wins. DMN supports several different hit policies, suitable for different decision scenarios.

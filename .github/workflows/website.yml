@@ -42,16 +42,20 @@ jobs:
 
       - run: make website-build
 
-      # The site ships no JavaScript (WEB-001). Leptos emits inline hydration
-      # bookkeeping that the prerenderer strips; if a change ever reintroduces a
-      # script, fail here rather than quietly serving it.
-      - name: Assert the output ships no scripts or wasm
+      # The content pages ship no JavaScript (WEB-001). Leptos emits inline
+      # hydration bookkeeping that the prerenderer strips; if a change ever
+      # reintroduces a script, fail here rather than quietly serving it. The one
+      # allowed exception is dmn-viewer.html — a deliberate, isolated interactive
+      # page that loads dmn-js to render a model in standard DMN tooling.
+      - name: Assert the content pages ship no scripts or wasm
         run: |
-          if grep -rlE '<script|\.wasm' website/dist/; then
+          offenders=$(grep -rlE '<script|\.wasm' website/dist/ | grep -v '/dmn-viewer\.html$' || true)
+          if [ -n "$offenders" ]; then
             echo "::error::prerendered output contains scripts or wasm; see WEB-001"
+            echo "$offenders"
             exit 1
           fi
-          echo "output is script-free"
+          echo "content pages are script-free (dmn-viewer.html excepted)"
 
       - name: Assert the deployable artifact is complete
         run: |

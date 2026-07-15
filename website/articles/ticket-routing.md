@@ -26,6 +26,8 @@ Table: Queue — hit policy: F (first)
 | 4 | — | `"enterprise"` | tier-2 |
 | 5 | — | — | tier-1 |
 
+This is a standard DMN file — [open it in dmn-js →](/dmn-viewer.html?model=ticket-routing.dmn), or in any DMN tool.
+
 Read it as a policy and it is legible to someone who does not write SQL: wake somebody for anything critical; wake somebody for an enterprise customer with an urgent problem; everything else queues by severity, and enterprise jumps the line. That is a conversation you can have with the person who owns the support budget.
 
 ## Set up

@@ -23,6 +23,8 @@ Table: The standard pricing model
 
 You never tell pgdmn about that dependency. You ask for `Total Price`, and it works backwards: to answer that, it needs `Tax Amount`; to answer that, it needs the two inputs you supplied. The order of evaluation falls out of the model.
 
+Both models are standard DMN files — open them in dmn-js, or any DMN tool: [standard →](/dmn-viewer.html?model=order-pricing.dmn), [promotional →](/dmn-viewer.html?model=order-pricing-promo.dmn).
+
 ## Set up
 
 Load both models — [`order-pricing.dmn`](/examples/order-pricing.dmn) and [`order-pricing-promo.dmn`](/examples/order-pricing-promo.dmn) — into the `models` table under different names, and load the orders from [`orders.csv`](/examples/orders.csv). Run this from the directory the three files are in; you will need pgdmn installed first (see [Install](/docs/#install)).
