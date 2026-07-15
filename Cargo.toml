@@ -73,7 +73,7 @@ dsntk-feel-temporal = "0.3"
 rapidhash = "1"
 
 [dev-dependencies]
-pgrx-tests = "0.16"
+pgrx-tests = "0.18"
 proptest = "1"
 
 # dsntk is vendored (see vendor/README.md) so the DMN/FEEL engine can be
