@@ -7,35 +7,22 @@ use crate::strings::ToFeelString;
 use crate::value_null;
 use crate::values::Value;
 use dsntk_common::{DsntkError, Jsonify, Result};
-use std::collections::btree_map::Iter;
 use std::collections::BTreeMap;
+use std::collections::btree_map::Iter;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::Arc;
 
 /// Type alias for context entries.
 type FeelContextEntries = BTreeMap<Name, Value>;
 
 /// The FEEL context.
-// PGDMN: H3 — the entries are shared behind an Arc with copy-on-write, so cloning
-// a context (every scope lookup and every Value::Context clone) is a refcount
-// bump instead of a deep copy of all entries. All mutating methods go through
-// `entries_mut`, which clones the map only when it is actually shared.
-#[derive(Debug, Clone, Default)]
-pub struct FeelContext(Arc<FeelContextEntries>);
-
-impl PartialEq for FeelContext {
-  /// Contexts sharing the same entries are equal without deep comparison.
-  // PGDMN: H3 — pointer-equality fast path, semantics otherwise unchanged.
-  fn eq(&self, other: &Self) -> bool {
-    Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
-  }
-}
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct FeelContext(FeelContextEntries);
 
 impl Deref for FeelContext {
   type Target = FeelContextEntries;
   fn deref(&self) -> &Self::Target {
-    self.0.as_ref()
+    &self.0
   }
 }
 
@@ -117,12 +104,6 @@ impl FeelContext {
     Self::default()
   }
 
-  /// Returns a mutable reference to the entries, cloning them first when shared.
-  // PGDMN: H3 — single copy-on-write point for all mutating methods.
-  fn entries_mut(&mut self) -> &mut FeelContextEntries {
-    Arc::make_mut(&mut self.0)
-  }
-
   /// Returns `true` if context contains an entry specified by **name**.
   pub fn contains_entry(&self, name: &Name) -> bool {
     self.0.contains_key(name)
@@ -140,7 +121,7 @@ impl FeelContext {
 
   /// Sets a value for specified entry name.
   pub fn set_entry(&mut self, name: &Name, value: Value) {
-    self.entries_mut().insert(name.clone(), value);
+    self.0.insert(name.clone(), value);
   }
 
   // PGDMN: by-value variant of set_entry that takes ownership of the name,
@@ -148,17 +129,17 @@ impl FeelContext {
   // kept untouched for compatibility.
   /// Sets a value for specified entry name, taking ownership of the name.
   pub fn insert(&mut self, name: Name, value: Value) {
-    self.entries_mut().insert(name, value);
+    self.0.insert(name, value);
   }
 
   /// Removes a value of an entry with specified name.
   pub fn remove_entry(&mut self, name: &Name) -> Option<Value> {
-    self.entries_mut().remove(name)
+    self.0.remove(name)
   }
 
   /// Sets a null value for specified entry.
   pub fn set_null(&mut self, name: Name) {
-    self.entries_mut().insert(name, value_null!());
+    self.0.insert(name, value_null!());
   }
 
   /// Returns a list of all [FeelContext] entries.
@@ -167,7 +148,7 @@ impl FeelContext {
   }
 
   /// Returns an iterator over all entries in [FeelContext].
-  pub fn iter(&self) -> Iter<Name, Value> {
+  pub fn iter(&self) -> Iter<'_, Name, Value> {
     self.0.iter()
   }
 
@@ -192,26 +173,22 @@ impl FeelContext {
   }
 
   pub fn zip(&mut self, other: &FeelContext) {
-    if other.0.is_empty() {
-      return;
-    }
-    let entries = self.entries_mut();
-    for (name, value) in other.0.iter() {
-      entries.insert(name.clone(), value.clone());
+    for (name, value) in &other.0 {
+      self.0.insert(name.clone(), value.clone());
     }
   }
 
   pub fn overwrite(&mut self, other: &FeelContext) {
-    for (name, value) in other.0.iter() {
+    for (name, value) in &other.0 {
       if self.0.contains_key(name) {
-        self.entries_mut().insert(name.clone(), value.clone());
+        self.0.insert(name.clone(), value.clone());
       }
     }
   }
 
   //TODO refactor the name, this operation is not moving, it is like prefixing
   pub fn move_entry(&mut self, name: Name, parent: Name) {
-    if let Some(value) = self.entries_mut().remove(&name) {
+    if let Some(value) = self.0.remove(&name) {
       self.create_entries(&[parent, name], value);
     }
   }
@@ -252,21 +229,20 @@ impl FeelContext {
     }
     let key = names[0].clone();
     let tail = &names[1..];
-    let entries = self.entries_mut();
     // if tail is empty, then insert the value under the key in current context and return
     if tail.is_empty() {
-      entries.insert(key, value);
+      self.0.insert(key, value);
       return;
     }
     // if there is a context under the key, then insert value to this context and return
-    if let Some(Value::Context(ctx)) = entries.get_mut(&key) {
+    if let Some(Value::Context(ctx)) = self.0.get_mut(&key) {
       ctx.create_entries(tail, value);
       return;
     }
     // insert a value from tail to newly created context
     let mut ctx = FeelContext::default();
     ctx.create_entries(tail, value);
-    entries.insert(key, ctx.into());
+    self.0.insert(key, ctx.into());
   }
 
   /// ???
@@ -277,14 +253,13 @@ impl FeelContext {
     }
     let key = names[0].clone();
     let tail = &names[1..];
-    let entries = self.entries_mut();
     // if tail is empty, then insert the value under the key in current context and return
     if tail.is_empty() {
-      entries.insert(key, value);
+      self.0.insert(key, value);
       return Ok(());
     }
     // if there is a context under the key, then insert value to this context and return
-    match entries.get_mut(&key) {
+    match self.0.get_mut(&key) {
       Some(Value::Context(ctx)) => {
         ctx.apply_entries(tail, value)?;
         return Ok(());
@@ -297,7 +272,7 @@ impl FeelContext {
     // insert a value from tail to new created context
     let mut ctx = FeelContext::default();
     ctx.apply_entries(tail, value)?;
-    entries.insert(key, ctx.into());
+    self.0.insert(key, ctx.into());
     Ok(())
   }
 

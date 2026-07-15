@@ -45,6 +45,7 @@ impl DmnModel {
     pub fn from_xml(xml: &str) -> Result<Self, String> {
         let definitions =
             dsntk_model::parse(xml).map_err(|e| format!("failed to parse DMN XML: {e}"))?;
+        crate::guard::reject_external_definitions(&definitions)?;
 
         let namespace = definitions.namespace().to_string();
         let name = definitions.name().to_string();

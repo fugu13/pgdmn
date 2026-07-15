@@ -1,9 +1,12 @@
+use super::*;
+
 mod addition;
 mod arithmetic_negation;
 mod between;
 mod boxed_expression;
 mod comment;
 mod comparison;
+mod comparison_in;
 mod conjunction;
 mod context;
 mod date;
@@ -29,6 +32,7 @@ mod miscellaneous;
 mod multiplication;
 mod name;
 mod path_expression;
+mod properties;
 mod range;
 mod simple_positive_unary_test;
 mod some_expression;

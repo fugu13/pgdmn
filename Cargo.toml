@@ -16,6 +16,7 @@ members = [
     "vendor/dsntk-macros",
     "vendor/dsntk-model",
     "vendor/dsntk-model-evaluator",
+    "vendor/dsntk-recognizer",
 ]
 exclude = ["profiling"]
 
@@ -62,12 +63,12 @@ pgrx = "0.16"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_cbor = "0.11"
-dsntk-model = "0.2"
-dsntk-feel = "0.2"
-dsntk-feel-parser = "0.2"
-dsntk-feel-evaluator = "0.2"
-dsntk-model-evaluator = "0.2"
-dsntk-feel-temporal = "0.2"
+dsntk-model = "0.3"
+dsntk-feel = "0.3"
+dsntk-feel-parser = "0.3"
+dsntk-feel-evaluator = "0.3"
+dsntk-model-evaluator = "0.3"
+dsntk-feel-temporal = "0.3"
 rapidhash = "1"
 
 [dev-dependencies]
@@ -75,8 +76,8 @@ pgrx-tests = "0.16"
 proptest = "1"
 
 # dsntk is vendored (see vendor/README.md) so the DMN/FEEL engine can be
-# profiled and optimized in-tree. Sources are the published crates.io 0.2.0
-# tarballs, checksum-verified against Cargo.lock at vendoring time.
+# profiled, optimized, and dependency-sliced in-tree. Sources are the published
+# crates.io 0.3.0 tarballs, checksum-verified at vendoring time.
 [patch.crates-io]
 dsntk-common = { path = "vendor/dsntk-common" }
 dsntk-examples = { path = "vendor/dsntk-examples" }
@@ -90,6 +91,7 @@ dsntk-feel-temporal = { path = "vendor/dsntk-feel-temporal" }
 dsntk-macros = { path = "vendor/dsntk-macros" }
 dsntk-model = { path = "vendor/dsntk-model" }
 dsntk-model-evaluator = { path = "vendor/dsntk-model-evaluator" }
+dsntk-recognizer = { path = "vendor/dsntk-recognizer" }
 
 [profile.dev]
 panic = "unwind"

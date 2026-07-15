@@ -10,9 +10,9 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
+edition = "2024"
 name = "dsntk-feel-temporal"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Dariusz Depta <depta@engos.de>"]
 build = false
 autolib = false
@@ -20,7 +20,8 @@ autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "dsntk | DecisionToolkit | FEEL temporal"
+description = "ÐecisionToolkit | FEEL temporal"
+homepage = "https://decision-toolkit.org"
 documentation = "https://docs.rs/dsntk-feel-temporal"
 readme = "README.md"
 keywords = [
@@ -36,7 +37,8 @@ categories = [
     "parsing",
 ]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/DecisionToolkit/dsntk-rs.git"
+repository = "https://github.com/DecisionToolkit/dsntk.git"
+resolver = "2"
 
 [lib]
 name = "dsntk_feel_temporal"
@@ -47,22 +49,19 @@ name = "mod"
 path = "tests/mod.rs"
 
 [dependencies.chrono]
-version = "0.4.40"
+version = "0.4.44"
 
 [dependencies.chrono-tz]
-version = "0.10.1"
+version = "0.10.4"
 
 [dependencies.dsntk-common]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-feel-number]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-macros]
-version = "0.2.0"
-
-[dependencies.once_cell]
-version = "1.21.1"
+version = "0.3.0"
 
 [dependencies.regex]
-version = "1.11.1"
+version = "1.12.3"

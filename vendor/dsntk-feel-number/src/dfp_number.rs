@@ -33,31 +33,6 @@ macro_rules! round {
   };
 }
 
-// PGDMN: H9 — dfp_number_sys::bid128_to_string zeroes a 1 KiB buffer and makes
-// two allocations per call, but the textual form of a BID128 value is bounded
-// ASCII (sign + 34 digits + 'E' + sign + 4-digit exponent, well under 64 bytes).
-// Bind the underlying C function directly and format via a small stack buffer.
-extern "C" {
-  fn __bid128_to_string(s: *mut std::os::raw::c_char, x: BID128, flags: *mut std::os::raw::c_uint);
-}
-
-/// Writes the Intel-library string form of `x` into `buf` and returns it as `&str`.
-// PGDMN: H9
-fn bid128_to_str(x: BID128, buf: &mut [u8; 64]) -> &str {
-  unsafe {
-    __bid128_to_string(buf.as_mut_ptr().cast(), x, flags!());
-  }
-  let len = buf.iter().position(|b| *b == 0).unwrap_or(buf.len());
-  // the output is always ASCII (digits, signs, 'E', or Inf/NaN markers)
-  std::str::from_utf8(&buf[..len]).unwrap_or("")
-}
-
-/// Appends `n` zero digits to the string.
-// PGDMN: H9
-fn push_zeros(s: &mut String, n: usize) {
-  s.extend(std::iter::repeat('0').take(n));
-}
-
 /// FEEL number.
 #[derive(Copy, Clone)]
 pub struct FeelNumber(BID128, bool);
@@ -108,11 +83,7 @@ impl FeelNumber {
     Ok(Self(
       if scale == 0 {
         let rounded = bid128_round_integral_positive(self.0, flags!());
-        if bid128_is_zero(rounded) {
-          BID128_ZERO
-        } else {
-          rounded
-        }
+        if bid128_is_zero(rounded) { BID128_ZERO } else { rounded }
       } else {
         self.validate_scale(scale)?;
         self.unscale(bid128_round_integral_positive(bid128_scalbn(self.0, scale), flags!()), scale)
@@ -127,11 +98,7 @@ impl FeelNumber {
 
   pub fn exp(&self) -> Option<Self> {
     let n = bid128_exp(self.0, round!(), flags!());
-    if bid128_is_finite(n) {
-      Some(Self(n, true))
-    } else {
-      None
-    }
+    if bid128_is_finite(n) { Some(Self(n, true)) } else { None }
   }
 
   /// Returns a nearest integer less or equal to this [FeelNumber].
@@ -173,11 +140,7 @@ impl FeelNumber {
 
   pub fn ln(&self) -> Option<Self> {
     let n = bid128_log(self.0, round!(), flags!());
-    if bid128_is_finite(n) {
-      Some(Self(n, true))
-    } else {
-      None
-    }
+    if bid128_is_finite(n) { Some(Self(n, true)) } else { None }
   }
 
   pub fn odd(&self) -> bool {
@@ -190,11 +153,7 @@ impl FeelNumber {
 
   pub fn pow(&self, rhs: &FeelNumber) -> Option<Self> {
     let n = bid128_pow(self.0, rhs.0, round!(), flags!());
-    if bid128_is_finite(n) {
-      Some(Self(n, true))
-    } else {
-      None
-    }
+    if bid128_is_finite(n) { Some(Self(n, true)) } else { None }
   }
 
   pub fn round(&self, rhs: &FeelNumber) -> Self {
@@ -226,11 +185,7 @@ impl FeelNumber {
     };
     Ok(Self(
       if scale == 0 {
-        if bid128_is_signed(self.0) {
-          negative(self.0)
-        } else {
-          positive(self.0)
-        }
+        if bid128_is_signed(self.0) { negative(self.0) } else { positive(self.0) }
       } else {
         self.validate_scale(scale)?;
         let scaled = bid128_scalbn(self.0, scale);
@@ -277,20 +232,12 @@ impl FeelNumber {
 
   pub fn sqrt(&self) -> Option<Self> {
     let n = bid128_sqrt(self.0, round!(), flags!());
-    if bid128_is_finite(n) {
-      Some(Self(n, true))
-    } else {
-      None
-    }
+    if bid128_is_finite(n) { Some(Self(n, true)) } else { None }
   }
 
   pub fn square(&self) -> Option<Self> {
     let n = bid128_pow(self.0, BID128_TWO, round!(), flags!());
-    if bid128_is_finite(n) {
-      Some(Self(n, true))
-    } else {
-      None
-    }
+    if bid128_is_finite(n) { Some(Self(n, true)) } else { None }
   }
 
   pub fn trunc(&self) -> Self {
@@ -480,20 +427,14 @@ impl Neg for FeelNumber {
 
 impl Debug for FeelNumber {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    // PGDMN: H9 — stack buffer instead of allocating conversion
-    let mut buf = [0_u8; 64];
-    f.write_str(bid128_to_str(self.0, &mut buf))
+    write!(f, "{}", bid128_to_string(self.0, flags!()))
   }
 }
 
 impl Display for FeelNumber {
   /// Converts [FeelNumber] to human readable string.
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    // PGDMN: H9 — the raw digits come from a stack buffer, and the repeated
-    // `"0".repeat(..)` allocations are replaced with in-place zero pushes;
-    // the produced text is identical to the previous implementation.
-    let mut buf = [0_u8; 64];
-    let s = bid128_to_str(self.0, &mut buf);
+    let s = bid128_to_string(self.0, flags!());
     let negative = s.starts_with('-');
     let mut split = s[1..].split('E');
     let (sb, sa) = split.next().zip(split.next()).unwrap(); // unwrap is ok, there is always E present
@@ -503,10 +444,12 @@ impl Display for FeelNumber {
       let digit_count = sb.len();
       if digit_count <= decimal_points {
         let before = "0".to_string();
-        let digits = if self.1 { sb.trim_end_matches('0') } else { sb };
-        let mut after = String::with_capacity(decimal_points - digit_count + digits.len());
-        push_zeros(&mut after, decimal_points - digit_count);
-        after.push_str(digits);
+        let mut after = "0".repeat(decimal_points - digit_count);
+        if self.1 {
+          after.push_str(sb.trim_end_matches('0'));
+        } else {
+          after.push_str(sb);
+        }
         (before, after)
       } else {
         let before = sb[..digit_count - decimal_points].to_string();
@@ -518,17 +461,16 @@ impl Display for FeelNumber {
         (before, after)
       }
     } else {
-      let mut before = String::with_capacity(sb.len() + decimal_points);
-      before.push_str(sb);
-      push_zeros(&mut before, decimal_points);
-      (before, String::new())
+      let mut before = sb.to_string();
+      before.push_str(&"0".repeat(decimal_points));
+      let after = "".to_string();
+      (before, after)
     };
     if let Some(precision) = f.precision() {
       if after.len() < precision {
-        let missing = precision - after.len();
-        push_zeros(&mut after, missing);
+        after.push_str(&"0".repeat(precision - after.len()));
       } else {
-        after.truncate(precision);
+        after = after[0..precision].to_string();
       }
     }
     if !after.is_empty() {
@@ -550,11 +492,7 @@ impl FromStr for FeelNumber {
   type Err = DsntkError;
   fn from_str(s: &str) -> Result<Self, Self::Err> {
     let n = bid128_from_string(s, round!(), flags!());
-    if bid128_is_finite(n) {
-      Ok(Self(n, false))
-    } else {
-      Err(err_invalid_number_literal(s))
-    }
+    if bid128_is_finite(n) { Ok(Self(n, false)) } else { Err(err_invalid_number_literal(s)) }
   }
 }
 

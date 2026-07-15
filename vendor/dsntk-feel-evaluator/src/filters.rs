@@ -2,11 +2,7 @@
 
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::{Value, Values};
-use dsntk_feel::{value_null, Evaluator, FeelScope, Name};
-use once_cell::sync::Lazy;
-
-// PGDMN: H20 — the `item` binding name is fixed; avoid re-allocating it on every filter call.
-static NAME_ITEM: Lazy<Name> = Lazy::new(|| "item".into());
+use dsntk_feel::{Evaluator, FeelScope, Name, value_null};
 
 pub struct FilterExpressionEvaluator {}
 
@@ -23,34 +19,21 @@ impl FilterExpressionEvaluator {
   }
 
   pub fn evaluate(&self, scope: &FeelScope, value: Value, evaluator: &Evaluator) -> Value {
-    self.evaluate_with_hint(scope, value, evaluator, true)
-  }
-
-  /// Like [FilterExpressionEvaluator::evaluate], with a build-time hint whether the filter
-  /// expression may evaluate to a number (numeric index). When `may_yield_number` is `false`,
-  /// the extra probe evaluation that only detects numeric indexing is skipped.
-  // PGDMN: H20 — added hint variant; `evaluate` keeps the previous behavior.
-  pub fn evaluate_with_hint(&self, scope: &FeelScope, value: Value, evaluator: &Evaluator, may_yield_number: bool) -> Value {
-    let name_item: &Name = &NAME_ITEM;
+    let name_item: Name = "item".into();
     match value {
       Value::List(values) => {
         let mut filtered_values = vec![];
-        // PGDMN: H20 — reuse one scratch context across elements instead of building a fresh one per element
-        let mut special_context = FeelContext::default();
         for value in &values {
           let (added_local_context, has_item_entry) = if let Value::Context(local_context) = value {
             scope.push(local_context.clone());
-            if local_context.contains_entry(name_item) {
-              (true, true)
-            } else {
-              (true, false)
-            }
+            if local_context.contains_entry(&name_item) { (true, true) } else { (true, false) }
           } else {
             (false, false)
           };
           if !has_item_entry {
-            special_context.set_entry(name_item, value.clone());
-            scope.push(special_context.clone());
+            let mut special_context = FeelContext::default();
+            special_context.set_entry(&name_item, value.clone());
+            scope.push(special_context);
           }
           let rhv = evaluator(scope);
           match rhv {
@@ -64,11 +47,6 @@ impl FilterExpressionEvaluator {
           if added_local_context {
             scope.pop();
           }
-        }
-        // PGDMN: H20 — when the filter expression cannot evaluate to a number,
-        // skip the probe evaluation used only to detect numeric indexing.
-        if !may_yield_number {
-          return Value::List(filtered_values);
         }
         let rhv = evaluator(scope);
         match rhv {

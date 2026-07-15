@@ -510,14 +510,9 @@ fn build_bkm_evaluator_from_function_definition(
       let business_knowledge_model_evaluator = model_evaluator.business_knowledge_model_evaluator();
       let decision_service_evaluator = model_evaluator.decision_service_evaluator();
       knowledge_requirements.iter().for_each(|def_key| {
-        // PGDMN (H12): a key identifies either a business knowledge model or a decision
-        // service, never both - skip the decision service probe on a hit.
-        if business_knowledge_model_evaluator
-          .evaluate(def_key, global_context, input_data, model_evaluator, output_data)
-          .is_none()
-        {
-          decision_service_evaluator.evaluate(def_key, global_context, input_data, model_evaluator, output_data);
-        }
+        //TODO refactor: call either business knowledge model or decision service,  but not both!
+        business_knowledge_model_evaluator.evaluate(def_key, global_context, input_data, model_evaluator, output_data);
+        decision_service_evaluator.evaluate(def_key, global_context, input_data, model_evaluator, output_data);
       });
       output_data.set_entry(&output_variable_name, function_definition.clone());
       output_variable_name.clone()

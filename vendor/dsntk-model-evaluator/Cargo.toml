@@ -10,9 +10,9 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
+edition = "2024"
 name = "dsntk-model-evaluator"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Dariusz Depta <depta@engos.de>"]
 build = false
 autolib = false
@@ -20,7 +20,8 @@ autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "dsntk | DecisionToolkit | DMN model evaluator"
+description = "ÐecisionToolkit | DMN model evaluator"
+homepage = "https://decision-toolkit.org"
 documentation = "https://docs.rs/dsntk-model-evaluator"
 readme = "README.md"
 keywords = [
@@ -36,7 +37,8 @@ categories = [
     "parsing",
 ]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/DecisionToolkit/dsntk-rs.git"
+repository = "https://github.com/DecisionToolkit/dsntk.git"
+resolver = "2"
 
 [lib]
 name = "dsntk_model_evaluator"
@@ -47,37 +49,34 @@ name = "mod"
 path = "benches/mod.rs"
 
 [dependencies.dsntk-common]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-feel]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-feel-evaluator]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-feel-parser]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-feel-temporal]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-macros]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-model]
-version = "0.2.0"
+version = "0.3.0"
 
 [dev-dependencies.antex]
-version = "0.0.8"
+version = "0.2.1"
 
 [dev-dependencies.dsntk-examples]
-version = "0.2.0"
+version = "0.3.0"
 
 [dev-dependencies.dsntk-recognizer]
-version = "0.2.0"
-
-[dev-dependencies.once_cell]
-version = "1.21.1"
+version = "0.3.0"
 
 [dev-dependencies.walkdir]
 version = "2.5.0"

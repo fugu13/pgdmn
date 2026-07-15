@@ -11,8 +11,17 @@ use pgrx::pg_sys;
 
 // The pgrx-free JSON <-> FEEL conversions live in convert_core.rs (shared
 // with the profiling harness); re-exported here so callers keep one import
-// path for the whole conversion layer.
-pub use crate::convert_core::{feel_to_json, json_to_context};
+// path for the whole conversion layer. feel_to_json is the pgrx boundary
+// around the fallible core conversion: a non-finite number (BUG-004) becomes
+// a SQL error.
+pub use crate::convert_core::{feel_number_is_finite, json_to_context};
+
+/// Convert a dsntk FEEL Value to serde_json::Value, raising a SQL error when
+/// the value contains a non-finite number (BUG-004).
+pub fn feel_to_json(value: &Value) -> serde_json::Value {
+    crate::convert_core::try_feel_to_json(value).unwrap_or_else(|e| pgrx::error!("{}", e))
+}
+
 
 /// Convert a single PG datum from a PgHeapTuple to a FEEL Value, dispatching on the type OID.
 #[expect(clippy::too_many_lines)] // OID dispatch match; one arm per supported PG type

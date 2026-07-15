@@ -1,73 +1,66 @@
 use crate::bifs::core;
 use dsntk_feel::bif::Bif;
 use dsntk_feel::values::Value;
-use dsntk_feel::{value_null, FeelNumber, Name};
+use dsntk_feel::{FeelNumber, Name, value_null};
+use std::sync::LazyLock;
 
-use once_cell::sync::Lazy;
-
-static NAME_CONTEXT: Lazy<Name> = Lazy::new(|| Name::from("context"));
-static NAME_CONTEXTS: Lazy<Name> = Lazy::new(|| Name::from("contexts"));
-static NAME_DATE: Lazy<Name> = Lazy::new(|| Name::from("date"));
-static NAME_DAY: Lazy<Name> = Lazy::new(|| Name::from("day"));
-static NAME_DECIMAL_SEPARATOR: Lazy<Name> = Lazy::new(|| Name::new(&["decimal", "separator"]));
-static NAME_DELIMITER: Lazy<Name> = Lazy::new(|| Name::from("delimiter"));
-static NAME_DIVIDEND: Lazy<Name> = Lazy::new(|| Name::from("dividend"));
-static NAME_DIVISOR: Lazy<Name> = Lazy::new(|| Name::from("divisor"));
-static NAME_ENTRIES: Lazy<Name> = Lazy::new(|| Name::from("entries"));
-static NAME_FLAGS: Lazy<Name> = Lazy::new(|| Name::from("flags"));
-static NAME_FROM: Lazy<Name> = Lazy::new(|| Name::from("from"));
-static NAME_GROUPING_SEPARATOR: Lazy<Name> = Lazy::new(|| Name::new(&["grouping", "separator"]));
-static NAME_HOUR: Lazy<Name> = Lazy::new(|| Name::from("hour"));
-static NAME_INPUT: Lazy<Name> = Lazy::new(|| Name::from("input"));
-static NAME_KEY: Lazy<Name> = Lazy::new(|| Name::from("key"));
-static NAME_KEYS: Lazy<Name> = Lazy::new(|| Name::from("keys"));
-static NAME_LENGTH: Lazy<Name> = Lazy::new(|| Name::from("length"));
-static NAME_LIST: Lazy<Name> = Lazy::new(|| Name::from("list"));
-static NAME_MATCH: Lazy<Name> = Lazy::new(|| Name::from("match"));
-static NAME_MONTH: Lazy<Name> = Lazy::new(|| Name::from("month"));
-static NAME_MINUTE: Lazy<Name> = Lazy::new(|| Name::from("minute"));
-static NAME_N: Lazy<Name> = Lazy::new(|| Name::from("n"));
-static NAME_M: Lazy<Name> = Lazy::new(|| Name::from("m"));
-static NAME_NEGAND: Lazy<Name> = Lazy::new(|| Name::from("negand"));
-static NAME_NEW_ITEM: Lazy<Name> = Lazy::new(|| Name::from("newItem"));
-static NAME_NUMBER: Lazy<Name> = Lazy::new(|| Name::from("number"));
-static NAME_OFFSET: Lazy<Name> = Lazy::new(|| Name::from("offset"));
-static NAME_PATTERN: Lazy<Name> = Lazy::new(|| Name::from("pattern"));
-static NAME_POINT: Lazy<Name> = Lazy::new(|| Name::from("point"));
-static NAME_POINT_1: Lazy<Name> = Lazy::new(|| Name::from("point1"));
-static NAME_POINT_2: Lazy<Name> = Lazy::new(|| Name::from("point2"));
-static NAME_POSITION: Lazy<Name> = Lazy::new(|| Name::from("position"));
-static NAME_PRECEDES: Lazy<Name> = Lazy::new(|| Name::from("precedes"));
-static NAME_RANGE: Lazy<Name> = Lazy::new(|| Name::from("range"));
-static NAME_RANGE_1: Lazy<Name> = Lazy::new(|| Name::from("range1"));
-static NAME_RANGE_2: Lazy<Name> = Lazy::new(|| Name::from("range2"));
-static NAME_REPLACEMENT: Lazy<Name> = Lazy::new(|| Name::from("replacement"));
-static NAME_SCALE: Lazy<Name> = Lazy::new(|| Name::from("scale"));
-static NAME_SECOND: Lazy<Name> = Lazy::new(|| Name::from("second"));
-static NAME_START_POSITION: Lazy<Name> = Lazy::new(|| Name::new(&["start", "position"]));
-static NAME_STRING: Lazy<Name> = Lazy::new(|| Name::from("string"));
-static NAME_TIME: Lazy<Name> = Lazy::new(|| Name::from("time"));
-static NAME_TO: Lazy<Name> = Lazy::new(|| Name::from("to"));
-static NAME_VALUE: Lazy<Name> = Lazy::new(|| Name::from("value"));
-static NAME_VALUE_1: Lazy<Name> = Lazy::new(|| Name::from("value1"));
-static NAME_VALUE_2: Lazy<Name> = Lazy::new(|| Name::from("value2"));
-static NAME_YEAR: Lazy<Name> = Lazy::new(|| Name::from("year"));
+static NAME_CONTEXT: LazyLock<Name> = LazyLock::new(|| Name::from("context"));
+static NAME_CONTEXTS: LazyLock<Name> = LazyLock::new(|| Name::from("contexts"));
+static NAME_DATE: LazyLock<Name> = LazyLock::new(|| Name::from("date"));
+static NAME_DAY: LazyLock<Name> = LazyLock::new(|| Name::from("day"));
+static NAME_DECIMAL_SEPARATOR: LazyLock<Name> = LazyLock::new(|| Name::new(&["decimal", "separator"]));
+static NAME_DELIMITER: LazyLock<Name> = LazyLock::new(|| Name::from("delimiter"));
+static NAME_DIVIDEND: LazyLock<Name> = LazyLock::new(|| Name::from("dividend"));
+static NAME_DIVISOR: LazyLock<Name> = LazyLock::new(|| Name::from("divisor"));
+static NAME_ENTRIES: LazyLock<Name> = LazyLock::new(|| Name::from("entries"));
+static NAME_FLAGS: LazyLock<Name> = LazyLock::new(|| Name::from("flags"));
+static NAME_FROM: LazyLock<Name> = LazyLock::new(|| Name::from("from"));
+static NAME_GROUPING_SEPARATOR: LazyLock<Name> = LazyLock::new(|| Name::new(&["grouping", "separator"]));
+static NAME_HOUR: LazyLock<Name> = LazyLock::new(|| Name::from("hour"));
+static NAME_INPUT: LazyLock<Name> = LazyLock::new(|| Name::from("input"));
+static NAME_KEY: LazyLock<Name> = LazyLock::new(|| Name::from("key"));
+static NAME_KEYS: LazyLock<Name> = LazyLock::new(|| Name::from("keys"));
+static NAME_LENGTH: LazyLock<Name> = LazyLock::new(|| Name::from("length"));
+static NAME_LIST: LazyLock<Name> = LazyLock::new(|| Name::from("list"));
+static NAME_MATCH: LazyLock<Name> = LazyLock::new(|| Name::from("match"));
+static NAME_MONTH: LazyLock<Name> = LazyLock::new(|| Name::from("month"));
+static NAME_MINUTE: LazyLock<Name> = LazyLock::new(|| Name::from("minute"));
+static NAME_N: LazyLock<Name> = LazyLock::new(|| Name::from("n"));
+static NAME_M: LazyLock<Name> = LazyLock::new(|| Name::from("m"));
+static NAME_NEGAND: LazyLock<Name> = LazyLock::new(|| Name::from("negand"));
+static NAME_NEW_ITEM: LazyLock<Name> = LazyLock::new(|| Name::from("newItem"));
+static NAME_NUMBER: LazyLock<Name> = LazyLock::new(|| Name::from("number"));
+static NAME_OFFSET: LazyLock<Name> = LazyLock::new(|| Name::from("offset"));
+static NAME_PATTERN: LazyLock<Name> = LazyLock::new(|| Name::from("pattern"));
+static NAME_POINT: LazyLock<Name> = LazyLock::new(|| Name::from("point"));
+static NAME_POINT_1: LazyLock<Name> = LazyLock::new(|| Name::from("point1"));
+static NAME_POINT_2: LazyLock<Name> = LazyLock::new(|| Name::from("point2"));
+static NAME_POSITION: LazyLock<Name> = LazyLock::new(|| Name::from("position"));
+static NAME_PRECEDES: LazyLock<Name> = LazyLock::new(|| Name::from("precedes"));
+static NAME_RANGE: LazyLock<Name> = LazyLock::new(|| Name::from("range"));
+static NAME_RANGE_1: LazyLock<Name> = LazyLock::new(|| Name::from("range1"));
+static NAME_RANGE_2: LazyLock<Name> = LazyLock::new(|| Name::from("range2"));
+static NAME_REPLACEMENT: LazyLock<Name> = LazyLock::new(|| Name::from("replacement"));
+static NAME_SCALE: LazyLock<Name> = LazyLock::new(|| Name::from("scale"));
+static NAME_SECOND: LazyLock<Name> = LazyLock::new(|| Name::from("second"));
+static NAME_START_POSITION: LazyLock<Name> = LazyLock::new(|| Name::new(&["start", "position"]));
+static NAME_STRING: LazyLock<Name> = LazyLock::new(|| Name::from("string"));
+static NAME_TIME: LazyLock<Name> = LazyLock::new(|| Name::from("time"));
+static NAME_TO: LazyLock<Name> = LazyLock::new(|| Name::from("to"));
+static NAME_VALUE: LazyLock<Name> = LazyLock::new(|| Name::from("value"));
+static NAME_VALUE_1: LazyLock<Name> = LazyLock::new(|| Name::from("value1"));
+static NAME_VALUE_2: LazyLock<Name> = LazyLock::new(|| Name::from("value2"));
+static NAME_YEAR: LazyLock<Name> = LazyLock::new(|| Name::from("year"));
 
 type NamedParameters = Value;
 
 macro_rules! invalid_number_of_parameters {
-  ($expected:expr, $actual:expr) => {{
-    value_null!("expected {} parameters, actual number of parameters is {}", $expected, $actual)
-  }};
+  ($expected:expr, $actual:expr) => {{ value_null!("expected {} parameters, actual number of parameters is {}", $expected, $actual) }};
 }
 
 macro_rules! parameter_not_found {
-  ($p1:expr, $p2:expr) => {{
-    value_null!(r"parameter '{}' or '{}' not found", *$p1, *$p2)
-  }};
-  ($p:expr) => {{
-    value_null!(r"parameter '{}' not found", *$p)
-  }};
+  ($p1:expr, $p2:expr) => {{ value_null!(r"parameter '{}' or '{}' not found", *$p1, *$p2) }};
+  ($p:expr) => {{ value_null!(r"parameter '{}' not found", *$p) }};
 }
 
 pub fn evaluate_bif(bif: Bif, parameters: &NamedParameters) -> Value {
@@ -173,11 +166,7 @@ fn bif_after(parameters: &NamedParameters) -> Value {
   if let Some(((value1, _), (value2, _))) = get_param(parameters, &NAME_POINT_1).zip(get_param(parameters, &NAME_POINT_2)) {
     core::after(value1, value2)
   } else if let Some(((value1, pos1), (value2, pos2))) = get_param(parameters, &NAME_POINT).zip(get_param(parameters, &NAME_RANGE)) {
-    if pos1 > pos2 {
-      core::after(value2, value1)
-    } else {
-      core::after(value1, value2)
-    }
+    if pos1 > pos2 { core::after(value2, value1) } else { core::after(value1, value2) }
   } else if let Some(((value1, _), (value2, _))) = get_param(parameters, &NAME_RANGE_1).zip(get_param(parameters, &NAME_RANGE_2)) {
     core::after(value1, value2)
   } else {
@@ -210,11 +199,7 @@ fn bif_before(parameters: &NamedParameters) -> Value {
   if let Some(((value1, _), (value2, _))) = get_param(parameters, &NAME_POINT_1).zip(get_param(parameters, &NAME_POINT_2)) {
     core::before(value1, value2)
   } else if let Some(((value1, pos1), (value2, pos2))) = get_param(parameters, &NAME_POINT).zip(get_param(parameters, &NAME_RANGE)) {
-    if pos1 > pos2 {
-      core::before(value2, value1)
-    } else {
-      core::before(value1, value2)
-    }
+    if pos1 > pos2 { core::before(value2, value1) } else { core::before(value1, value2) }
   } else if let Some(((value1, _), (value2, _))) = get_param(parameters, &NAME_RANGE_1).zip(get_param(parameters, &NAME_RANGE_2)) {
     core::before(value1, value2)
   } else {
@@ -328,12 +313,11 @@ fn bif_date(parameters: &NamedParameters) -> Value {
   if let Some((from, _)) = get_param(parameters, &NAME_FROM) {
     return core::date_1(from);
   }
-  if let Some((year, _)) = get_param(parameters, &NAME_YEAR) {
-    if let Some((month, _)) = get_param(parameters, &NAME_MONTH) {
-      if let Some((day, _)) = get_param(parameters, &NAME_DAY) {
-        return core::date_3(year, month, day);
-      }
-    }
+  if let Some((year, _)) = get_param(parameters, &NAME_YEAR)
+    && let Some((month, _)) = get_param(parameters, &NAME_MONTH)
+    && let Some((day, _)) = get_param(parameters, &NAME_DAY)
+  {
+    return core::date_3(year, month, day);
   }
   value_null!("invalid parameters in named::bif_date")
 }
@@ -342,10 +326,10 @@ fn bif_date_and_time(parameters: &NamedParameters) -> Value {
   if let Some((from_value, _)) = get_param(parameters, &NAME_FROM) {
     return core::date_and_time_1(from_value);
   }
-  if let Some((date_value, _)) = get_param(parameters, &NAME_DATE) {
-    if let Some((time_value, _)) = get_param(parameters, &NAME_TIME) {
-      return core::date_and_time_2(date_value, time_value);
-    }
+  if let Some((date_value, _)) = get_param(parameters, &NAME_DATE)
+    && let Some((time_value, _)) = get_param(parameters, &NAME_TIME)
+  {
+    return core::date_and_time_2(date_value, time_value);
   }
   value_null!("invalid parameters in named::bif_date_and_time")
 }
@@ -1130,16 +1114,15 @@ fn bif_time(parameters: &NamedParameters) -> Value {
   if let Some((from_value, _)) = get_param(parameters, &NAME_FROM) {
     return core::time_1(from_value);
   }
-  if let Some((hour_value, _)) = get_param(parameters, &NAME_HOUR) {
-    if let Some((minute_value, _)) = get_param(parameters, &NAME_MINUTE) {
-      if let Some((second_value, _)) = get_param(parameters, &NAME_SECOND) {
-        return if let Some((offset_value, _)) = get_param(parameters, &NAME_OFFSET) {
-          core::time_4(hour_value, minute_value, second_value, offset_value)
-        } else {
-          core::time_3(hour_value, minute_value, second_value)
-        };
-      }
-    }
+  if let Some((hour_value, _)) = get_param(parameters, &NAME_HOUR)
+    && let Some((minute_value, _)) = get_param(parameters, &NAME_MINUTE)
+    && let Some((second_value, _)) = get_param(parameters, &NAME_SECOND)
+  {
+    return if let Some((offset_value, _)) = get_param(parameters, &NAME_OFFSET) {
+      core::time_4(hour_value, minute_value, second_value, offset_value)
+    } else {
+      core::time_3(hour_value, minute_value, second_value)
+    };
   }
   value_null!("invalid parameters in bif time")
 }
@@ -1184,21 +1167,17 @@ fn bif_years_and_months_duration(parameters: &NamedParameters) -> Value {
 /// The position of the named parameter is counted from 1.
 /// Additionally, the total number of parameters is returned.
 fn get_param<'a>(parameters: &'a NamedParameters, name: &'a Name) -> Option<(&'a Value, &'a usize)> {
-  if let Value::NamedParameters(map) = parameters {
-    if let Some((value, position)) = map.get(name) {
-      return Some((value, position));
-    }
+  if let Value::NamedParameters(map) = parameters
+    && let Some((value, position)) = map.get(name)
+  {
+    return Some((value, position));
   }
   None
 }
 
 /// Returns the number of named parameters.
 fn get_param_count(parameters: &NamedParameters) -> usize {
-  if let Value::NamedParameters(map) = parameters {
-    map.len()
-  } else {
-    0
-  }
+  if let Value::NamedParameters(map) = parameters { map.len() } else { 0 }
 }
 
 #[cfg(test)]

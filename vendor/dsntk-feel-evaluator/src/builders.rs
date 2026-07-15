@@ -4,11 +4,12 @@ use crate::evaluator_java::evaluate_external_java_function;
 use crate::evaluator_pmml::evaluate_external_pmml_function;
 use crate::iterations::{EveryExpressionEvaluator, ForExpressionEvaluator, SomeExpressionEvaluator};
 use crate::macros::invalid_argument_type;
-use crate::{bifs, FilterExpressionEvaluator};
+use crate::{FilterExpressionEvaluator, bifs};
 use dsntk_feel::bif::Bif;
+use dsntk_feel::bip::*;
 use dsntk_feel::context::FeelContext;
-use dsntk_feel::values::{Value, VALUE_FALSE, VALUE_TRUE};
-use dsntk_feel::{value_null, Evaluator, FeelNumber, FeelScope, FeelType, FunctionBody, Name};
+use dsntk_feel::values::{VALUE_FALSE, VALUE_TRUE, Value};
+use dsntk_feel::{Evaluator, FeelNumber, FeelScope, FeelType, FunctionBody, IntervalType, Name, value_null};
 use dsntk_feel_parser::{AstNode, ClosureBuilder};
 use dsntk_feel_temporal::{FeelDate, FeelDateTime, FeelDaysAndTimeDuration, FeelTime, FeelYearsAndMonthsDuration};
 use std::borrow::Borrow;
@@ -16,7 +17,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write;
 use std::ops::Deref;
 use std::str::FromStr;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 /// Builds an evaluator from provided AST node.
 pub fn build_evaluator(node: &AstNode) -> Evaluator {
@@ -55,11 +56,7 @@ impl<'b> EvaluatorBuilder<'b> {
   /// Returns an optional reference to parent node if any.
   fn parent_node(&self) -> Option<&AstNode> {
     let stack_height = self.node_stack.len();
-    if stack_height > 1 {
-      self.node_stack.get(stack_height - 2).cloned()
-    } else {
-      None
-    }
+    if stack_height > 1 { self.node_stack.get(stack_height - 2).cloned() } else { None }
   }
 
   /// Builds and evaluator based on provided AST node.
@@ -628,12 +625,9 @@ impl<'b> EvaluatorBuilder<'b> {
   fn build_filter(&mut self, lhs: &'b AstNode, rhs: &'b AstNode) -> Evaluator {
     let lhe = self.build(lhs);
     let rhe = self.build(rhs);
-    // PGDMN: H20 — classify the filter expression at build time, so filters that
-    // can never be a numeric index skip the per-call numeric-index probe evaluation.
-    let may_yield_number = filter_may_yield_number(rhs);
     Box::new(move |scope: &FeelScope| {
       let filter_expression_evaluator = FilterExpressionEvaluator::new();
-      filter_expression_evaluator.evaluate_with_hint(scope, lhe(scope), &rhe, may_yield_number)
+      filter_expression_evaluator.evaluate(scope, lhe(scope), &rhe)
     })
   }
 
@@ -645,9 +639,6 @@ impl<'b> EvaluatorBuilder<'b> {
       Variable((Name, Name)),
     }
     let rhe = self.build(rhs);
-    // PGDMN: H13 — bind `partial` only when the body may reference it; binding it
-    // copies the accumulated results into the scope on every iteration (quadratic).
-    let bind_partial = ast_references_name(rhs, &"partial".into());
     let mut evaluators = vec![];
     let mut binding_variables = HashSet::new();
     if let AstNode::IterationContexts(items) = lhs {
@@ -663,12 +654,12 @@ impl<'b> EvaluatorBuilder<'b> {
           }
           AstNode::IterationContextSingle(variable_name, expr_node) => {
             if let AstNode::Name(name) = variable_name.borrow() {
-              if let AstNode::Name(variable_name) = expr_node.borrow() {
-                if binding_variables.contains(variable_name) {
-                  evaluators.push(IteratorType::Variable((name.clone(), variable_name.clone())));
-                  binding_variables.insert(name.clone());
-                  continue; // JUMP TO THE NEXT ITERATION, DO NOT MISS THIS LINE WHEN ANALYZING THE CODE!
-                }
+              if let AstNode::Name(variable_name) = expr_node.borrow()
+                && binding_variables.contains(variable_name)
+              {
+                evaluators.push(IteratorType::Variable((name.clone(), variable_name.clone())));
+                binding_variables.insert(name.clone());
+                continue; // JUMP TO THE NEXT ITERATION, DO NOT MISS THIS LINE WHEN ANALYZING THE CODE!
               }
               if let AstNode::Range(range_start_node, range_end_node) = expr_node.borrow() {
                 let range_start_evaluator = self.build(range_start_node);
@@ -687,7 +678,6 @@ impl<'b> EvaluatorBuilder<'b> {
     }
     Box::new(move |scope: &FeelScope| {
       let mut for_expression_evaluator = ForExpressionEvaluator::new();
-      for_expression_evaluator.set_bind_partial(bind_partial); // PGDMN: H13
       for iterator_type in &evaluators {
         match iterator_type {
           IteratorType::Interval((name, interval_start_evaluator, interval_end_evaluator)) => {
@@ -860,11 +850,11 @@ impl<'b> EvaluatorBuilder<'b> {
       return build_err_msg(err_msg_expected_node("QuantifiedContexts", lhs));
     };
     for item in items {
-      if let AstNode::QuantifiedContext(variable_name, expr_node) = item {
-        if let AstNode::Name(name) = variable_name.borrow() {
-          let evaluator_single = self.build(expr_node);
-          expr_evaluators.push((name.clone(), evaluator_single));
-        }
+      if let AstNode::QuantifiedContext(variable_name, expr_node) = item
+        && let AstNode::Name(name) = variable_name.borrow()
+      {
+        let evaluator_single = self.build(expr_node);
+        expr_evaluators.push((name.clone(), evaluator_single));
       }
     }
     let AstNode::Satisfies(satisfies) = rhs else {
@@ -900,8 +890,7 @@ impl<'b> EvaluatorBuilder<'b> {
           if external {
             eval_external_function_with_positional_parameters(scope, &args, &params, &body, result_type)
           } else {
-            // PGDMN: H6 — pass arguments by value to avoid cloning during coercion
-            eval_function_with_positional_parameters(scope, args, &params, &body, closure_ctx, result_type)
+            eval_function_with_positional_parameters(scope, &args, &params, &body, closure_ctx, result_type)
           }
         }
         _ => value_null!("expected built-in function name or function definition, actual is {}", function),
@@ -955,8 +944,7 @@ impl<'b> EvaluatorBuilder<'b> {
           if external {
             eval_external_function_with_named_parameters(scope, &args, &params, &body, result_type)
           } else {
-            // PGDMN: H6 — pass arguments by value to avoid cloning during coercion
-            eval_function_with_named_parameters(scope, args, &params, &body, closure_ctx, result_type)
+            eval_function_with_named_parameters(scope, &args, &params, &body, closure_ctx, result_type)
           }
         }
         _ => value_null!("expected built-in function name or function definition, actual is {}", function),
@@ -1114,7 +1102,7 @@ impl<'b> EvaluatorBuilder<'b> {
       let lhv = lhe(scope);
       let rhv = rhe(scope);
       match rhv {
-        inner @ Value::Null(_)
+        inner @ Value::Null(None)
         | inner @ Value::Number(_)
         | inner @ Value::String(_)
         | inner @ Value::Boolean(_)
@@ -1124,7 +1112,7 @@ impl<'b> EvaluatorBuilder<'b> {
         | inner @ Value::YearsAndMonthsDuration(_)
         | inner @ Value::DaysAndTimeDuration(_)
         | inner @ Value::Context(_) => eval_in_equal(&lhv, &inner),
-        Value::Range(l, l_closed, r, r_closed) => eval_in_range(&lhv, &l, l_closed, &r, r_closed),
+        Value::Range(l, l_type, r, r_type) => eval_in_range(&lhv, &l, l_type, &r, r_type),
         Value::List(r_inner) => {
           if let Value::List(l_inner) = lhv {
             eval_in_list_in_list(&l_inner, &r_inner)
@@ -1134,31 +1122,34 @@ impl<'b> EvaluatorBuilder<'b> {
         }
         Value::ExpressionList(inner) => eval_in_list(&lhv, &inner),
         Value::NegatedCommaList(inner) => eval_in_negated_list(&lhv, &inner),
+        Value::UnaryEqual(inner) => eval_in_equal(&lhv, &inner),
+        Value::UnaryNotEqual(inner) => eval_in_not_equal(&lhv, &inner),
         Value::UnaryLess(inner) => eval_in_unary_less(&lhv, inner.borrow()),
         Value::UnaryLessOrEqual(inner) => eval_in_unary_less_or_equal(&lhv, inner.borrow()),
         Value::UnaryGreater(inner) => eval_in_unary_greater(&lhv, inner.borrow()),
         Value::UnaryGreaterOrEqual(inner) => eval_in_unary_greater_or_equal(&lhv, inner.borrow()),
         Value::Irrelevant => VALUE_TRUE,
+        Value::Null(Some(message)) => value_null!(message),
         _ => value_null!("unexpected argument type in 'in' operator: {}", rhv.type_of()),
       }
     })
   }
 
-  fn build_interval_end(&mut self, lhs: &'b AstNode, rhs: &bool) -> Evaluator {
+  fn build_interval_end(&mut self, lhs: &'b AstNode, rhs: &IntervalType) -> Evaluator {
     let lhe = self.build(lhs);
-    let closed = *rhs;
+    let interval_type = *rhs;
     Box::new(move |scope: &FeelScope| {
       let lhv = lhe(scope);
-      Value::IntervalEnd(Box::new(lhv), closed)
+      Value::IntervalEnd(Box::new(lhv), interval_type)
     })
   }
 
-  fn build_interval_start(&mut self, lhs: &'b AstNode, rhs: &bool) -> Evaluator {
+  fn build_interval_start(&mut self, lhs: &'b AstNode, rhs: &IntervalType) -> Evaluator {
     let lhe = self.build(lhs);
-    let closed = *rhs;
+    let interval_type = *rhs;
     Box::new(move |scope: &FeelScope| {
       let lhv = lhe(scope);
-      Value::IntervalStart(Box::new(lhv), closed)
+      Value::IntervalStart(Box::new(lhv), interval_type)
     })
   }
 
@@ -1404,16 +1395,11 @@ impl<'b> EvaluatorBuilder<'b> {
   }
 
   fn build_name(&mut self, name: Name) -> Evaluator {
-    // PGDMN: H19 — memoize the built-in function fallback, so repeated calls
-    // do not allocate a String and match ~90 names again (Bif::from_str also
-    // builds an error value for every non-BIF name). The scope lookup stays
-    // first, so user definitions still shadow BIF names.
-    let bif_cell: OnceLock<Option<Bif>> = OnceLock::new();
     Box::new(move |scope: &FeelScope| {
       if let Some(value) = scope.get_value(&name) {
         value
-      } else if let Some(bif) = bif_cell.get_or_init(|| Bif::from_str(&name.to_string()).ok()) {
-        Value::BuiltInFunction(bif.clone())
+      } else if let Ok(bif) = Bif::from_str(&name.to_string()) {
+        Value::BuiltInFunction(bif)
       } else {
         value_null!("context has no value for key '{}'", name)
       }
@@ -1441,11 +1427,11 @@ impl<'b> EvaluatorBuilder<'b> {
       let mut parameters = BTreeMap::new();
       let mut position = 1_usize;
       for evaluator in &evaluators {
-        if let Value::NamedParameter(name, value) = evaluator(scope) {
-          if let Value::ParameterName(name) = *name {
-            parameters.insert(name, (*value, position));
-            position += 1;
-          }
+        if let Value::NamedParameter(name, value) = evaluator(scope)
+          && let Value::ParameterName(name) = *name
+        {
+          parameters.insert(name, (*value, position));
+          position += 1;
         }
       }
       Value::NamedParameters(parameters)
@@ -1618,10 +1604,12 @@ impl<'b> EvaluatorBuilder<'b> {
       return build_err_msg(err_expected_name(rhs));
     };
     let fn_adjust = match self.parent_node() {
-      Some(AstNode::UnaryGt(_)) => |value: Value| (Value::UnaryGreater(value.into()), true),
-      Some(AstNode::UnaryGe(_)) => |value: Value| (Value::UnaryGreaterOrEqual(value.into()), true),
+      Some(AstNode::UnaryEq(_)) => |value: Value| (Value::UnaryEqual(value.into()), true),
+      Some(AstNode::UnaryNe(_)) => |value: Value| (Value::UnaryNotEqual(value.into()), true),
       Some(AstNode::UnaryLt(_)) => |value: Value| (Value::UnaryLess(value.into()), true),
       Some(AstNode::UnaryLe(_)) => |value: Value| (Value::UnaryLessOrEqual(value.into()), true),
+      Some(AstNode::UnaryGt(_)) => |value: Value| (Value::UnaryGreater(value.into()), true),
+      Some(AstNode::UnaryGe(_)) => |value: Value| (Value::UnaryGreaterOrEqual(value.into()), true),
       _ => |value: Value| (value, false),
     };
     let lhe = self.build(lhs);
@@ -1695,11 +1683,11 @@ impl<'b> EvaluatorBuilder<'b> {
       return build_err_msg(err_msg_expected_node("QuantifiedContexts", lhs));
     };
     for item in items {
-      if let AstNode::QuantifiedContext(variable_name, expr_node) = item {
-        if let AstNode::Name(name) = variable_name.borrow() {
-          let evaluator_single = self.build(expr_node);
-          expr_evaluators.push((name.clone(), evaluator_single));
-        }
+      if let AstNode::QuantifiedContext(variable_name, expr_node) = item
+        && let AstNode::Name(name) = variable_name.borrow()
+      {
+        let evaluator_single = self.build(expr_node);
+        expr_evaluators.push((name.clone(), evaluator_single));
       }
     }
     let AstNode::Satisfies(satisfies) = rhs else {
@@ -1809,39 +1797,21 @@ impl<'b> EvaluatorBuilder<'b> {
     })
   }
 
-  /// Returns an evaluator for unary `>=` (greater or equal) operator.
-  fn build_unary_ge(&mut self, lhs: &'b AstNode) -> Evaluator {
-    let lhe = self.build(lhs);
-    Box::new(move |scope: &FeelScope| match lhe(scope) {
-      Value::Transparent(value) => *value,
-      other => Value::UnaryGreaterOrEqual(other.into()),
-    })
-  }
-
   /// Returns an evaluator for unary `=` (equal) operator.
   fn build_unary_eq(&mut self, lhs: &'b AstNode) -> Evaluator {
     let lhe = self.build(lhs);
-    Box::new(move |scope: &FeelScope| {
-      let lhv = lhe(scope);
-      Value::UnaryEqual(Box::from(lhv))
+    Box::new(move |scope: &FeelScope| match lhe(scope) {
+      Value::Transparent(value) => *value,
+      other => Value::UnaryEqual(other.into()),
     })
   }
 
-  /// Returns an evaluator for unary `>` (greater) operator.
-  fn build_unary_gt(&mut self, lhs: &'b AstNode) -> Evaluator {
+  /// Returns an evaluator for unary `!=` (not equal) operator.
+  fn build_unary_ne(&mut self, lhs: &'b AstNode) -> Evaluator {
     let lhe = self.build(lhs);
     Box::new(move |scope: &FeelScope| match lhe(scope) {
       Value::Transparent(value) => *value,
-      other => Value::UnaryGreater(other.into()),
-    })
-  }
-
-  /// Returns an evaluator for unary `<=` (less or equal) operator.
-  fn build_unary_le(&mut self, lhs: &'b AstNode) -> Evaluator {
-    let lhe = self.build(lhs);
-    Box::new(move |scope: &FeelScope| match lhe(scope) {
-      Value::Transparent(value) => *value,
-      other => Value::UnaryLessOrEqual(other.into()),
+      other => Value::UnaryNotEqual(other.into()),
     })
   }
 
@@ -1854,32 +1824,46 @@ impl<'b> EvaluatorBuilder<'b> {
     })
   }
 
-  /// Returns an evaluator for unary `!=` (not equal) operator.
-  fn build_unary_ne(&mut self, lhs: &'b AstNode) -> Evaluator {
+  /// Returns an evaluator for unary `<=` (less or equal) operator.
+  fn build_unary_le(&mut self, lhs: &'b AstNode) -> Evaluator {
     let lhe = self.build(lhs);
-    Box::new(move |scope: &FeelScope| {
-      let lhv = lhe(scope);
-      Value::UnaryNotEqual(Box::from(lhv))
+    Box::new(move |scope: &FeelScope| match lhe(scope) {
+      Value::Transparent(value) => *value,
+      other => Value::UnaryLessOrEqual(other.into()),
+    })
+  }
+
+  /// Returns an evaluator for unary `>` (greater) operator.
+  fn build_unary_gt(&mut self, lhs: &'b AstNode) -> Evaluator {
+    let lhe = self.build(lhs);
+    Box::new(move |scope: &FeelScope| match lhe(scope) {
+      Value::Transparent(value) => *value,
+      other => Value::UnaryGreater(other.into()),
+    })
+  }
+
+  /// Returns an evaluator for unary `>=` (greater or equal) operator.
+  fn build_unary_ge(&mut self, lhs: &'b AstNode) -> Evaluator {
+    let lhe = self.build(lhs);
+    Box::new(move |scope: &FeelScope| match lhe(scope) {
+      Value::Transparent(value) => *value,
+      other => Value::UnaryGreaterOrEqual(other.into()),
     })
   }
 }
 
-fn adjust(value: Value, adjusted: bool) -> Value {
-  if adjusted {
-    Value::Transparent(value.into())
-  } else {
-    value
-  }
+fn set_transparency(value: Value, transparent: bool) -> Value {
+  if transparent { Value::Transparent(value.into()) } else { value }
 }
 
-fn get_property_from_value(value: Value, adjusted: bool, name: &Name) -> Value {
-  let property_name = name.to_string();
+fn get_property_from_value(value: Value, transparent: bool, name: &Name) -> Value {
+  let property = Bip::new(name.as_str());
   match value {
-    Value::Date(date) => match property_name.as_str() {
-      "year" => Value::Number(date.year().into()),
-      "month" => Value::Number(date.month().into()),
-      "day" => Value::Number(date.day().into()),
-      "weekday" => {
+    Value::Date(date) => match property {
+      Bip::Year => Value::Number(date.year().into()),
+      Bip::Month => Value::Number(date.month().into()),
+      Bip::Day => Value::Number(date.day().into()),
+      Bip::Weekday => {
         if let Some(day_of_week) = date.day_of_week() {
           Value::Number(day_of_week.1.into())
         } else {
@@ -1888,28 +1872,28 @@ fn get_property_from_value(value: Value, adjusted: bool, name: &Name) -> Value {
       }
       other => value_null!("no such property in date: {}", other),
     },
-    Value::DateTime(date_time) => match property_name.as_str() {
-      "year" => Value::Number(date_time.year().into()),
-      "month" => Value::Number(date_time.month().into()),
-      "day" => Value::Number(date_time.day().into()),
-      "weekday" => {
+    Value::DateTime(date_time) => match property {
+      Bip::Year => Value::Number(date_time.year().into()),
+      Bip::Month => Value::Number(date_time.month().into()),
+      Bip::Day => Value::Number(date_time.day().into()),
+      Bip::Weekday => {
         if let Some(day_of_week) = date_time.day_of_week() {
           Value::Number(day_of_week.1.into())
         } else {
           value_null!("could not retrieve weekday for date and time")
         }
       }
-      "hour" => Value::Number(date_time.hour().into()),
-      "minute" => Value::Number(date_time.minute().into()),
-      "second" => Value::Number(date_time.second().into()),
-      "time offset" => {
+      Bip::Hour => Value::Number(date_time.hour().into()),
+      Bip::Minute => Value::Number(date_time.minute().into()),
+      Bip::Second => Value::Number(date_time.second().into()),
+      Bip::TimeOffset => {
         if let Some(offset) = date_time.feel_time_offset() {
           Value::DaysAndTimeDuration(FeelDaysAndTimeDuration::from_s(offset as i64))
         } else {
           value_null!("could not retrieve time offset for date and time")
         }
       }
-      "timezone" => {
+      Bip::Timezone => {
         if let Some(feel_time_zone) = date_time.feel_time_zone() {
           Value::String(feel_time_zone)
         } else {
@@ -1918,18 +1902,18 @@ fn get_property_from_value(value: Value, adjusted: bool, name: &Name) -> Value {
       }
       other => value_null!("no such property in date and time: {}", other),
     },
-    Value::Time(time) => match property_name.as_str() {
-      "hour" => Value::Number(time.hour().into()),
-      "minute" => Value::Number(time.minute().into()),
-      "second" => Value::Number(time.second().into()),
-      "time offset" => {
+    Value::Time(time) => match property {
+      Bip::Hour => Value::Number(time.hour().into()),
+      Bip::Minute => Value::Number(time.minute().into()),
+      Bip::Second => Value::Number(time.second().into()),
+      Bip::TimeOffset => {
         if let Some(offset) = time.feel_time_offset() {
           Value::DaysAndTimeDuration(FeelDaysAndTimeDuration::from_s(offset as i64))
         } else {
           value_null!("could not retrieve time offset for time")
         }
       }
-      "timezone" => {
+      Bip::Timezone => {
         if let Some(feel_time_zone) = time.feel_time_zone() {
           Value::String(feel_time_zone)
         } else {
@@ -1938,55 +1922,66 @@ fn get_property_from_value(value: Value, adjusted: bool, name: &Name) -> Value {
       }
       other => value_null!("no such property in time: {}", other),
     },
-    Value::DaysAndTimeDuration(dt_duration) => match property_name.as_str() {
-      "days" => Value::Number(dt_duration.get_days().into()),
-      "hours" => Value::Number(dt_duration.get_hours().into()),
-      "minutes" => Value::Number(dt_duration.get_minutes().into()),
-      "seconds" => Value::Number(dt_duration.get_seconds().into()),
+    Value::DaysAndTimeDuration(dt_duration) => match property {
+      Bip::Days => Value::Number(dt_duration.get_days().into()),
+      Bip::Hours => Value::Number(dt_duration.get_hours().into()),
+      Bip::Minutes => Value::Number(dt_duration.get_minutes().into()),
+      Bip::Seconds => Value::Number(dt_duration.get_seconds().into()),
       other => value_null!("no such property in days and time duration: {}", other),
     },
-    Value::YearsAndMonthsDuration(ym_duration) => match property_name.as_str() {
-      "years" => Value::Number(ym_duration.years().into()),
-      "months" => Value::Number(ym_duration.months().into()),
+    Value::YearsAndMonthsDuration(ym_duration) => match property {
+      Bip::Years => Value::Number(ym_duration.years().into()),
+      Bip::Months => Value::Number(ym_duration.months().into()),
       other => value_null!("no such property in years and months duration: {}", other),
     },
-    Value::Range(rs, cs, re, ce) => match property_name.as_str() {
-      "start" => *rs,
-      "start included" => Value::Boolean(cs),
-      "end" => *re,
-      "end included" => Value::Boolean(ce),
+    Value::Range(rs, cs, re, ce) => match property {
+      Bip::Start => *rs,
+      Bip::StartIncluded => Value::Boolean(cs.closed()),
+      Bip::End => *re,
+      Bip::EndIncluded => Value::Boolean(ce.closed()),
       other => value_null!("no such property in range: {}", other),
     },
-    Value::UnaryGreater(value) => match property_name.as_str() {
-      "start" => adjust(*value, adjusted),
-      "start included" | "end included" => adjust(Value::Boolean(false), adjusted),
-      other => adjust(value_null!("no such property in unary greater: {}", other), adjusted),
+    Value::UnaryEqual(value) => match property {
+      Bip::Start => set_transparency(*value, transparent),
+      Bip::End => set_transparency(*value, transparent),
+      Bip::StartIncluded | Bip::EndIncluded => set_transparency(Value::Boolean(true), transparent),
+      other => set_transparency(value_null!("no such property in unary equal: {}", other), transparent),
     },
-    Value::UnaryGreaterOrEqual(value) => match property_name.as_str() {
-      "start" => adjust(*value, adjusted),
-      "start included" => adjust(Value::Boolean(true), adjusted),
-      "end included" => adjust(Value::Boolean(false), adjusted),
-      other => adjust(value_null!("no such property in unary greater or equal: {}", other), adjusted),
+    Value::UnaryNotEqual(value) => match property {
+      Bip::Start => set_transparency(*value, transparent),
+      Bip::End => set_transparency(*value, transparent),
+      Bip::StartIncluded | Bip::EndIncluded => set_transparency(Value::Boolean(true), transparent),
+      other => set_transparency(value_null!("no such property in unary not equal: {}", other), transparent),
     },
-    Value::UnaryLess(value) => match property_name.as_str() {
-      "end" => adjust(*value, adjusted),
-      "start included" | "end included" => adjust(Value::Boolean(false), adjusted),
-      other => adjust(value_null!("no such property in unary less: {}", other), adjusted),
+    Value::UnaryLess(value) => match property {
+      Bip::End => set_transparency(*value, transparent),
+      Bip::StartIncluded | Bip::EndIncluded => set_transparency(Value::Boolean(false), transparent),
+      other => set_transparency(value_null!("no such property in unary less: {}", other), transparent),
     },
-    Value::UnaryLessOrEqual(value) => match property_name.as_str() {
-      "end" => adjust(*value, adjusted),
-      "start included" => adjust(Value::Boolean(false), adjusted),
-      "end included" => adjust(Value::Boolean(true), adjusted),
-      other => adjust(value_null!("no such property in unary less or equal: {}", other), adjusted),
+    Value::UnaryLessOrEqual(value) => match property {
+      Bip::End => set_transparency(*value, transparent),
+      Bip::StartIncluded => set_transparency(Value::Boolean(false), transparent),
+      Bip::EndIncluded => set_transparency(Value::Boolean(true), transparent),
+      other => set_transparency(value_null!("no such property in unary less or equal: {}", other), transparent),
+    },
+    Value::UnaryGreater(value) => match property {
+      Bip::Start => set_transparency(*value, transparent),
+      Bip::StartIncluded | Bip::EndIncluded => set_transparency(Value::Boolean(false), transparent),
+      other => set_transparency(value_null!("no such property in unary greater: {}", other), transparent),
+    },
+    Value::UnaryGreaterOrEqual(value) => match property {
+      Bip::Start => set_transparency(*value, transparent),
+      Bip::StartIncluded => set_transparency(Value::Boolean(true), transparent),
+      Bip::EndIncluded => set_transparency(Value::Boolean(false), transparent),
+      other => set_transparency(value_null!("no such property in unary greater or equal: {}", other), transparent),
     },
     v @ Value::Null(_) => v,
-    other => value_null!("unexpected type: {}, for property: {}", other.type_of(), property_name),
+    other => value_null!("unexpected type: {}, for property: {}", other.type_of(), property),
   }
 }
 
 /// Evaluates ternary equality of two values.
 pub fn eval_ternary_equality(lhs: &Value, rhs: &Value) -> Option<bool> {
-  //TODO Maybe this function should be defined in dsntk-feel crate?
   match lhs {
     Value::Boolean(ls) => match rhs {
       Value::Boolean(rs) => Some(*ls == *rs),
@@ -2090,20 +2085,9 @@ pub fn eval_ternary_equality(lhs: &Value, rhs: &Value) -> Option<bool> {
       Value::UnaryNotEqual(r_end) => eval_ternary_equality(l_end, r_end),
       _ => Some(false),
     },
-    Value::UnaryGreater(l_end) => match rhs {
-      Value::Range(rs, cs, re, ce) => {
-        if !*cs && !*ce && !re.is_null() {
-          eval_ternary_equality(l_end, rs)
-        } else {
-          Some(false)
-        }
-      }
-      Value::UnaryGreater(r_end) => eval_ternary_equality(l_end, r_end),
-      _ => None,
-    },
     Value::UnaryLess(l_end) => match rhs {
       Value::Range(rs, cs, re, ce) => {
-        if !*cs && !*ce && !rs.is_null() {
+        if cs.opened() && ce.opened() && !rs.is_null() {
           eval_ternary_equality(l_end, re)
         } else {
           Some(false)
@@ -2112,20 +2096,9 @@ pub fn eval_ternary_equality(lhs: &Value, rhs: &Value) -> Option<bool> {
       Value::UnaryLess(r_end) => eval_ternary_equality(l_end, r_end),
       _ => None,
     },
-    Value::UnaryGreaterOrEqual(l_end) => match rhs {
-      Value::Range(rs, cs, re, ce) => {
-        if *cs && !*ce && !re.is_null() {
-          eval_ternary_equality(l_end, rs)
-        } else {
-          Some(false)
-        }
-      }
-      Value::UnaryGreaterOrEqual(r_end) => eval_ternary_equality(l_end, r_end),
-      _ => None,
-    },
     Value::UnaryLessOrEqual(l_end) => match rhs {
       Value::Range(rs, cs, re, ce) => {
-        if !*cs && *ce && !rs.is_null() {
+        if cs.closed() && ce.opened() && !rs.is_null() {
           eval_ternary_equality(l_end, re)
         } else {
           Some(false)
@@ -2134,12 +2107,35 @@ pub fn eval_ternary_equality(lhs: &Value, rhs: &Value) -> Option<bool> {
       Value::UnaryLessOrEqual(r_end) => eval_ternary_equality(l_end, r_end),
       _ => None,
     },
+    Value::UnaryGreater(l_end) => match rhs {
+      Value::Range(rs, cs, re, ce) => {
+        if cs.opened() && ce.opened() && !re.is_null() {
+          eval_ternary_equality(l_end, rs)
+        } else {
+          Some(false)
+        }
+      }
+      Value::UnaryGreater(r_end) => eval_ternary_equality(l_end, r_end),
+      _ => None,
+    },
+    Value::UnaryGreaterOrEqual(l_end) => match rhs {
+      Value::Range(rs, cs, re, ce) => {
+        if cs.closed() && ce.opened() && !re.is_null() {
+          eval_ternary_equality(l_end, rs)
+        } else {
+          Some(false)
+        }
+      }
+      Value::UnaryGreaterOrEqual(r_end) => eval_ternary_equality(l_end, r_end),
+      _ => None,
+    },
     Value::Range(r1s, c1s, r1e, c1e) => match rhs {
       Value::Range(r2s, c2s, r2e, c2e) => {
-        if *c1s == *c2s && *c1e == *c2e {
-          if let Some(true) = eval_ternary_equality(r1s, r2s) {
-            return eval_ternary_equality(r1e, r2e);
-          }
+        if *c1s == *c2s
+          && *c1e == *c2e
+          && let Some(true) = eval_ternary_equality(r1s, r2s)
+        {
+          return eval_ternary_equality(r1e, r2e);
         }
         Some(false)
       }
@@ -2151,9 +2147,10 @@ pub fn eval_ternary_equality(lhs: &Value, rhs: &Value) -> Option<bool> {
 }
 
 fn eval_in_list(left: &Value, items: &[Value]) -> Value {
+  let mut unary_not_equal = vec![];
   for item in items {
     match item {
-      inner @ Value::Null(_)
+      inner @ Value::Null(None)
       | inner @ Value::String(_)
       | inner @ Value::Number(_)
       | inner @ Value::Boolean(_)
@@ -2167,6 +2164,18 @@ fn eval_in_list(left: &Value, items: &[Value]) -> Value {
           return VALUE_TRUE;
         }
       }
+      Value::UnaryEqual(inner) => {
+        if let Value::Boolean(true) = eval_in_equal(left, inner.borrow()) {
+          return VALUE_TRUE;
+        }
+      }
+      Value::UnaryNotEqual(inner) => {
+        if let Value::Boolean(true) = eval_in_equal(left, inner.borrow()) {
+          unary_not_equal.push(false);
+        } else {
+          unary_not_equal.push(true);
+        }
+      }
       Value::UnaryLess(inner) => {
         if let Value::Boolean(true) = eval_in_unary_less(left, inner.borrow()) {
           return VALUE_TRUE;
@@ -2197,10 +2206,83 @@ fn eval_in_list(left: &Value, items: &[Value]) -> Value {
           return VALUE_TRUE;
         }
       }
-      _ => return value_null!("eval_in_list"),
+      Value::Null(Some(message)) => return value_null!(message),
+      other => return value_null!("unexpected type in list: {}", other.type_of()),
     }
   }
+  if !unary_not_equal.is_empty() && unary_not_equal.iter().all(|value| *value) {
+    return VALUE_TRUE;
+  }
   VALUE_FALSE
+}
+
+fn eval_in_negated_list(left: &Value, items: &[Value]) -> Value {
+  let mut unary_not_equal = vec![];
+  for item in items {
+    match item {
+      inner @ Value::Null(None)
+      | inner @ Value::String(_)
+      | inner @ Value::Number(_)
+      | inner @ Value::Boolean(_)
+      | inner @ Value::Date(_)
+      | inner @ Value::Time(_)
+      | inner @ Value::DateTime(_)
+      | inner @ Value::DaysAndTimeDuration(_)
+      | inner @ Value::YearsAndMonthsDuration(_) => {
+        if let Value::Boolean(true) = eval_in_equal(left, inner) {
+          return VALUE_FALSE;
+        }
+      }
+      Value::UnaryEqual(inner) => {
+        if let Value::Boolean(true) = eval_in_equal(left, inner) {
+          return VALUE_FALSE;
+        }
+      }
+      Value::UnaryNotEqual(inner) => {
+        if let Value::Boolean(true) = eval_in_equal(left, inner.borrow()) {
+          unary_not_equal.push(false);
+        } else {
+          unary_not_equal.push(true);
+        }
+      }
+      Value::UnaryLess(inner) => {
+        if let Value::Boolean(true) = eval_in_unary_less(left, inner.borrow()) {
+          return VALUE_FALSE;
+        }
+      }
+      Value::UnaryLessOrEqual(inner) => {
+        if let Value::Boolean(true) = eval_in_unary_less_or_equal(left, inner.borrow()) {
+          return VALUE_FALSE;
+        }
+      }
+      Value::UnaryGreater(inner) => {
+        if let Value::Boolean(true) = eval_in_unary_greater(left, inner.borrow()) {
+          return VALUE_FALSE;
+        }
+      }
+      Value::UnaryGreaterOrEqual(inner) => {
+        if let Value::Boolean(true) = eval_in_unary_greater_or_equal(left, inner.borrow()) {
+          return VALUE_FALSE;
+        }
+      }
+      Value::List(inner) => {
+        if let Value::Boolean(true) = eval_in_list(left, inner) {
+          return VALUE_FALSE;
+        }
+      }
+      Value::Range(l, l_closed, r, r_closed) => {
+        if let Value::Boolean(true) = eval_in_range(left, l, *l_closed, r, *r_closed) {
+          return VALUE_FALSE;
+        }
+      }
+      Value::Null(Some(message)) => return value_null!(message),
+      other => return value_null!("unexpected type in negated list: {}", other.type_of()),
+    }
+  }
+  if !unary_not_equal.is_empty() && unary_not_equal.iter().all(|value| *value) {
+    return VALUE_FALSE;
+  }
+  VALUE_TRUE
 }
 
 /// Checks if all elements from `list` are present in `items`.
@@ -2211,12 +2293,12 @@ fn eval_in_list_in_list(l_items: &[Value], r_items: &[Value]) -> Value {
       for l in l_items {
         let mut found = false;
         for (index, r) in rhs.iter().enumerate() {
-          if available.contains(&index) {
-            if let Value::Boolean(true) = eval_in_equal(l, r) {
-              available.remove(&index);
-              found = true;
-              break;
-            }
+          if available.contains(&index)
+            && let Value::Boolean(true) = eval_in_equal(l, r)
+          {
+            available.remove(&index);
+            found = true;
+            break;
           }
         }
         if !found {
@@ -2229,72 +2311,31 @@ fn eval_in_list_in_list(l_items: &[Value], r_items: &[Value]) -> Value {
   VALUE_FALSE
 }
 
-fn eval_in_negated_list(left: &Value, items: &[Value]) -> Value {
-  for item in items {
-    match item {
-      inner @ Value::Null(_)
-      | inner @ Value::String(_)
-      | inner @ Value::Number(_)
-      | inner @ Value::Boolean(_)
-      | inner @ Value::Date(_)
-      | inner @ Value::Time(_)
-      | inner @ Value::DateTime(_)
-      | inner @ Value::DaysAndTimeDuration(_)
-      | inner @ Value::YearsAndMonthsDuration(_) => {
-        if let Value::Boolean(true) = eval_in_equal(left, inner) {
-          return Value::Boolean(false);
-        }
-      }
-      Value::UnaryLess(inner) => {
-        if let Value::Boolean(true) = eval_in_unary_less(left, inner.borrow()) {
-          return Value::Boolean(false);
-        }
-      }
-      Value::UnaryLessOrEqual(inner) => {
-        if let Value::Boolean(true) = eval_in_unary_less_or_equal(left, inner.borrow()) {
-          return Value::Boolean(false);
-        }
-      }
-      Value::UnaryGreater(inner) => {
-        if let Value::Boolean(true) = eval_in_unary_greater(left, inner.borrow()) {
-          return Value::Boolean(false);
-        }
-      }
-      Value::UnaryGreaterOrEqual(inner) => {
-        if let Value::Boolean(true) = eval_in_unary_greater_or_equal(left, inner.borrow()) {
-          return Value::Boolean(false);
-        }
-      }
-      Value::List(inner) => {
-        if let Value::Boolean(true) = eval_in_list(left, inner) {
-          return Value::Boolean(false);
-        }
-      }
-      Value::Range(l, l_closed, r, r_closed) => {
-        if let Value::Boolean(true) = eval_in_range(left, l, *l_closed, r, *r_closed) {
-          return Value::Boolean(false);
-        }
-      }
-      other => return value_null!("unexpected type in negated list: {}", other.type_of()),
-    }
-  }
-  Value::Boolean(true)
-}
-
-fn eval_in_range(lhv: &Value, start: &Value, start_closed: bool, end: &Value, end_closed: bool) -> Value {
+fn eval_in_range(lhv: &Value, start: &Value, start_type: IntervalType, end: &Value, end_type: IntervalType) -> Value {
   match lhv {
     Value::Number(value) => match start {
       Value::Number(lv) => match end {
         Value::Number(rv) => {
-          let start_ok = if start_closed { value >= lv } else { value > lv };
-          let end_ok = if end_closed { value <= rv } else { value < rv };
+          let start_ok = if start_type.closed() { value >= lv } else { value > lv };
+          let end_ok = if end_type.closed() { value <= rv } else { value < rv };
           Value::Boolean(start_ok && end_ok)
         }
-        Value::Null(_) if !end_closed => Value::Boolean(if start_closed { value >= lv } else { value > lv }),
+        Value::Null(_) if end_type.undefined() => {
+          let start_in_range = if start_type.closed() { value >= lv } else { value > lv };
+          Value::Boolean(start_in_range)
+        }
+        Value::Null(_) => value_null!(),
         _ => value_null!("eval_in_range"),
       },
-      Value::Null(_) if !start_closed => match end {
-        Value::Number(rv) => Value::Boolean(if end_closed { value <= rv } else { value < rv }),
+      Value::Null(_) if start_type.undefined() => match end {
+        Value::Number(rv) => {
+          let end_in_range = if end_type.closed() { value <= rv } else { value < rv };
+          Value::Boolean(end_in_range)
+        }
+        _ => value_null!("eval_in_range"),
+      },
+      Value::Null(_) => match end {
+        Value::Number(_) => value_null!(),
         _ => value_null!("eval_in_range"),
       },
       _ => value_null!("eval_in_range"),
@@ -2302,15 +2343,15 @@ fn eval_in_range(lhv: &Value, start: &Value, start_closed: bool, end: &Value, en
     Value::String(value) => match start {
       Value::String(lv) => match end {
         Value::String(rv) => {
-          let start_ok = if start_closed { value >= lv } else { value > lv };
-          let end_ok = if end_closed { value <= rv } else { value < rv };
+          let start_ok = if start_type.closed() { value >= lv } else { value > lv };
+          let end_ok = if end_type.closed() { value <= rv } else { value < rv };
           Value::Boolean(start_ok && end_ok)
         }
-        Value::Null(_) if !end_closed => Value::Boolean(if start_closed { value >= lv } else { value > lv }),
+        Value::Null(_) if end_type.opened() => Value::Boolean(if start_type.closed() { value >= lv } else { value > lv }),
         _ => value_null!("eval_in_range"),
       },
-      Value::Null(_) if !start_closed => match end {
-        Value::String(rv) => Value::Boolean(if end_closed { value <= rv } else { value < rv }),
+      Value::Null(_) if start_type.opened() => match end {
+        Value::String(rv) => Value::Boolean(if end_type.closed() { value <= rv } else { value < rv }),
         _ => value_null!("eval_in_range"),
       },
       _ => value_null!("eval_in_range"),
@@ -2318,15 +2359,15 @@ fn eval_in_range(lhv: &Value, start: &Value, start_closed: bool, end: &Value, en
     Value::Date(value) => match start {
       Value::Date(lv) => match end {
         Value::Date(rv) => {
-          let start_ok = if start_closed { value >= lv } else { value > lv };
-          let end_ok = if end_closed { value <= rv } else { value < rv };
+          let start_ok = if start_type.closed() { value >= lv } else { value > lv };
+          let end_ok = if end_type.closed() { value <= rv } else { value < rv };
           Value::Boolean(start_ok && end_ok)
         }
-        Value::Null(_) if !end_closed => Value::Boolean(if start_closed { value >= lv } else { value > lv }),
+        Value::Null(_) if end_type.opened() => Value::Boolean(if start_type.closed() { value >= lv } else { value > lv }),
         _ => value_null!("eval_in_range"),
       },
-      Value::Null(_) if !start_closed => match end {
-        Value::Date(rv) => Value::Boolean(if end_closed { value <= rv } else { value < rv }),
+      Value::Null(_) if start_type.opened() => match end {
+        Value::Date(rv) => Value::Boolean(if end_type.closed() { value <= rv } else { value < rv }),
         _ => value_null!("eval_in_range"),
       },
       _ => value_null!("eval_in_range"),
@@ -2334,15 +2375,15 @@ fn eval_in_range(lhv: &Value, start: &Value, start_closed: bool, end: &Value, en
     Value::Time(value) => match start {
       Value::Time(lv) => match end {
         Value::Time(rv) => {
-          let start_ok = if start_closed { value >= lv } else { value > lv };
-          let end_ok = if end_closed { value <= rv } else { value < rv };
+          let start_ok = if start_type.closed() { value >= lv } else { value > lv };
+          let end_ok = if end_type.closed() { value <= rv } else { value < rv };
           Value::Boolean(start_ok && end_ok)
         }
-        Value::Null(_) if !end_closed => Value::Boolean(if start_closed { value >= lv } else { value > lv }),
+        Value::Null(_) if end_type.opened() => Value::Boolean(if start_type.closed() { value >= lv } else { value > lv }),
         _ => value_null!("eval_in_range"),
       },
-      Value::Null(_) if !start_closed => match end {
-        Value::Time(rv) => Value::Boolean(if end_closed { value <= rv } else { value < rv }),
+      Value::Null(_) if start_type.opened() => match end {
+        Value::Time(rv) => Value::Boolean(if end_type.closed() { value <= rv } else { value < rv }),
         _ => value_null!("eval_in_range"),
       },
       _ => value_null!("eval_in_range"),
@@ -2350,15 +2391,15 @@ fn eval_in_range(lhv: &Value, start: &Value, start_closed: bool, end: &Value, en
     Value::DateTime(value) => match start {
       Value::DateTime(lv) => match end {
         Value::DateTime(rv) => {
-          let start_ok = if start_closed { value >= lv } else { value > lv };
-          let end_ok = if end_closed { value <= rv } else { value < rv };
+          let start_ok = if start_type.closed() { value >= lv } else { value > lv };
+          let end_ok = if end_type.closed() { value <= rv } else { value < rv };
           Value::Boolean(start_ok && end_ok)
         }
-        Value::Null(_) if !end_closed => Value::Boolean(if start_closed { value >= lv } else { value > lv }),
+        Value::Null(_) if end_type.opened() => Value::Boolean(if start_type.closed() { value >= lv } else { value > lv }),
         _ => value_null!("eval_in_range"),
       },
-      Value::Null(_) if !start_closed => match end {
-        Value::DateTime(rv) => Value::Boolean(if end_closed { value <= rv } else { value < rv }),
+      Value::Null(_) if start_type.opened() => match end {
+        Value::DateTime(rv) => Value::Boolean(if end_type.closed() { value <= rv } else { value < rv }),
         _ => value_null!("eval_in_range"),
       },
       _ => value_null!("eval_in_range"),
@@ -2366,15 +2407,15 @@ fn eval_in_range(lhv: &Value, start: &Value, start_closed: bool, end: &Value, en
     Value::YearsAndMonthsDuration(value) => match start {
       Value::YearsAndMonthsDuration(lv) => match end {
         Value::YearsAndMonthsDuration(rv) => {
-          let start_ok = if start_closed { value >= lv } else { value > lv };
-          let end_ok = if end_closed { value <= rv } else { value < rv };
+          let start_ok = if start_type.closed() { value >= lv } else { value > lv };
+          let end_ok = if end_type.closed() { value <= rv } else { value < rv };
           Value::Boolean(start_ok && end_ok)
         }
-        Value::Null(_) if !end_closed => Value::Boolean(if start_closed { value >= lv } else { value > lv }),
+        Value::Null(_) if end_type.opened() => Value::Boolean(if start_type.closed() { value >= lv } else { value > lv }),
         _ => value_null!("eval_in_range"),
       },
-      Value::Null(_) if !start_closed => match end {
-        Value::YearsAndMonthsDuration(rv) => Value::Boolean(if end_closed { value <= rv } else { value < rv }),
+      Value::Null(_) if start_type.opened() => match end {
+        Value::YearsAndMonthsDuration(rv) => Value::Boolean(if end_type.closed() { value <= rv } else { value < rv }),
         _ => value_null!("eval_in_range"),
       },
       _ => value_null!("eval_in_range"),
@@ -2382,15 +2423,15 @@ fn eval_in_range(lhv: &Value, start: &Value, start_closed: bool, end: &Value, en
     Value::DaysAndTimeDuration(value) => match start {
       Value::DaysAndTimeDuration(lv) => match end {
         Value::DaysAndTimeDuration(rv) => {
-          let start_ok = if start_closed { value >= lv } else { value > lv };
-          let end_ok = if end_closed { value <= rv } else { value < rv };
+          let start_ok = if start_type.closed() { value >= lv } else { value > lv };
+          let end_ok = if end_type.closed() { value <= rv } else { value < rv };
           Value::Boolean(start_ok && end_ok)
         }
-        Value::Null(_) if !end_closed => Value::Boolean(if start_closed { value >= lv } else { value > lv }),
+        Value::Null(_) if end_type.opened() => Value::Boolean(if start_type.closed() { value >= lv } else { value > lv }),
         _ => value_null!("eval_in_range"),
       },
-      Value::Null(_) if !start_closed => match end {
-        Value::DaysAndTimeDuration(rv) => Value::Boolean(if end_closed { value <= rv } else { value < rv }),
+      Value::Null(_) if start_type.opened() => match end {
+        Value::DaysAndTimeDuration(rv) => Value::Boolean(if end_type.closed() { value <= rv } else { value < rv }),
         _ => value_null!("eval_in_range"),
       },
       _ => value_null!("eval_in_range"),
@@ -2400,7 +2441,11 @@ fn eval_in_range(lhv: &Value, start: &Value, start_closed: bool, end: &Value, en
 }
 
 fn eval_in_equal(left: &Value, right: &Value) -> Value {
-  if let Some(true) = eval_ternary_equality(left, right) {
+  if let Some(true) = eval_ternary_equality(left, right) { VALUE_TRUE } else { VALUE_FALSE }
+}
+
+fn eval_in_not_equal(left: &Value, right: &Value) -> Value {
+  if let Some(false) = eval_ternary_equality(left, right) {
     VALUE_TRUE
   } else {
     VALUE_FALSE
@@ -2576,10 +2621,9 @@ fn eval_in_unary_greater_or_equal(left: &Value, right: &Value) -> Value {
 }
 
 /// Evaluates function definition with positional parameters.
-// PGDMN: H6 — takes arguments by value, so coercion never clones conformant values.
 fn eval_function_with_positional_parameters(
   scope: &FeelScope,
-  args: Vec<Value>,
+  args: &[Value],
   params: &[(Name, FeelType)],
   body: &FunctionBody,
   closure_ctx: FeelContext,
@@ -2589,30 +2633,29 @@ fn eval_function_with_positional_parameters(
   if args.len() != params.len() {
     return value_null!("invalid number of arguments");
   }
-  for (argument_value, (parameter_name, parameter_type)) in args.into_iter().zip(params) {
-    params_ctx.set_entry(parameter_name, argument_value.coerced_owned(parameter_type))
+  for (argument_value, (parameter_name, parameter_type)) in args.iter().zip(params) {
+    params_ctx.set_entry(parameter_name, argument_value.coerced(parameter_type))
   }
   eval_function_definition(scope, params_ctx, body, closure_ctx, result_type)
 }
 
 /// Evaluates function definition with named parameters.
-// PGDMN: H6 — takes arguments by value, so coercion never clones conformant values.
 fn eval_function_with_named_parameters(
   scope: &FeelScope,
-  args: Value,
+  args: &Value,
   params: &[(Name, FeelType)],
   body: &FunctionBody,
   closure_ctx: FeelContext,
   result_type: FeelType,
 ) -> Value {
   let mut params_ctx = FeelContext::default();
-  if let Value::NamedParameters(mut argument_map) = args {
+  if let Value::NamedParameters(argument_map) = args {
     if argument_map.len() != params.len() {
       return value_null!("invalid number of arguments");
     }
     for (parameter_name, parameter_type) in params {
-      if let Some((argument, _)) = argument_map.remove(parameter_name) {
-        params_ctx.set_entry(parameter_name, argument.coerced_owned(parameter_type))
+      if let Some((argument, _)) = argument_map.get(parameter_name) {
+        params_ctx.set_entry(parameter_name, argument.coerced(parameter_type))
       } else {
         return value_null!("parameter with name {} not found in arguments", parameter_name);
       }
@@ -2644,8 +2687,7 @@ fn eval_function_definition(scope: &FeelScope, params_ctx: FeelContext, body: &F
   }
   scope.pop(); // params_ctx
   scope.pop(); // closure_ctx
-  // PGDMN: H6 — owned coercion, conformant results are returned without cloning
-  result.coerced_owned(&result_type)
+  result.coerced(&result_type)
 }
 
 /// Evaluates external function definition with positional parameters.
@@ -2681,113 +2723,7 @@ fn eval_external_function_definition(scope: &FeelScope, arguments: &[Value], bod
     Value::ExternalPmmlFunction(document, model_name) => evaluate_external_pmml_function(document, model_name, arguments),
     other => value_null!("expected JAVA or PMML mapping, actual value is {}", other),
   };
-  // PGDMN: H6 — owned coercion, conformant results are returned without cloning
-  result.coerced_owned(&result_type)
-}
-
-/// Returns `true` when the AST may reference the specified name.
-/// Conservative: qualified-name segments and path tails count as references.
-// PGDMN: H13 — detects whether a for-expression body references `partial`.
-// Also used by the decision-table evaluator to classify `?`-referencing
-// input entries (exported below). Exhaustive match, so a new AST node
-// variant fails the build instead of being silently classified.
-pub fn ast_references_name(node: &AstNode, name: &Name) -> bool {
-  match node {
-    AstNode::Name(n) | AstNode::QualifiedNameSegment(n) => n == name,
-    AstNode::At(_)
-    | AstNode::Boolean(_)
-    | AstNode::ContextEntryKey(_)
-    | AstNode::ContextTypeEntryKey(_)
-    | AstNode::FeelType(_)
-    | AstNode::Irrelevant
-    | AstNode::Null
-    | AstNode::Numeric(_, _, _, _)
-    | AstNode::ParameterName(_)
-    | AstNode::String(_) => false,
-    AstNode::EvaluatedExpression(lhs)
-    | AstNode::FunctionBody(lhs, _)
-    | AstNode::IntervalEnd(lhs, _)
-    | AstNode::IntervalStart(lhs, _)
-    | AstNode::ListType(lhs)
-    | AstNode::Neg(lhs)
-    | AstNode::RangeType(lhs)
-    | AstNode::Satisfies(lhs)
-    | AstNode::UnaryEq(lhs)
-    | AstNode::UnaryGe(lhs)
-    | AstNode::UnaryGt(lhs)
-    | AstNode::UnaryLe(lhs)
-    | AstNode::UnaryLt(lhs)
-    | AstNode::UnaryNe(lhs) => ast_references_name(lhs, name),
-    AstNode::Add(lhs, rhs)
-    | AstNode::And(lhs, rhs)
-    | AstNode::ContextEntry(lhs, rhs)
-    | AstNode::ContextTypeEntry(lhs, rhs)
-    | AstNode::Div(lhs, rhs)
-    | AstNode::Eq(lhs, rhs)
-    | AstNode::Every(lhs, rhs)
-    | AstNode::Exp(lhs, rhs)
-    | AstNode::Filter(lhs, rhs)
-    | AstNode::For(lhs, rhs)
-    | AstNode::FormalParameter(lhs, rhs)
-    | AstNode::FunctionDefinition(lhs, rhs)
-    | AstNode::FunctionInvocation(lhs, rhs)
-    | AstNode::FunctionType(lhs, rhs)
-    | AstNode::Ge(lhs, rhs)
-    | AstNode::Gt(lhs, rhs)
-    | AstNode::In(lhs, rhs)
-    | AstNode::InstanceOf(lhs, rhs)
-    | AstNode::IterationContextSingle(lhs, rhs)
-    | AstNode::Le(lhs, rhs)
-    | AstNode::Lt(lhs, rhs)
-    | AstNode::Mul(lhs, rhs)
-    | AstNode::NamedParameter(lhs, rhs)
-    | AstNode::Nq(lhs, rhs)
-    | AstNode::Or(lhs, rhs)
-    | AstNode::Out(lhs, rhs)
-    | AstNode::Path(lhs, rhs)
-    | AstNode::QuantifiedContext(lhs, rhs)
-    | AstNode::Range(lhs, rhs)
-    | AstNode::Some(lhs, rhs)
-    | AstNode::Sub(lhs, rhs) => ast_references_name(lhs, name) || ast_references_name(rhs, name),
-    AstNode::Between(lhs, mhs, rhs) | AstNode::If(lhs, mhs, rhs) | AstNode::IterationContextInterval(lhs, mhs, rhs) => {
-      ast_references_name(lhs, name) || ast_references_name(mhs, name) || ast_references_name(rhs, name)
-    }
-    AstNode::CommaList(items)
-    | AstNode::Context(items)
-    | AstNode::ContextType(items)
-    | AstNode::ExpressionList(items)
-    | AstNode::FormalParameters(items)
-    | AstNode::IterationContexts(items)
-    | AstNode::List(items)
-    | AstNode::NamedParameters(items)
-    | AstNode::NegatedList(items)
-    | AstNode::ParameterTypes(items)
-    | AstNode::PositionalParameters(items)
-    | AstNode::QualifiedName(items)
-    | AstNode::QuantifiedContexts(items) => items.iter().any(|item| ast_references_name(item, name)),
-  }
-}
-
-/// Returns `true` when a filter expression may evaluate to a number (numeric index).
-/// Conservative: comparisons, logical operators and boolean literals always yield
-/// boolean or null, every other node is assumed to possibly yield a number.
-// PGDMN: H20 — build-time classification used to skip the numeric-index probe.
-fn filter_may_yield_number(node: &AstNode) -> bool {
-  !matches!(
-    node,
-    AstNode::And(_, _)
-      | AstNode::Between(_, _, _)
-      | AstNode::Boolean(_)
-      | AstNode::Eq(_, _)
-      | AstNode::Ge(_, _)
-      | AstNode::Gt(_, _)
-      | AstNode::In(_, _)
-      | AstNode::InstanceOf(_, _)
-      | AstNode::Le(_, _)
-      | AstNode::Lt(_, _)
-      | AstNode::Nq(_, _)
-      | AstNode::Or(_, _)
-  )
+  result.coerced(&result_type)
 }
 
 fn build_err_msg(err_msg: String) -> Evaluator {

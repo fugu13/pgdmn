@@ -2,8 +2,8 @@
 
 use crate::errors::*;
 use dsntk_common::DsntkError;
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 use std::{fmt, ops};
 
 /// Regular expression pattern for parsing years and months duration.
@@ -13,7 +13,7 @@ const REGEX_YEARS_AND_MONTHS: &str = r#"^(?P<sign>-)?P((?P<years>[0-9]+)Y)?((?P<
 const MONTHS_IN_YEAR: i64 = 12;
 
 /// Regular expression for parsing years and months duration.
-static RE_YEARS_AND_MONTHS: Lazy<Regex> = Lazy::new(|| Regex::new(REGEX_YEARS_AND_MONTHS).unwrap());
+static RE_YEARS_AND_MONTHS: LazyLock<Regex> = LazyLock::new(|| Regex::new(REGEX_YEARS_AND_MONTHS).unwrap());
 
 /// Years and months duration in FEEL.
 ///
@@ -110,22 +110,21 @@ impl TryFrom<&str> for FeelYearsAndMonthsDuration {
       let mut valid_months = false;
       if let Some(years_match) = captures.name("years") {
         contains_years = true;
-        if let Ok(years) = years_match.as_str().parse::<i64>() {
-          if let Some(months) = years.checked_mul(MONTHS_IN_YEAR) {
-            if let Some(total) = total_months.checked_add(months) {
-              total_months = total;
-              valid_years = true;
-            }
-          }
+        if let Ok(years) = years_match.as_str().parse::<i64>()
+          && let Some(months) = years.checked_mul(MONTHS_IN_YEAR)
+          && let Some(total) = total_months.checked_add(months)
+        {
+          total_months = total;
+          valid_years = true;
         }
       }
       if let Some(months_match) = captures.name("months") {
         contains_months = true;
-        if let Ok(months) = months_match.as_str().parse::<i64>() {
-          if let Some(total) = total_months.checked_add(months) {
-            total_months = total;
-            valid_months = true;
-          }
+        if let Ok(months) = months_match.as_str().parse::<i64>()
+          && let Some(total) = total_months.checked_add(months)
+        {
+          total_months = total;
+          valid_months = true;
         }
       }
       if (contains_years && valid_years) || (contains_months && valid_months) {
@@ -301,11 +300,5 @@ mod tests {
     assert_eq!(2, ym_duration.years());
     assert_eq!(3, ym_duration.months());
     assert_eq!(27, ym_duration.as_months());
-  }
-
-  #[test]
-  fn test_eq_receiver() {
-    let ym_duration = FeelYearsAndMonthsDuration::try_from("P2Y3M").unwrap();
-    ym_duration.assert_receiver_is_total_eq();
   }
 }

@@ -10,9 +10,9 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
+edition = "2024"
 name = "dsntk-feel-regex"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Dariusz Depta <depta@engos.de>"]
 build = false
 autolib = false
@@ -20,7 +20,8 @@ autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "dsntk | DecisionToolkit | FEEL regular expressions"
+description = "ÐecisionToolkit | FEEL regular expressions"
+homepage = "https://decision-toolkit.org"
 documentation = "https://docs.rs/dsntk-feel-regex"
 readme = "README.md"
 keywords = [
@@ -36,7 +37,8 @@ categories = [
     "parsing",
 ]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/DecisionToolkit/dsntk-rs.git"
+repository = "https://github.com/DecisionToolkit/dsntk.git"
+resolver = "2"
 
 [lib]
 name = "dsntk_feel_regex"
@@ -51,13 +53,10 @@ name = "test_is_match_with_flags"
 path = "tests/test_is_match_with_flags.rs"
 
 [dependencies.dsntk-common]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-macros]
-version = "0.2.0"
-
-[dependencies.once_cell]
-version = "1.21.1"
+version = "0.3.0"
 
 [dependencies.regex]
-version = "1.11.1"
+version = "1.12.3"

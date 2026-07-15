@@ -3,8 +3,8 @@
 use crate::feel_date_time::FeelDateTime;
 use crate::feel_zone::FeelZone;
 use chrono::{DateTime, Datelike, FixedOffset, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Timelike, Utc};
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 /// Regular expression pattern for parsing dates.
 const DATE_PATTERN: &str = r"(?P<sign>-)?(?P<year>[1-9][0-9]{3,8})-(?P<month>[0-9]{2})-(?P<day>[0-9]{2})";
@@ -35,13 +35,13 @@ pub type WeekOfYear = u8;
 pub type MonthOfYear = (String, u8);
 
 /// Regular expression pattern for parsing time zone.
-pub static TIME_ZONE_PATTERN: Lazy<String> = Lazy::new(|| format!("{ZULU_PATTERN}|{ZONE_PATTERN}|{OFFSET_PATTERN}"));
+pub static TIME_ZONE_PATTERN: LazyLock<String> = LazyLock::new(|| format!("{ZULU_PATTERN}|{ZONE_PATTERN}|{OFFSET_PATTERN}"));
 /// Regular expression for parsing date.
-pub static RE_DATE: Lazy<Regex> = Lazy::new(|| Regex::new(&format!("^{DATE_PATTERN}$")).unwrap());
+pub static RE_DATE: LazyLock<Regex> = LazyLock::new(|| Regex::new(&format!("^{DATE_PATTERN}$")).unwrap());
 /// Regular expression for parsing time.
-pub static RE_TIME: Lazy<Regex> = Lazy::new(|| Regex::new(&format!("^{TIME_PATTERN}({})?$", TIME_ZONE_PATTERN.as_str())).unwrap());
+pub static RE_TIME: LazyLock<Regex> = LazyLock::new(|| Regex::new(&format!("^{TIME_PATTERN}({})?$", TIME_ZONE_PATTERN.as_str())).unwrap());
 /// Regular expression for parsing date and time.
-pub static RE_DATE_AND_TIME: Lazy<Regex> = Lazy::new(|| Regex::new(&format!("^{DATE_PATTERN}T{TIME_PATTERN}({})?$", TIME_ZONE_PATTERN.as_str())).unwrap());
+pub static RE_DATE_AND_TIME: LazyLock<Regex> = LazyLock::new(|| Regex::new(&format!("^{DATE_PATTERN}T{TIME_PATTERN}({})?$", TIME_ZONE_PATTERN.as_str())).unwrap());
 
 pub fn feel_time_offset(me: &FeelDateTime) -> Option<i32> {
   let me_date_tuple = me.date().as_tuple();
@@ -66,12 +66,11 @@ pub fn feel_time_zone(me: &FeelDateTime) -> Option<String> {
 }
 
 pub fn date_time_offset_dt(date: (i32, u32, u32), time: (u32, u32, u32, u32), offset: i32) -> Option<DateTime<FixedOffset>> {
-  if let Some(fixed_offset) = FixedOffset::east_opt(offset) {
-    if let LocalResult::Single(offset_date_time) = fixed_offset.with_ymd_and_hms(date.0, date.1, date.2, time.0, time.1, time.2) {
-      if let Some(date_time) = offset_date_time.with_nanosecond(time.3) {
-        return Some(date_time);
-      }
-    }
+  if let Some(fixed_offset) = FixedOffset::east_opt(offset)
+    && let LocalResult::Single(offset_date_time) = fixed_offset.with_ymd_and_hms(date.0, date.1, date.2, time.0, time.1, time.2)
+    && let Some(date_time) = offset_date_time.with_nanosecond(time.3)
+  {
+    return Some(date_time);
   }
   None
 }
@@ -84,11 +83,11 @@ pub fn date_time_offset_t(time: (u32, u32, u32, u32), offset: i32) -> Option<Dat
 /// Returns the time offset (in seconds) between local time zone
 /// and UTC time zone at specified **date and time**.
 pub fn get_local_offset_dt(date: (i32, u32, u32), time: (u32, u32, u32, u32)) -> Option<i32> {
-  if let Some(naive_date) = NaiveDate::from_ymd_opt(date.0, date.1, date.2) {
-    if let Some(naive_time) = NaiveTime::from_hms_nano_opt(time.0, time.1, time.2, time.3) {
-      let naive_date_time = NaiveDateTime::new(naive_date, naive_time);
-      return Some(Local.offset_from_utc_datetime(&naive_date_time).local_minus_utc());
-    }
+  if let Some(naive_date) = NaiveDate::from_ymd_opt(date.0, date.1, date.2)
+    && let Some(naive_time) = NaiveTime::from_hms_nano_opt(time.0, time.1, time.2, time.3)
+  {
+    let naive_date_time = NaiveDateTime::new(naive_date, naive_time);
+    return Some(Local.offset_from_utc_datetime(&naive_date_time).local_minus_utc());
   }
   None
 }
@@ -104,19 +103,19 @@ pub fn get_local_offset_t(time: (u32, u32, u32, u32)) -> Option<i32> {
 /// and UTC time zone at specified **date and time**.
 pub fn get_zone_offset_dt(zone_name: &str, date: (i32, u32, u32), time: (u32, u32, u32, u32)) -> Option<i32> {
   // try to build UTC date and time from specified values
-  if let LocalResult::Single(utc_date_time) = Utc.with_ymd_and_hms(date.0, date.1, date.2, time.0, time.1, time.2) {
-    if let Some(utc) = utc_date_time.with_nanosecond(time.3) {
-      // try parse the time zone specified as text
-      if let Ok(tz) = zone_name.parse::<chrono_tz::Tz>() {
-        // build date and time in parsed time zone
-        if let LocalResult::Single(z_date_time) = tz.with_ymd_and_hms(date.0, date.1, date.2, time.0, time.1, time.2) {
-          if let Some(zdt) = z_date_time.with_nanosecond(time.3) {
-            // calculate the time offset, the result is a chrono::Duration
-            let offset: chrono::Duration = utc.with_timezone(&tz) - zdt;
-            // return seconds
-            return Some(offset.num_seconds() as i32);
-          }
-        }
+  if let LocalResult::Single(utc_date_time) = Utc.with_ymd_and_hms(date.0, date.1, date.2, time.0, time.1, time.2)
+    && let Some(utc) = utc_date_time.with_nanosecond(time.3)
+  {
+    // try parse the time zone specified as text
+    if let Ok(tz) = zone_name.parse::<chrono_tz::Tz>() {
+      // build date and time in parsed time zone
+      if let LocalResult::Single(z_date_time) = tz.with_ymd_and_hms(date.0, date.1, date.2, time.0, time.1, time.2)
+        && let Some(zdt) = z_date_time.with_nanosecond(time.3)
+      {
+        // calculate the time offset, the result is a chrono::Duration
+        let offset: chrono::Duration = utc.with_timezone(&tz) - zdt;
+        // return seconds
+        return Some(offset.num_seconds() as i32);
       }
     }
   }
@@ -208,8 +207,8 @@ pub fn month_of_year(month: u32) -> Option<MonthOfYear> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::feel_date::FeelDate;
   use crate::FeelTime;
+  use crate::feel_date::FeelDate;
   use std::str::FromStr;
 
   const SECONDS_IN_HOUR: i32 = 3_600;

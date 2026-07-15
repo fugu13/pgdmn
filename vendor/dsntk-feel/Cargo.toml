@@ -10,9 +10,9 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
+edition = "2024"
 name = "dsntk-feel"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Dariusz Depta <depta@engos.de>"]
 build = false
 autolib = false
@@ -20,7 +20,8 @@ autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "dsntk | DecisionToolkit | FEEL definitions"
+description = "ÐecisionToolkit | FEEL definitions"
+homepage = "https://decision-toolkit.org"
 documentation = "https://docs.rs/dsntk-feel"
 readme = "README.md"
 keywords = [
@@ -36,7 +37,8 @@ categories = [
     "parsing",
 ]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/DecisionToolkit/dsntk-rs.git"
+repository = "https://github.com/DecisionToolkit/dsntk.git"
+resolver = "2"
 
 [lib]
 name = "dsntk_feel"
@@ -55,32 +57,29 @@ name = "name_to_string"
 path = "benches/name_to_string.rs"
 
 [dependencies.chrono]
-version = "0.4.40"
+version = "0.4.44"
 
 [dependencies.chrono-tz]
-version = "0.10.1"
+version = "0.10.4"
 
 [dependencies.dsntk-common]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-feel-number]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-feel-temporal]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.dsntk-macros]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.regex]
-version = "1.11.1"
+version = "1.12.3"
 
 [dependencies.serde]
-version = "1.0.219"
+version = "1.0.228"
 features = ["derive"]
 
 [dependencies.serde_json]
-version = "1.0.140"
-
-[dev-dependencies.once_cell]
-version = "1.21.1"
+version = "1.0.149"

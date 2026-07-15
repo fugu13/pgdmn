@@ -16,7 +16,12 @@
 
 use proptest::prelude::*;
 
-use crate::convert_core::{feel_to_json, json_to_feel};
+use crate::convert_core::{json_to_feel, try_feel_to_json};
+
+/// Generators produce only finite numbers, so conversion cannot fail here.
+fn feel_to_json(value: &dsntk_feel::values::Value) -> serde_json::Value {
+    try_feel_to_json(value).expect("non-finite number in generated data")
+}
 
 /// Structural equality with numeric-value comparison for numbers.
 fn json_value_eq(left: &serde_json::Value, right: &serde_json::Value) -> bool {

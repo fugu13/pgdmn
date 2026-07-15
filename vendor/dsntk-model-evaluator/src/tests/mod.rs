@@ -1,12 +1,11 @@
 use crate::model_evaluator::ModelEvaluator;
+use dsntk_feel::FeelScope;
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
-use dsntk_feel::FeelScope;
 use dsntk_model::DmnElement;
-use once_cell::sync::Lazy;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use walkdir::WalkDir;
 
 mod compatibility;
@@ -25,36 +24,41 @@ macro_rules! from_examples {
 
 macro_rules! model_evaluator_from_examples {
   ($model_name:tt) => {
-    static MODEL_EVALUATOR: Lazy<Arc<ModelEvaluator>> = Lazy::new(|| build_model_evaluator(dsntk_examples::$model_name));
+    static MODEL_EVALUATOR: LazyLock<Arc<ModelEvaluator>> = LazyLock::new(|| build_model_evaluator(dsntk_examples::$model_name));
   };
 }
 
 macro_rules! model_namespace_from_examples {
   ($model_name:tt) => {
-    static MODEL_NAMESPACE: Lazy<String> = Lazy::new(|| build_model_namespace(dsntk_examples::$model_name));
+    static MODEL_NAMESPACE: LazyLock<String> = LazyLock::new(|| build_model_namespace(dsntk_examples::$model_name));
   };
 }
 
 macro_rules! model_name_from_examples {
   ($model_name:tt) => {
-    static MODEL_NAME: Lazy<String> = Lazy::new(|| build_model_name(dsntk_examples::$model_name));
+    static MODEL_NAME: LazyLock<String> = LazyLock::new(|| build_model_name(dsntk_examples::$model_name));
   };
 }
 
 macro_rules! model_evaluator {
   ($model_name:tt) => {
-    static MODEL_EVALUATOR: Lazy<Arc<ModelEvaluator>> = Lazy::new(|| build_model_evaluator($model_name));
+    static MODEL_EVALUATOR: LazyLock<Arc<ModelEvaluator>> = LazyLock::new(|| build_model_evaluator($model_name));
   };
 }
 
 macro_rules! static_context {
   ($name:tt, $content:tt) => {
-    static $name: Lazy<FeelContext> = Lazy::new(|| context($content));
+    static $name: LazyLock<FeelContext> = LazyLock::new(|| context($content));
   };
 }
 
 use dsntk_model::NamedElement;
-use {from_examples, model_evaluator, model_evaluator_from_examples, model_name_from_examples, model_namespace_from_examples, static_context};
+use from_examples;
+use model_evaluator;
+use model_evaluator_from_examples;
+use model_name_from_examples;
+use model_namespace_from_examples;
+use static_context;
 
 /// Utility function that creates a `FEEL` context from specified input expression.
 pub fn context(input: &str) -> FeelContext {

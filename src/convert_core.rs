@@ -2,7 +2,8 @@
 //!
 //! Shared verbatim with the host-side profiling harness (via `#[path]`
 //! inclusion), so benchmark numbers always describe the shipping conversion
-//! code. Everything pgrx-dependent lives in `convert.rs`.
+//! code. Everything pgrx-dependent lives in `convert.rs`, including the
+//! SQL-error wrapper around [`try_feel_to_json`].
 
 use dsntk_feel::FeelNumber;
 use dsntk_feel::Name;
@@ -48,21 +49,35 @@ pub fn json_to_feel(json: &serde_json::Value) -> Value {
     }
 }
 
+/// Whether a FEEL number is finite. dsntk arithmetic can overflow decimal128
+/// to ±Inf/NaN, whose Display panics inside dsntk (BUG-004) — callers must
+/// check before stringifying. NaN compares false to everything, so it fails
+/// the range check too.
+pub fn feel_number_is_finite(n: &FeelNumber) -> bool {
+    let infinite = FeelNumber::infinite();
+    -infinite < *n && *n < infinite
+}
+
 /// Convert a dsntk FEEL Value to serde_json::Value.
-pub fn feel_to_json(value: &Value) -> serde_json::Value {
-    match value {
+///
+/// Fails when the value contains a non-finite number (BUG-004: stringifying
+/// ±Inf/NaN panics inside dsntk); the pgrx boundary in `convert.rs` turns
+/// that into a SQL error.
+pub fn try_feel_to_json(value: &Value) -> Result<serde_json::Value, String> {
+    Ok(match value {
         Value::Null(_) => serde_json::Value::Null,
         Value::Boolean(b) => serde_json::Value::Bool(*b),
-        Value::Number(n) => feel_number_to_json(n),
+        Value::Number(n) => feel_number_to_json(n)?,
         Value::String(s) => serde_json::Value::String(s.clone()),
         Value::List(items) => {
-            let arr: Vec<serde_json::Value> = items.iter().map(feel_to_json).collect();
+            let arr: Vec<serde_json::Value> =
+                items.iter().map(try_feel_to_json).collect::<Result<_, _>>()?;
             serde_json::Value::Array(arr)
         }
         Value::Context(ctx) => {
             let mut map = serde_json::Map::new();
             for (name, val) in ctx.iter() {
-                map.insert(name.to_string(), feel_to_json(val));
+                map.insert(String::from(name), try_feel_to_json(val)?);
             }
             serde_json::Value::Object(map)
         }
@@ -72,29 +87,33 @@ pub fn feel_to_json(value: &Value) -> serde_json::Value {
         Value::DaysAndTimeDuration(d) => serde_json::Value::String(d.to_string()),
         Value::YearsAndMonthsDuration(d) => serde_json::Value::String(d.to_string()),
         _ => serde_json::Value::String(value.to_string()),
-    }
+    })
 }
 
 /// Convert a FEEL number to a JSON number.
 ///
-/// Integers take a single exact FFI conversion. The `is_integer` guard is
-/// required because `i64::try_from(&FeelNumber)` truncates fractional values
-/// instead of failing. Everything else renders as a decimal string: f64 when
-/// parseable (non-integers, and integers wider than i64 — the latter lossy,
-/// see CONVERT-001), otherwise a JSON string. The rendered form of those
-/// values never parses as i64, so no i64 attempt is made on the string path.
-fn feel_number_to_json(n: &FeelNumber) -> serde_json::Value {
+/// Non-finite numbers fail (see [`try_feel_to_json`]). Finite integers take a
+/// single exact FFI conversion; the `is_integer` guard is required because
+/// `i64::try_from(&FeelNumber)` truncates fractional values instead of
+/// failing. Everything else renders as a decimal string: f64 when parseable
+/// (non-integers, and integers wider than i64 — the latter lossy, see
+/// CONVERT-001), otherwise a JSON string. The rendered form of those values
+/// never parses as i64, so no i64 attempt is made on the string path.
+fn feel_number_to_json(n: &FeelNumber) -> Result<serde_json::Value, String> {
+    if !feel_number_is_finite(n) {
+        return Err("FEEL number result is not finite and cannot be represented".to_string());
+    }
     if n.is_integer() {
         if let Ok(i) = i64::try_from(n) {
-            return serde_json::Value::Number(serde_json::Number::from(i));
+            return Ok(serde_json::Value::Number(serde_json::Number::from(i)));
         }
     }
     let s = n.to_string();
-    if let Ok(f) = s.parse::<f64>() {
+    Ok(if let Ok(f) = s.parse::<f64>() {
         serde_json::json!(f)
     } else {
         serde_json::Value::String(s)
-    }
+    })
 }
 
 /// Convert a JSON value (expected object) to a FeelContext.

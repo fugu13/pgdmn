@@ -88,11 +88,14 @@ pub fn get_or_build_evaluator(model: &DmnModel) -> Result<Arc<ModelEvaluator>, S
         return Ok(evaluator);
     }
 
-    // Parse and build
+    // Parse and build. The guard re-runs here (not just at input parsing) so
+    // dmn_model values stored before the external-function guard existed are
+    // still rejected at evaluation time.
     #[cfg(any(test, feature = "pg_test"))]
     EVALUATOR_BUILDS.with(|count| count.set(count.get() + 1));
     let definitions =
         dsntk_model::parse(&model.xml).map_err(|e| format!("failed to parse DMN XML: {e}"))?;
+    crate::guard::reject_external_definitions(&definitions)?;
     let evaluator = ModelEvaluator::new(&[definitions])
         .map_err(|e| format!("failed to build model evaluator: {e}"))?;
 
@@ -147,6 +150,10 @@ fn get_or_prepare_feel_evaluator(
 
     let node = dsntk_feel_parser::parse_expression(scope, expression, false)
         .map_err(|e| format!("FEEL parse error: {e}"))?;
+    // Guard once per parse: every cached evaluator was screened for external
+    // (Java/PMML) function definitions when its expression first entered the
+    // cache, so cache hits need no re-check.
+    crate::guard::reject_external_functions(&node)?;
     let evaluator = Rc::new(dsntk_feel_evaluator::prepare(&node));
 
     FEEL_EVALUATOR_CACHE.with_borrow_mut(|cache| {

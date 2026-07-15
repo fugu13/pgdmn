@@ -4,16 +4,14 @@ use crate::macros::invalid_argument_type;
 use crate::{evaluate_equals, evaluate_range_literal};
 use dsntk_common::DsntkError;
 use dsntk_feel::context::FeelContext;
-use dsntk_feel::values::{Value, Values, VALUE_FALSE, VALUE_TRUE};
-use dsntk_feel::{value_null, value_number, value_string, FeelNumber, FeelScope, Name, ToFeelString};
+use dsntk_feel::values::{VALUE_FALSE, VALUE_TRUE, Value, Values};
+use dsntk_feel::{FeelNumber, FeelScope, IntervalType, Name, ToFeelString, value_null, value_number, value_string};
 use dsntk_feel_temporal::{DayOfWeek, DayOfYear, FeelDate, FeelDateTime, FeelDaysAndTimeDuration, FeelTime, FeelYearsAndMonthsDuration, MonthOfYear, WeekOfYear};
-use once_cell::sync::Lazy;
 use regex::Regex;
 use std::borrow::Borrow;
-use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 /// Returns the absolute value of the argument.
 pub fn abs(value: &Value) -> Value {
@@ -25,123 +23,146 @@ pub fn abs(value: &Value) -> Value {
   }
 }
 
-/// Returns `true` when value2 `>>` value1.
+/// Returns `true` when value1 **is after** value2.
 pub fn after(value1: &Value, value2: &Value) -> Value {
   match value1 {
     Value::Number(point1) => match value2 {
-      Value::Number(point2) => return Value::Boolean(point1 > point2),
+      Value::Number(point2) => Value::Boolean(point1 > point2),
       Value::Range(_, _, range_end, closed_end) => {
         if let Value::Number(point2) = range_end.borrow() {
-          return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed_end));
+          Value::Boolean(point1 > point2 || (point1 == point2 && closed_end.opened()))
+        } else {
+          invalid_argument_type!("after", "range of numbers", value2.type_of())
         }
       }
-      _ => {}
+      _ => invalid_argument_type!("after", "number or range of numbers", value2.type_of()),
     },
     Value::Date(point1) => match value2 {
-      Value::Date(point2) => return Value::Boolean(point1 > point2),
+      Value::Date(point2) => Value::Boolean(point1 > point2),
       Value::Range(_, _, range_end, closed_end) => {
         if let Value::Date(point2) = range_end.borrow() {
-          return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed_end));
+          Value::Boolean(point1 > point2 || (point1 == point2 && closed_end.opened()))
+        } else {
+          invalid_argument_type!("after", "range of dates", value2.type_of())
         }
       }
-      _ => {}
+      _ => invalid_argument_type!("after", "date or range of dates", value2.type_of()),
     },
     Value::Time(point1) => match value2 {
-      Value::Time(point2) => return Value::Boolean(point1 > point2),
+      Value::Time(point2) => Value::Boolean(point1 > point2),
       Value::Range(_, _, range_end, closed_end) => {
         if let Value::Time(point2) = range_end.borrow() {
-          return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed_end));
+          Value::Boolean(point1 > point2 || (point1 == point2 && closed_end.opened()))
+        } else {
+          invalid_argument_type!("after", "range of times", value2.type_of())
         }
       }
-      _ => {}
+      _ => invalid_argument_type!("after", "time or range of times", value2.type_of()),
     },
     Value::DateTime(point1) => match value2 {
-      Value::DateTime(point2) => return Value::Boolean(point1 > point2),
+      Value::DateTime(point2) => Value::Boolean(point1 > point2),
       Value::Range(_, _, range_end, closed_end) => {
         if let Value::DateTime(point2) = range_end.borrow() {
-          return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed_end));
+          Value::Boolean(point1 > point2 || (point1 == point2 && closed_end.opened()))
+        } else {
+          invalid_argument_type!("after", "range of date and times", value2.type_of())
         }
       }
-      _ => {}
+      _ => invalid_argument_type!("after", "date and time or range of date and times", value2.type_of()),
     },
     Value::DaysAndTimeDuration(point1) => match value2 {
-      Value::DaysAndTimeDuration(point2) => return Value::Boolean(point1 > point2),
+      Value::DaysAndTimeDuration(point2) => Value::Boolean(point1 > point2),
       Value::Range(_, _, range_end, closed_end) => {
         if let Value::DaysAndTimeDuration(point2) = range_end.borrow() {
-          return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed_end));
+          Value::Boolean(point1 > point2 || (point1 == point2 && closed_end.opened()))
+        } else {
+          invalid_argument_type!("after", "range of date and time durations", value2.type_of())
         }
       }
-      _ => {}
+      _ => invalid_argument_type!("after", "date and time duration or range of date and time durations", value2.type_of()),
     },
     Value::YearsAndMonthsDuration(point1) => match value2 {
-      Value::YearsAndMonthsDuration(point2) => return Value::Boolean(point1 > point2),
+      Value::YearsAndMonthsDuration(point2) => Value::Boolean(point1 > point2),
       Value::Range(_, _, range_end, closed_end) => {
         if let Value::YearsAndMonthsDuration(point2) = range_end.borrow() {
-          return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed_end));
+          Value::Boolean(point1 > point2 || (point1 == point2 && closed_end.opened()))
+        } else {
+          invalid_argument_type!("after", "range of years and months durations", value2.type_of())
         }
       }
-      _ => {}
+      _ => invalid_argument_type!("after", "years and months duration or range of years and months durations", value2.type_of()),
     },
     Value::Range(range1_start, closed1_start, _, _) => match range1_start.borrow() {
       Value::Number(point1) => match value2 {
-        Value::Number(point2) => return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed1_start)),
+        Value::Number(point2) => Value::Boolean(point1 > point2 || (point1 == point2 && closed1_start.opened())),
         Value::Range(_, _, range2_end, closed2_end) => {
           if let Value::Number(point2) = range2_end.borrow() {
-            return Value::Boolean(point1 > point2 || (point1 == point2 && (!*closed1_start || !*closed2_end)));
+            Value::Boolean(point1 > point2 || (point1 == point2 && (closed1_start.opened() || closed2_end.opened())))
+          } else {
+            invalid_argument_type!("after", "range of numbers", value2.type_of())
           }
         }
-        _ => {}
+        _ => invalid_argument_type!("after", "number or range of numbers", value2.type_of()),
       },
       Value::Date(point1) => match value2 {
-        Value::Date(point2) => return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed1_start)),
+        Value::Date(point2) => Value::Boolean(point1 > point2 || (point1 == point2 && closed1_start.opened())),
         Value::Range(_, _, range2_end, closed2_end) => {
           if let Value::Date(point2) = range2_end.borrow() {
-            return Value::Boolean(point1 > point2 || (point1 == point2 && (!*closed1_start || !*closed2_end)));
+            Value::Boolean(point1 > point2 || (point1 == point2 && (closed1_start.opened() || closed2_end.opened())))
+          } else {
+            invalid_argument_type!("after", "range of dates", value2.type_of())
           }
         }
-        _ => {}
+        _ => invalid_argument_type!("after", "date or range of dates", value2.type_of()),
       },
       Value::Time(point1) => match value2 {
-        Value::Time(point2) => return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed1_start)),
+        Value::Time(point2) => Value::Boolean(point1 > point2 || (point1 == point2 && closed1_start.opened())),
         Value::Range(_, _, range2_end, closed2_end) => {
           if let Value::Time(point2) = range2_end.borrow() {
-            return Value::Boolean(point1 > point2 || (point1 == point2 && (!*closed1_start || !*closed2_end)));
+            Value::Boolean(point1 > point2 || (point1 == point2 && (closed1_start.opened() || closed2_end.opened())))
+          } else {
+            invalid_argument_type!("after", "range of times", value2.type_of())
           }
         }
-        _ => {}
+        _ => invalid_argument_type!("after", "time or range of times", value2.type_of()),
       },
       Value::DateTime(point1) => match value2 {
-        Value::DateTime(point2) => return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed1_start)),
+        Value::DateTime(point2) => Value::Boolean(point1 > point2 || (point1 == point2 && closed1_start.opened())),
         Value::Range(_, _, range2_end, closed2_end) => {
           if let Value::DateTime(point2) = range2_end.borrow() {
-            return Value::Boolean(point1 > point2 || (point1 == point2 && (!*closed1_start || !*closed2_end)));
+            Value::Boolean(point1 > point2 || (point1 == point2 && (closed1_start.opened() || closed2_end.opened())))
+          } else {
+            invalid_argument_type!("after", "range of date and times", value2.type_of())
           }
         }
-        _ => {}
+        _ => invalid_argument_type!("after", "date and time or range of date and times", value2.type_of()),
       },
       Value::DaysAndTimeDuration(point1) => match value2 {
-        Value::DaysAndTimeDuration(point2) => return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed1_start)),
+        Value::DaysAndTimeDuration(point2) => Value::Boolean(point1 > point2 || (point1 == point2 && closed1_start.opened())),
         Value::Range(_, _, range2_end, closed2_end) => {
           if let Value::DaysAndTimeDuration(point2) = range2_end.borrow() {
-            return Value::Boolean(point1 > point2 || (point1 == point2 && (!*closed1_start || !*closed2_end)));
+            Value::Boolean(point1 > point2 || (point1 == point2 && (closed1_start.opened() || closed2_end.opened())))
+          } else {
+            invalid_argument_type!("after", "range of days and time durations", value2.type_of())
           }
         }
-        _ => {}
+        _ => invalid_argument_type!("after", "days and time duration or range of days and time durations", value2.type_of()),
       },
       Value::YearsAndMonthsDuration(point1) => match value2 {
-        Value::YearsAndMonthsDuration(point2) => return Value::Boolean(point1 > point2 || (point1 == point2 && !*closed1_start)),
+        Value::YearsAndMonthsDuration(point2) => Value::Boolean(point1 > point2 || (point1 == point2 && closed1_start.opened())),
         Value::Range(_, _, range2_end, closed2_end) => {
           if let Value::YearsAndMonthsDuration(point2) = range2_end.borrow() {
-            return Value::Boolean(point1 > point2 || (point1 == point2 && (!*closed1_start || !*closed2_end)));
+            Value::Boolean(point1 > point2 || (point1 == point2 && (closed1_start.opened() || closed2_end.opened())))
+          } else {
+            invalid_argument_type!("after", "range of years and months durations", value2.type_of())
           }
         }
-        _ => {}
+        _ => invalid_argument_type!("after", "years and months duration or range of years and months durations", value2.type_of()),
       },
-      _ => {}
+      _ => invalid_argument_type!("after", "scalar or range of scalars", value2.type_of()),
     },
-    _ => {}
+    _ => invalid_argument_type!("after", "scalar or range of scalars", value1.type_of()),
   }
-  invalid_argument_type!("after", "scalar or range of scalars", value1.type_of())
 }
 
 /// Returns `false` if any item is `false`, `true` if empty or all items are true, else `null`.
@@ -202,14 +223,14 @@ pub fn append(list: &Value, values: &[Value]) -> Value {
   }
 }
 
-/// TBD
+/// Returns `true` when value1 **is before** value2.
 pub fn before(value1: &Value, value2: &Value) -> Value {
   match value1 {
     Value::Number(point1) => match value2 {
       Value::Number(point2) => return Value::Boolean(point1 < point2),
       Value::Range(range_start2, closed_start2, _, _) => {
         if let Value::Number(start2) = range_start2.borrow() {
-          return Value::Boolean(point1 < start2 || (point1 == start2 && !*closed_start2));
+          return Value::Boolean(point1 < start2 || (point1 == start2 && closed_start2.opened()));
         }
       }
       _ => {}
@@ -218,7 +239,7 @@ pub fn before(value1: &Value, value2: &Value) -> Value {
       Value::Date(point2) => return Value::Boolean(point1 < point2),
       Value::Range(range_start2, closed_start2, _, _) => {
         if let Value::Date(start2) = range_start2.borrow() {
-          return Value::Boolean(point1 < start2 || (point1 == start2 && !*closed_start2));
+          return Value::Boolean(point1 < start2 || (point1 == start2 && closed_start2.opened()));
         }
       }
       _ => {}
@@ -227,7 +248,7 @@ pub fn before(value1: &Value, value2: &Value) -> Value {
       Value::Time(point2) => return Value::Boolean(point1 < point2),
       Value::Range(range_start2, closed_start2, _, _) => {
         if let Value::Time(start2) = range_start2.borrow() {
-          return Value::Boolean(point1 < start2 || (point1 == start2 && !*closed_start2));
+          return Value::Boolean(point1 < start2 || (point1 == start2 && closed_start2.opened()));
         }
       }
       _ => {}
@@ -236,7 +257,7 @@ pub fn before(value1: &Value, value2: &Value) -> Value {
       Value::DateTime(point2) => return Value::Boolean(point1 < point2),
       Value::Range(range_start2, closed_start2, _, _) => {
         if let Value::DateTime(start2) = range_start2.borrow() {
-          return Value::Boolean(point1 < start2 || (point1 == start2 && !*closed_start2));
+          return Value::Boolean(point1 < start2 || (point1 == start2 && closed_start2.opened()));
         }
       }
       _ => {}
@@ -245,7 +266,7 @@ pub fn before(value1: &Value, value2: &Value) -> Value {
       Value::DaysAndTimeDuration(point2) => return Value::Boolean(point1 < point2),
       Value::Range(range_start2, closed_start2, _, _) => {
         if let Value::DaysAndTimeDuration(start2) = range_start2.borrow() {
-          return Value::Boolean(point1 < start2 || (point1 == start2 && !*closed_start2));
+          return Value::Boolean(point1 < start2 || (point1 == start2 && closed_start2.opened()));
         }
       }
       _ => {}
@@ -254,62 +275,62 @@ pub fn before(value1: &Value, value2: &Value) -> Value {
       Value::YearsAndMonthsDuration(point2) => return Value::Boolean(point1 < point2),
       Value::Range(range_start2, closed_start2, _, _) => {
         if let Value::YearsAndMonthsDuration(start2) = range_start2.borrow() {
-          return Value::Boolean(point1 < start2 || (point1 == start2 && !*closed_start2));
+          return Value::Boolean(point1 < start2 || (point1 == start2 && closed_start2.opened()));
         }
       }
       _ => {}
     },
     Value::Range(_, _, range_end1, closed_end1) => match range_end1.borrow() {
       Value::Number(end1) => match value2 {
-        Value::Number(point2) => return Value::Boolean(end1 < point2 || (!*closed_end1 && end1 == point2)),
+        Value::Number(point2) => return Value::Boolean(end1 < point2 || (closed_end1.opened() && end1 == point2)),
         Value::Range(range_start2, closed_start2, _, _) => {
           if let Value::Number(start2) = range_start2.borrow() {
-            return Value::Boolean(end1 < start2 || (end1 == start2 && (!*closed_end1 || !*closed_start2)));
+            return Value::Boolean(end1 < start2 || (end1 == start2 && (closed_end1.opened() || closed_start2.opened())));
           }
         }
         _ => {}
       },
       Value::Date(end1) => match value2 {
-        Value::Date(point2) => return Value::Boolean(end1 < point2 || (!*closed_end1 && end1 == point2)),
+        Value::Date(point2) => return Value::Boolean(end1 < point2 || (closed_end1.opened() && end1 == point2)),
         Value::Range(range_start2, closed_start2, _, _) => {
           if let Value::Date(start2) = range_start2.borrow() {
-            return Value::Boolean(end1 < start2 || (end1 == start2 && (!*closed_end1 || !*closed_start2)));
+            return Value::Boolean(end1 < start2 || (end1 == start2 && (closed_end1.opened() || closed_start2.opened())));
           }
         }
         _ => {}
       },
       Value::Time(end1) => match value2 {
-        Value::Time(point2) => return Value::Boolean(end1 < point2 || (!*closed_end1 && end1 == point2)),
+        Value::Time(point2) => return Value::Boolean(end1 < point2 || (closed_end1.opened() && end1 == point2)),
         Value::Range(range_start2, closed_start2, _, _) => {
           if let Value::Time(start2) = range_start2.borrow() {
-            return Value::Boolean(end1 < start2 || (end1 == start2 && (!*closed_end1 || !*closed_start2)));
+            return Value::Boolean(end1 < start2 || (end1 == start2 && (closed_end1.opened() || closed_start2.opened())));
           }
         }
         _ => {}
       },
       Value::DateTime(end1) => match value2 {
-        Value::DateTime(point2) => return Value::Boolean(end1 < point2 || (!*closed_end1 && end1 == point2)),
+        Value::DateTime(point2) => return Value::Boolean(end1 < point2 || (closed_end1.opened() && end1 == point2)),
         Value::Range(range_start2, closed_start2, _, _) => {
           if let Value::DateTime(start2) = range_start2.borrow() {
-            return Value::Boolean(end1 < start2 || (end1 == start2 && (!*closed_end1 || !*closed_start2)));
+            return Value::Boolean(end1 < start2 || (end1 == start2 && (closed_end1.opened() || closed_start2.opened())));
           }
         }
         _ => {}
       },
       Value::DaysAndTimeDuration(end1) => match value2 {
-        Value::DaysAndTimeDuration(point2) => return Value::Boolean(end1 < point2 || (!*closed_end1 && end1 == point2)),
+        Value::DaysAndTimeDuration(point2) => return Value::Boolean(end1 < point2 || (closed_end1.opened() && end1 == point2)),
         Value::Range(range_start2, closed_start2, _, _) => {
           if let Value::DaysAndTimeDuration(start2) = range_start2.borrow() {
-            return Value::Boolean(end1 < start2 || (end1 == start2 && (!*closed_end1 || !*closed_start2)));
+            return Value::Boolean(end1 < start2 || (end1 == start2 && (closed_end1.opened() || closed_start2.opened())));
           }
         }
         _ => {}
       },
       Value::YearsAndMonthsDuration(end1) => match value2 {
-        Value::YearsAndMonthsDuration(point2) => return Value::Boolean(end1 < point2 || (!*closed_end1 && end1 == point2)),
+        Value::YearsAndMonthsDuration(point2) => return Value::Boolean(end1 < point2 || (closed_end1.opened() && end1 == point2)),
         Value::Range(range_start2, closed_start2, _, _) => {
           if let Value::YearsAndMonthsDuration(start2) = range_start2.borrow() {
-            return Value::Boolean(end1 < start2 || (end1 == start2 && (!*closed_end1 || !*closed_start2)));
+            return Value::Boolean(end1 < start2 || (end1 == start2 && (closed_end1.opened() || closed_start2.opened())));
           }
         }
         _ => {}
@@ -376,45 +397,45 @@ pub fn coincides(value1: &Value, value2: &Value) -> Value {
     }
     Value::Range(range1_start, closed1_start, range1_end, closed1_end) => match (range1_start.borrow(), range1_end.borrow()) {
       (Value::Number(point1_start), Value::Number(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2 {
-          if let (Value::Number(point2_start), Value::Number(point2_end)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2
+          && let (Value::Number(point2_start), Value::Number(point2_end)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
         }
       }
       (Value::Date(point1_start), Value::Date(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2 {
-          if let (Value::Date(point2_start), Value::Date(point2_end)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2
+          && let (Value::Date(point2_start), Value::Date(point2_end)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
         }
       }
       (Value::Time(point1_start), Value::Time(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2 {
-          if let (Value::Time(point2_start), Value::Time(point2_end)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2
+          && let (Value::Time(point2_start), Value::Time(point2_end)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
         }
       }
       (Value::DateTime(point1_start), Value::DateTime(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2 {
-          if let (Value::DateTime(point2_start), Value::DateTime(point2_end)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2
+          && let (Value::DateTime(point2_start), Value::DateTime(point2_end)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
         }
       }
       (Value::DaysAndTimeDuration(point1_start), Value::DaysAndTimeDuration(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2 {
-          if let (Value::DaysAndTimeDuration(point2_start), Value::DaysAndTimeDuration(point2_end)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2
+          && let (Value::DaysAndTimeDuration(point2_start), Value::DaysAndTimeDuration(point2_end)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
         }
       }
       (Value::YearsAndMonthsDuration(point1_start), Value::YearsAndMonthsDuration(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2 {
-          if let (Value::YearsAndMonthsDuration(point2_start), Value::YearsAndMonthsDuration(point2_end)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, closed2_end) = value2
+          && let (Value::YearsAndMonthsDuration(point2_start), Value::YearsAndMonthsDuration(point2_end)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_start == point2_start && point1_end == point2_end && closed1_start == closed2_start && closed1_end == closed2_end);
         }
       }
       _ => {}
@@ -714,100 +735,92 @@ pub fn duration(value: &Value) -> Value {
   }
 }
 
-/// Evaluates value of the `during` function for two ranges.
-macro_rules! during_rr {
-  ($r1s:expr, $c1s:expr, $r1e:expr, $c1e:expr, $r2s:expr, $c2s:expr, $r2e:expr, $c2e:expr) => {
-    ($r1s > $r2s || ($r1s == $r2s && (*$c1s == *$c2s || *$c2s))) && ($r1e < $r2e || ($r1e == $r2e && (*$c1e == *$c2e || *$c2e)))
-  };
-}
-
 /// Returns `true` when a point is during the range or the first range is during the second.
 pub fn during(value1: &Value, value2: &Value) -> Value {
   match value1 {
     Value::Number(point) => {
-      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2 {
-        if let (Value::Number(point1), Value::Number(point2)) = (range_start.borrow(), range_end.borrow()) {
-          return Value::Boolean((point > point1 || (point == point1 && *closed_start)) && (point < point2 || (point == point2 && *closed_end)));
-        }
+      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2
+        && let (Value::Number(point1), Value::Number(point2)) = (range_start.borrow(), range_end.borrow())
+      {
+        return Value::Boolean((point > point1 || (point == point1 && closed_start.closed())) && (point < point2 || (point == point2 && closed_end.closed())));
       }
     }
     Value::Date(point) => {
-      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2 {
-        if let (Value::Date(point1), Value::Date(point2)) = (range_start.borrow(), range_end.borrow()) {
-          return Value::Boolean((point > point1 || (point == point1 && *closed_start)) && (point < point2 || (point == point2 && *closed_end)));
-        }
+      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2
+        && let (Value::Date(point1), Value::Date(point2)) = (range_start.borrow(), range_end.borrow())
+      {
+        return Value::Boolean((point > point1 || (point == point1 && closed_start.closed())) && (point < point2 || (point == point2 && closed_end.closed())));
       }
     }
-
     Value::Time(point) => {
-      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2 {
-        if let (Value::Time(point1), Value::Time(point2)) = (range_start.borrow(), range_end.borrow()) {
-          return Value::Boolean((point > point1 || (point == point1 && *closed_start)) && (point < point2 || (point == point2 && *closed_end)));
-        }
+      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2
+        && let (Value::Time(point1), Value::Time(point2)) = (range_start.borrow(), range_end.borrow())
+      {
+        return Value::Boolean((point > point1 || (point == point1 && closed_start.closed())) && (point < point2 || (point == point2 && closed_end.closed())));
       }
     }
     Value::DateTime(point) => {
-      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2 {
-        if let (Value::DateTime(point1), Value::DateTime(point2)) = (range_start.borrow(), range_end.borrow()) {
-          return Value::Boolean((point > point1 || (point == point1 && *closed_start)) && (point < point2 || (point == point2 && *closed_end)));
-        }
+      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2
+        && let (Value::DateTime(point1), Value::DateTime(point2)) = (range_start.borrow(), range_end.borrow())
+      {
+        return Value::Boolean((point > point1 || (point == point1 && closed_start.closed())) && (point < point2 || (point == point2 && closed_end.closed())));
       }
     }
     Value::DaysAndTimeDuration(point) => {
-      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2 {
-        if let (Value::DaysAndTimeDuration(point1), Value::DaysAndTimeDuration(point2)) = (range_start.borrow(), range_end.borrow()) {
-          return Value::Boolean((point > point1 || (point == point1 && *closed_start)) && (point < point2 || (point == point2 && *closed_end)));
-        }
+      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2
+        && let (Value::DaysAndTimeDuration(point1), Value::DaysAndTimeDuration(point2)) = (range_start.borrow(), range_end.borrow())
+      {
+        return Value::Boolean((point > point1 || (point == point1 && closed_start.closed())) && (point < point2 || (point == point2 && closed_end.closed())));
       }
     }
     Value::YearsAndMonthsDuration(point) => {
-      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2 {
-        if let (Value::YearsAndMonthsDuration(point1), Value::YearsAndMonthsDuration(point2)) = (range_start.borrow(), range_end.borrow()) {
-          return Value::Boolean((point > point1 || (point == point1 && *closed_start)) && (point < point2 || (point == point2 && *closed_end)));
-        }
+      if let Value::Range(range_start, closed_start, range_end, closed_end) = value2
+        && let (Value::YearsAndMonthsDuration(point1), Value::YearsAndMonthsDuration(point2)) = (range_start.borrow(), range_end.borrow())
+      {
+        return Value::Boolean((point > point1 || (point == point1 && closed_start.closed())) && (point < point2 || (point == point2 && closed_end.closed())));
       }
     }
     Value::Range(range1_start, c1s, range1_end, c1e) => match (range1_start.borrow(), range1_end.borrow()) {
       (Value::Number(r1s), Value::Number(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(during_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(during_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::Date(r1s), Value::Date(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(during_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(during_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::Time(r1s), Value::Time(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(during_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(during_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::DateTime(r1s), Value::DateTime(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(during_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(during_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::DaysAndTimeDuration(r1s), Value::DaysAndTimeDuration(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(during_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(during_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::YearsAndMonthsDuration(r1s), Value::YearsAndMonthsDuration(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(during_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(during_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       _ => {}
@@ -841,10 +854,10 @@ pub fn even(number_value: &Value) -> Value {
 
 /// Returns the Euler’s number e raised to the power of **value** given as a parameter.
 pub fn exp(value: &Value) -> Value {
-  if let Value::Number(num) = value {
-    if let Some(n) = num.exp() {
-      return Value::Number(n);
-    }
+  if let Value::Number(num) = value
+    && let Some(n) = num.exp()
+  {
+    return Value::Number(n);
   }
   value_null!("exp")
 }
@@ -853,45 +866,45 @@ pub fn exp(value: &Value) -> Value {
 pub fn finishes(value1: &Value, value2: &Value) -> Value {
   match value1 {
     Value::Number(point) => {
-      if let Value::Range(_, _, range_end, closed_end) = value2 {
-        if let Value::Number(point2) = range_end.borrow() {
-          return Value::Boolean(*closed_end && point == point2);
-        }
+      if let Value::Range(_, _, range_end, closed_end) = value2
+        && let Value::Number(point2) = range_end.borrow()
+      {
+        return Value::Boolean(closed_end.closed() && point == point2);
       }
     }
     Value::Date(point) => {
-      if let Value::Range(_, _, range_end, closed_end) = value2 {
-        if let Value::Date(point2) = range_end.borrow() {
-          return Value::Boolean(*closed_end && point == point2);
-        }
+      if let Value::Range(_, _, range_end, closed_end) = value2
+        && let Value::Date(point2) = range_end.borrow()
+      {
+        return Value::Boolean(closed_end.closed() && point == point2);
       }
     }
     Value::Time(point) => {
-      if let Value::Range(_, _, range_end, closed_end) = value2 {
-        if let Value::Time(point2) = range_end.borrow() {
-          return Value::Boolean(*closed_end && point == point2);
-        }
+      if let Value::Range(_, _, range_end, closed_end) = value2
+        && let Value::Time(point2) = range_end.borrow()
+      {
+        return Value::Boolean(closed_end.closed() && point == point2);
       }
     }
     Value::DateTime(point) => {
-      if let Value::Range(_, _, range_end, closed_end) = value2 {
-        if let Value::DateTime(point2) = range_end.borrow() {
-          return Value::Boolean(*closed_end && point == point2);
-        }
+      if let Value::Range(_, _, range_end, closed_end) = value2
+        && let Value::DateTime(point2) = range_end.borrow()
+      {
+        return Value::Boolean(closed_end.closed() && point == point2);
       }
     }
     Value::DaysAndTimeDuration(point) => {
-      if let Value::Range(_, _, range_end, closed_end) = value2 {
-        if let Value::DaysAndTimeDuration(point2) = range_end.borrow() {
-          return Value::Boolean(*closed_end && point == point2);
-        }
+      if let Value::Range(_, _, range_end, closed_end) = value2
+        && let Value::DaysAndTimeDuration(point2) = range_end.borrow()
+      {
+        return Value::Boolean(closed_end.closed() && point == point2);
       }
     }
     Value::YearsAndMonthsDuration(point) => {
-      if let Value::Range(_, _, range_end, closed_end) = value2 {
-        if let Value::YearsAndMonthsDuration(point2) = range_end.borrow() {
-          return Value::Boolean(*closed_end && point == point2);
-        }
+      if let Value::Range(_, _, range_end, closed_end) = value2
+        && let Value::YearsAndMonthsDuration(point2) = range_end.borrow()
+      {
+        return Value::Boolean(closed_end.closed() && point == point2);
       }
     }
     Value::Range(_, _, range1_end, closed1_end) => {
@@ -943,7 +956,7 @@ pub fn finished_by(value1: &Value, value2: &Value) -> Value {
   if let Value::Range(_, _, range1_end, closed1_end) = value1 {
     match range1_end.borrow() {
       Value::Number(point1) => match value2 {
-        Value::Number(point2) => Value::Boolean(*closed1_end && point1 == point2),
+        Value::Number(point2) => Value::Boolean(closed1_end.closed() && point1 == point2),
         Value::Range(_, _, range2_end, closed2_end) => match range2_end.borrow() {
           Value::Number(point2) => Value::Boolean(*closed1_end == *closed2_end && point1 == point2),
           _ => invalid_argument_type!("finished by", "range<number>", value2.type_of()),
@@ -951,7 +964,7 @@ pub fn finished_by(value1: &Value, value2: &Value) -> Value {
         _ => invalid_argument_type!("finished by", "number or range<number>", value2.type_of()),
       },
       Value::Date(point1) => match value2 {
-        Value::Date(point2) => Value::Boolean(*closed1_end && point1 == point2),
+        Value::Date(point2) => Value::Boolean(closed1_end.closed() && point1 == point2),
         Value::Range(_, _, range2_end, closed2_end) => match range2_end.borrow() {
           Value::Date(point2) => Value::Boolean(*closed1_end == *closed2_end && point1 == point2),
           _ => invalid_argument_type!("finished by", "range<date>", value2.type_of()),
@@ -959,7 +972,7 @@ pub fn finished_by(value1: &Value, value2: &Value) -> Value {
         _ => invalid_argument_type!("finished by", "date or range<date>", value2.type_of()),
       },
       Value::Time(point1) => match value2 {
-        Value::Time(point2) => Value::Boolean(*closed1_end && point1 == point2),
+        Value::Time(point2) => Value::Boolean(closed1_end.closed() && point1 == point2),
         Value::Range(_, _, range2_end, closed2_end) => match range2_end.borrow() {
           Value::Time(point2) => Value::Boolean(*closed1_end == *closed2_end && point1 == point2),
           _ => invalid_argument_type!("finished by", "range<time>", value2.type_of()),
@@ -967,7 +980,7 @@ pub fn finished_by(value1: &Value, value2: &Value) -> Value {
         _ => invalid_argument_type!("finished by", "time or range<time>", value2.type_of()),
       },
       Value::DateTime(point1) => match value2 {
-        Value::DateTime(point2) => Value::Boolean(*closed1_end && point1 == point2),
+        Value::DateTime(point2) => Value::Boolean(closed1_end.closed() && point1 == point2),
         Value::Range(_, _, range2_end, closed2_end) => match range2_end.borrow() {
           Value::DateTime(point2) => Value::Boolean(*closed1_end == *closed2_end && point1 == point2),
           _ => invalid_argument_type!("finished by", "range<date and time>", value2.type_of()),
@@ -975,7 +988,7 @@ pub fn finished_by(value1: &Value, value2: &Value) -> Value {
         _ => invalid_argument_type!("finished by", "date and time or range<date and time>", value2.type_of()),
       },
       Value::DaysAndTimeDuration(point1) => match value2 {
-        Value::DaysAndTimeDuration(point2) => Value::Boolean(*closed1_end && point1 == point2),
+        Value::DaysAndTimeDuration(point2) => Value::Boolean(closed1_end.closed() && point1 == point2),
         Value::Range(_, _, range2_end, closed2_end) => match range2_end.borrow() {
           Value::DaysAndTimeDuration(point2) => Value::Boolean(*closed1_end == *closed2_end && point1 == point2),
           _ => invalid_argument_type!("finished by", "range<days and time duration>", value2.type_of()),
@@ -983,7 +996,7 @@ pub fn finished_by(value1: &Value, value2: &Value) -> Value {
         _ => invalid_argument_type!("finished by", "days and time duration or range<days and time duration>", value2.type_of()),
       },
       Value::YearsAndMonthsDuration(point1) => match value2 {
-        Value::YearsAndMonthsDuration(point2) => Value::Boolean(*closed1_end && point1 == point2),
+        Value::YearsAndMonthsDuration(point2) => Value::Boolean(closed1_end.closed() && point1 == point2),
         Value::Range(_, _, range2_end, closed2_end) => match range2_end.borrow() {
           Value::YearsAndMonthsDuration(point2) => Value::Boolean(*closed1_end == *closed2_end && point1 == point2),
           _ => invalid_argument_type!("finished by", "range<years and months duration>", value2.type_of()),
@@ -1075,81 +1088,67 @@ pub fn get_value(context: &Value, key: &Value) -> Value {
   }
 }
 
-/// Evaluates the value of the `includes` function for range and point.
-macro_rules! includes_rp {
-  ($rs:expr, $cs:expr, $re:expr, $ce:expr, $p:expr) => {
-    ($p > $rs || (*$cs && $p >= $rs)) && ($p < $re || (*$ce && $p <= $re))
-  };
-}
-
-/// Evaluates the value of the `includes` function for two ranges.
-macro_rules! includes_rr {
-  ($r1s:expr, $c1s:expr, $r1e:expr, $c1e:expr, $r2s:expr, $c2s:expr, $r2e:expr, $c2e:expr) => {
-    ($r2s > $r1s || ((*$c1s == *$c2s || *$c1s) && $r2s == $r1s)) && ($r2e < $r1e || ((*$c1e == *$c2e || *$c1e) && $r2e == $r1e))
-  };
-}
-
 pub fn includes(value1: &Value, value2: &Value) -> Value {
   if let Value::Range(range1_start, c1s, range1_end, c1e) = value1 {
     match (range1_start.borrow(), range1_end.borrow()) {
       (Value::Number(r1s), Value::Number(r1e)) => match value2 {
         Value::Range(range2_start, c2s, range2_end, c2e) => {
           if let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(includes_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
+            return Value::Boolean(includes_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
           }
           invalid_argument_type!("includes", "range<number>", value2.type_of())
         }
-        Value::Number(point2) => Value::Boolean(includes_rp!(r1s, c1s, r1e, c1e, point2)),
+        Value::Number(point2) => Value::Boolean(includes_rp(r1s, c1s, r1e, c1e, point2)),
         _ => invalid_argument_type!("includes", "number or range<number>", value2.type_of()),
       },
       (Value::Date(r1s), Value::Date(r1e)) => match value2 {
         Value::Range(range2_start, c2s, range2_end, c2e) => {
           if let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(includes_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
+            return Value::Boolean(includes_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
           }
           invalid_argument_type!("includes", "range<date>", value2.type_of())
         }
-        Value::Date(point2) => Value::Boolean(includes_rp!(r1s, c1s, r1e, c1e, point2)),
+        Value::Date(point2) => Value::Boolean(includes_rp(r1s, c1s, r1e, c1e, point2)),
         _ => invalid_argument_type!("includes", "date or range<date>", value2.type_of()),
       },
       (Value::Time(r1s), Value::Time(r1e)) => match value2 {
         Value::Range(range2_start, c2s, range2_end, c2e) => {
           if let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(includes_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
+            return Value::Boolean(includes_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
           }
           invalid_argument_type!("includes", "range<time>", value2.type_of())
         }
-        Value::Time(point2) => Value::Boolean(includes_rp!(r1s, c1s, r1e, c1e, point2)),
+        Value::Time(point2) => Value::Boolean(includes_rp(r1s, c1s, r1e, c1e, point2)),
         _ => invalid_argument_type!("includes", "time or range<time>", value2.type_of()),
       },
       (Value::DateTime(r1s), Value::DateTime(r1e)) => match value2 {
         Value::Range(range2_start, c2s, range2_end, c2e) => {
           if let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(includes_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
+            return Value::Boolean(includes_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
           }
           invalid_argument_type!("includes", "range<date and time>", value2.type_of())
         }
-        Value::DateTime(point2) => Value::Boolean(includes_rp!(r1s, c1s, r1e, c1e, point2)),
+        Value::DateTime(point2) => Value::Boolean(includes_rp(r1s, c1s, r1e, c1e, point2)),
         _ => invalid_argument_type!("includes", "date and time or range<date and time>", value2.type_of()),
       },
       (Value::DaysAndTimeDuration(r1s), Value::DaysAndTimeDuration(r1e)) => match value2 {
         Value::Range(range2_start, c2s, range2_end, c2e) => {
           if let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(includes_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
+            return Value::Boolean(includes_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
           }
           invalid_argument_type!("includes", "range<days and time duration>", value2.type_of())
         }
-        Value::DaysAndTimeDuration(point2) => Value::Boolean(includes_rp!(r1s, c1s, r1e, c1e, point2)),
+        Value::DaysAndTimeDuration(point2) => Value::Boolean(includes_rp(r1s, c1s, r1e, c1e, point2)),
         _ => invalid_argument_type!("includes", "days and time duration or range<days and time duration>", value2.type_of()),
       },
       (Value::YearsAndMonthsDuration(r1s), Value::YearsAndMonthsDuration(r1e)) => match value2 {
         Value::Range(range2_start, c2s, range2_end, c2e) => {
           if let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(includes_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
+            return Value::Boolean(includes_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
           }
           invalid_argument_type!("includes", "range<years and months duration>", value2.type_of())
         }
-        Value::YearsAndMonthsDuration(point2) => Value::Boolean(includes_rp!(r1s, c1s, r1e, c1e, point2)),
+        Value::YearsAndMonthsDuration(point2) => Value::Boolean(includes_rp(r1s, c1s, r1e, c1e, point2)),
         _ => invalid_argument_type!("includes", "years and months duration or range<years and months duration>", value2.type_of()),
       },
       _ => invalid_argument_type!("includes", "scalar or range<scalar>", value1.type_of()),
@@ -1176,24 +1175,22 @@ pub fn index_of(list: &Value, element: &Value) -> Value {
 
 /// ???
 pub fn insert_before(list: &Value, position_value: &Value, new_item_value: &Value) -> Value {
-  if let Value::List(mut items) = list.clone() {
-    if let Value::Number(position) = position_value {
-      if position.is_positive() {
-        if let Ok(i) = <&FeelNumber as TryInto<usize>>::try_into(position) {
-          if i <= items.len() {
-            items.insert(i - 1, new_item_value.clone());
-            return Value::List(items);
-          }
-        }
-      }
-      if position.is_negative() {
-        if let Ok(i) = <FeelNumber as TryInto<usize>>::try_into(position.abs()) {
-          if i <= items.len() {
-            items.insert(items.len() - i, new_item_value.clone());
-            return Value::List(items);
-          }
-        }
-      }
+  if let Value::List(mut items) = list.clone()
+    && let Value::Number(position) = position_value
+  {
+    if position.is_positive()
+      && let Ok(i) = <&FeelNumber as TryInto<usize>>::try_into(position)
+      && i <= items.len()
+    {
+      items.insert(i - 1, new_item_value.clone());
+      return Value::List(items);
+    }
+    if position.is_negative()
+      && let Ok(i) = <FeelNumber as TryInto<usize>>::try_into(position.abs())
+      && i <= items.len()
+    {
+      items.insert(items.len() - i, new_item_value.clone());
+      return Value::List(items);
     }
   }
   value_null!("index is out of range")
@@ -1267,23 +1264,29 @@ pub fn list_replace(list: &Value, position_or_match: &Value, new_item: &Value) -
             let index = index as usize;
             if index <= len {
               items[index - 1] = new_item.clone();
-              return Value::List(items);
+              Value::List(items)
+            } else {
+              value_null!("position exceeds list bounds")
             }
           }
           Ordering::Less => {
             let index = index.unsigned_abs();
             if index <= len {
               items[len - index] = new_item.clone();
-              return Value::List(items);
+              Value::List(items)
+            } else {
+              value_null!("position exceeds list bounds")
             }
           }
-          _ => {}
+          _ => value_null!("position must not be zero"),
         }
+      } else {
+        value_null!("position exceeds integer range")
       }
     }
     Value::FunctionDefinition(parameters, body, false, _, closure_ctx, _) => {
       if parameters.len() != 2 {
-        return value_null!("list replace: matching function must accept exactly two arguments");
+        return value_null!("list replace: matching function must have exactly two arguments");
       }
       let mut elements = vec![];
       for item in items {
@@ -1301,21 +1304,19 @@ pub fn list_replace(list: &Value, position_or_match: &Value, new_item: &Value) -
           return value_null!("list replace: matching function must return boolean value");
         }
       }
-      return Value::List(elements);
+      Value::List(elements)
     }
-    _ => {}
+    _ => value_null!("position must be number or function"),
   }
-  value_null!()
 }
 
 /// Returns the natural logarithm (base `e`) of the number parameter.
 pub fn log(number: &Value) -> Value {
-  if let Value::Number(num) = number {
-    if *num > FeelNumber::zero() {
-      if let Some(num_log) = num.ln() {
-        return Value::Number(num_log);
-      }
-    }
+  if let Value::Number(num) = number
+    && *num > FeelNumber::zero()
+    && let Some(num_log) = num.ln()
+  {
+    return Value::Number(num_log);
   }
   value_null!()
 }
@@ -1324,10 +1325,10 @@ pub fn log(number: &Value) -> Value {
 pub fn lower_case(input_string_value: &Value) -> Value {
   match input_string_value {
     Value::List(items) => {
-      if items.len() == 1 {
-        if let Value::String(input_string) = &items[0] {
-          return Value::String(input_string.to_lowercase());
-        }
+      if items.len() == 1
+        && let Value::String(input_string) = &items[0]
+      {
+        return Value::String(input_string.to_lowercase());
       }
     }
     Value::String(input_string) => return Value::String(input_string.to_lowercase()),
@@ -1435,45 +1436,45 @@ pub fn meets(value1: &Value, value2: &Value) -> Value {
   if let Value::Range(range1_start, _, range1_end, closed1_end) = value1 {
     match (range1_start.borrow(), range1_end.borrow()) {
       (Value::Number(_), Value::Number(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2 {
-          if let (Value::Number(point2_start), Value::Number(_)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2
+          && let (Value::Number(point2_start), Value::Number(_)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
         }
       }
       (Value::Date(_), Value::Date(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2 {
-          if let (Value::Date(point2_start), Value::Date(_)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2
+          && let (Value::Date(point2_start), Value::Date(_)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
         }
       }
       (Value::Time(_), Value::Time(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2 {
-          if let (Value::Time(point2_start), Value::Time(_)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2
+          && let (Value::Time(point2_start), Value::Time(_)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
         }
       }
       (Value::DateTime(_), Value::DateTime(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2 {
-          if let (Value::DateTime(point2_start), Value::DateTime(_)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2
+          && let (Value::DateTime(point2_start), Value::DateTime(_)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
         }
       }
       (Value::DaysAndTimeDuration(_), Value::DaysAndTimeDuration(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2 {
-          if let (Value::DaysAndTimeDuration(point2_start), Value::DaysAndTimeDuration(_)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2
+          && let (Value::DaysAndTimeDuration(point2_start), Value::DaysAndTimeDuration(_)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
         }
       }
       (Value::YearsAndMonthsDuration(_), Value::YearsAndMonthsDuration(point1_end)) => {
-        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2 {
-          if let (Value::YearsAndMonthsDuration(point2_start), Value::YearsAndMonthsDuration(_)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
-          }
+        if let Value::Range(range2_start, closed2_start, range2_end, _) = value2
+          && let (Value::YearsAndMonthsDuration(point2_start), Value::YearsAndMonthsDuration(_)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(point1_end == point2_start && closed1_end == closed2_start);
         }
       }
       _ => {}
@@ -1711,26 +1712,26 @@ pub fn number(from: &Value, grouping_separator: &Value, decimal_separator: &Valu
         _ => return value_null!("[core::number] decimal separator must be period, comma or null"),
       };
       // replace both separators and try to convert
-      if let Some(grp_sep) = &grouping_sep {
-        if let Some(dec_sep) = &decimal_sep {
-          return if *grp_sep != *dec_sep {
-            convert(value.replace(grp_sep, "").replace(dec_sep, "."))
-          } else {
-            value_null!("[core::number] decimal separator must be different from grouping separator")
-          };
-        }
+      if let Some(grp_sep) = &grouping_sep
+        && let Some(dec_sep) = &decimal_sep
+      {
+        return if *grp_sep != *dec_sep {
+          convert(value.replace(grp_sep, "").replace(dec_sep, "."))
+        } else {
+          value_null!("[core::number] decimal separator must be different from grouping separator")
+        };
       }
       // replace grouping separator and try to convert
-      if decimal_sep.is_none() {
-        if let Some(sep) = grouping_sep {
-          return convert(value.replace(&sep, ""));
-        }
+      if decimal_sep.is_none()
+        && let Some(sep) = grouping_sep
+      {
+        return convert(value.replace(&sep, ""));
       }
       // replace decimal separator and try to convert
-      if grouping_sep.is_none() {
-        if let Some(sep) = decimal_sep {
-          return convert(value.replace(&sep, "."));
-        }
+      if grouping_sep.is_none()
+        && let Some(sep) = decimal_sep
+      {
+        return convert(value.replace(&sep, "."));
       }
       // try to convert an input parameter without replacing
       convert(value.clone())
@@ -1751,59 +1752,60 @@ pub fn odd(value: &Value) -> Value {
 /// Evaluates the value of the `overlaps` function for two ranges.
 macro_rules! overlaps_rr {
   ($r1s:expr, $c1s:expr, $r1e:expr, $c1e:expr, $r2s:expr, $c2s:expr, $r2e:expr, $c2e:expr) => {
-    ($r1e >= $r2s && ($r1e != $r2s || (*$c1e == *$c2s && (*$c1e || *$c2s)))) && ($r2e >= $r1s && ($r2e != $r1s || (*$c2e == *$c1s && (*$c2e || *$c1s))))
+    ($r1e >= $r2s && ($r1e != $r2s || ($c1e.closed() == $c2s.closed() && ($c1e.closed() || $c2s.closed()))))
+      && ($r2e >= $r1s && ($r2e != $r1s || ($c2e.closed() == $c1s.closed() && ($c2e.closed() || $c1s.closed()))))
   };
 }
 
 /// Returns `true` when two ranges overlap.
 pub fn overlaps(value1: &Value, value2: &Value) -> Value {
-  if let Value::Range(range1_start, c1s, range1_end, c1e) = value1 {
-    if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-      match (range1_start.borrow(), range1_end.borrow()) {
-        (Value::Number(r1s), Value::Number(r1e)) => {
-          return if let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps", "range<number>", value2.type_of())
-          }
-        }
-        (Value::Date(r1s), Value::Date(r1e)) => {
-          return if let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps", "range<date>", value2.type_of())
-          }
-        }
-        (Value::Time(r1s), Value::Time(r1e)) => {
-          return if let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps", "range<time>", value2.type_of())
-          }
-        }
-        (Value::DateTime(r1s), Value::DateTime(r1e)) => {
-          return if let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps", "range<date and time>", value2.type_of())
-          }
-        }
-        (Value::DaysAndTimeDuration(r1s), Value::DaysAndTimeDuration(r1e)) => {
-          return if let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps", "range<days and time duration>", value2.type_of())
-          }
-        }
-        (Value::YearsAndMonthsDuration(r1s), Value::YearsAndMonthsDuration(r1e)) => {
-          return if let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps", "range<years and months duration>", value2.type_of())
-          }
-        }
-        _ => {}
+  if let Value::Range(range1_start, c1s, range1_end, c1e) = value1
+    && let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+  {
+    match (range1_start.borrow(), range1_end.borrow()) {
+      (Value::Number(r1s), Value::Number(r1e)) => {
+        return if let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps", "range<number>", value2.type_of())
+        };
       }
+      (Value::Date(r1s), Value::Date(r1e)) => {
+        return if let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps", "range<date>", value2.type_of())
+        };
+      }
+      (Value::Time(r1s), Value::Time(r1e)) => {
+        return if let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps", "range<time>", value2.type_of())
+        };
+      }
+      (Value::DateTime(r1s), Value::DateTime(r1e)) => {
+        return if let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps", "range<date and time>", value2.type_of())
+        };
+      }
+      (Value::DaysAndTimeDuration(r1s), Value::DaysAndTimeDuration(r1e)) => {
+        return if let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps", "range<days and time duration>", value2.type_of())
+        };
+      }
+      (Value::YearsAndMonthsDuration(r1s), Value::YearsAndMonthsDuration(r1e)) => {
+        return if let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps", "range<years and months duration>", value2.type_of())
+        };
+      }
+      _ => {}
     }
   }
   invalid_argument_type!("overlaps", "range<scalar>", value1.type_of())
@@ -1812,59 +1814,61 @@ pub fn overlaps(value1: &Value, value2: &Value) -> Value {
 /// Evaluates the value of the `overlaps_after` function for two ranges.
 macro_rules! overlaps_after_rr {
   ($r1s:expr, $c1s:expr, $r1e:expr, $c1e:expr, $r2s:expr, $c2s:expr, $r2e:expr, $c2e:expr) => {
-    ($r2s < $r1s || ($r2s == $r1s && *$c2s && !*$c1s)) && ($r2e > $r1s || ($r2e == $r1s && *$c2e && *$c1s)) && ($r2e < $r1e || ($r2e == $r1e && (!*$c2e || *$c1e)))
+    ($r2s < $r1s || ($r2s == $r1s && $c2s.closed() && $c1s.opened()))
+      && ($r2e > $r1s || ($r2e == $r1s && $c2e.closed() && $c1s.closed()))
+      && ($r2e < $r1e || ($r2e == $r1e && ($c2e.opened() || $c1e.closed())))
   };
 }
 
 /// Returns `true` when first range overlaps the end of the second range.
 pub fn overlaps_after(value1: &Value, value2: &Value) -> Value {
-  if let Value::Range(range1_start, c1s, range1_end, c1e) = value1 {
-    if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-      match (range1_start.borrow(), range1_end.borrow()) {
-        (Value::Number(r1s), Value::Number(r1e)) => {
-          return if let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps after", "range<number>", value2.type_of())
-          }
-        }
-        (Value::Date(r1s), Value::Date(r1e)) => {
-          return if let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps after", "range<date>", value2.type_of())
-          }
-        }
-        (Value::Time(r1s), Value::Time(r1e)) => {
-          return if let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps after", "range<time>", value2.type_of())
-          }
-        }
-        (Value::DateTime(r1s), Value::DateTime(r1e)) => {
-          return if let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps after", "range<date and time>", value2.type_of())
-          }
-        }
-        (Value::DaysAndTimeDuration(r1s), Value::DaysAndTimeDuration(r1e)) => {
-          return if let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps after", "range<days and time duration>", value2.type_of())
-          }
-        }
-        (Value::YearsAndMonthsDuration(r1s), Value::YearsAndMonthsDuration(r1e)) => {
-          return if let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps after", "range<years and months duration>", value2.type_of())
-          }
-        }
-        _ => {}
+  if let Value::Range(range1_start, c1s, range1_end, c1e) = value1
+    && let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+  {
+    match (range1_start.borrow(), range1_end.borrow()) {
+      (Value::Number(r1s), Value::Number(r1e)) => {
+        return if let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps after", "range<number>", value2.type_of())
+        };
       }
+      (Value::Date(r1s), Value::Date(r1e)) => {
+        return if let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps after", "range<date>", value2.type_of())
+        };
+      }
+      (Value::Time(r1s), Value::Time(r1e)) => {
+        return if let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps after", "range<time>", value2.type_of())
+        };
+      }
+      (Value::DateTime(r1s), Value::DateTime(r1e)) => {
+        return if let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps after", "range<date and time>", value2.type_of())
+        };
+      }
+      (Value::DaysAndTimeDuration(r1s), Value::DaysAndTimeDuration(r1e)) => {
+        return if let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps after", "range<days and time duration>", value2.type_of())
+        };
+      }
+      (Value::YearsAndMonthsDuration(r1s), Value::YearsAndMonthsDuration(r1e)) => {
+        return if let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_after_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps after", "range<years and months duration>", value2.type_of())
+        };
+      }
+      _ => {}
     }
   }
   invalid_argument_type!("overlaps", "range<scalar>", value1.type_of())
@@ -1873,59 +1877,61 @@ pub fn overlaps_after(value1: &Value, value2: &Value) -> Value {
 /// Evaluates the value of the `overlaps_before` function for two ranges.
 macro_rules! overlaps_before_rr {
   ($r1s:expr, $c1s:expr, $r1e:expr, $c1e:expr, $r2s:expr, $c2s:expr, $r2e:expr, $c2e:expr) => {
-    ($r1s < $r2s || ($r1s == $r2s && *$c1s && !*$c2s)) && ($r1e > $r2s || ($r1e == $r2s && *$c1e && *$c2s)) && ($r1e < $r2e || ($r1e == $r2e && (!*$c1e || *$c2e)))
+    ($r1s < $r2s || ($r1s == $r2s && $c1s.closed() && $c2s.opened()))
+      && ($r1e > $r2s || ($r1e == $r2s && $c1e.closed() && $c2s.closed()))
+      && ($r1e < $r2e || ($r1e == $r2e && ($c1e.opened() || $c2e.closed())))
   };
 }
 
 /// Returns `true` when first range overlaps the beginning of the second range.
 pub fn overlaps_before(value1: &Value, value2: &Value) -> Value {
-  if let Value::Range(range1_start, c1s, range1_end, c1e) = value1 {
-    if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-      match (range1_start.borrow(), range1_end.borrow()) {
-        (Value::Number(r1s), Value::Number(r1e)) => {
-          return if let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps before", "range<number>", value2.type_of())
-          }
-        }
-        (Value::Date(r1s), Value::Date(r1e)) => {
-          return if let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps before", "range<date>", value2.type_of())
-          }
-        }
-        (Value::Time(r1s), Value::Time(r1e)) => {
-          return if let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps before", "range<time>", value2.type_of())
-          }
-        }
-        (Value::DateTime(r1s), Value::DateTime(r1e)) => {
-          return if let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps before", "range<date and time>", value2.type_of())
-          }
-        }
-        (Value::DaysAndTimeDuration(r1s), Value::DaysAndTimeDuration(r1e)) => {
-          return if let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps before", "range<days and time duration>", value2.type_of())
-          }
-        }
-        (Value::YearsAndMonthsDuration(r1s), Value::YearsAndMonthsDuration(r1e)) => {
-          return if let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
-          } else {
-            invalid_argument_type!("overlaps before", "range<years and months duration>", value2.type_of())
-          }
-        }
-        _ => {}
+  if let Value::Range(range1_start, c1s, range1_end, c1e) = value1
+    && let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+  {
+    match (range1_start.borrow(), range1_end.borrow()) {
+      (Value::Number(r1s), Value::Number(r1e)) => {
+        return if let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps before", "range<number>", value2.type_of())
+        };
       }
+      (Value::Date(r1s), Value::Date(r1e)) => {
+        return if let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps before", "range<date>", value2.type_of())
+        };
+      }
+      (Value::Time(r1s), Value::Time(r1e)) => {
+        return if let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps before", "range<time>", value2.type_of())
+        };
+      }
+      (Value::DateTime(r1s), Value::DateTime(r1e)) => {
+        return if let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps before", "range<date and time>", value2.type_of())
+        };
+      }
+      (Value::DaysAndTimeDuration(r1s), Value::DaysAndTimeDuration(r1e)) => {
+        return if let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps before", "range<days and time duration>", value2.type_of())
+        };
+      }
+      (Value::YearsAndMonthsDuration(r1s), Value::YearsAndMonthsDuration(r1e)) => {
+        return if let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
+          Value::Boolean(overlaps_before_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e))
+        } else {
+          invalid_argument_type!("overlaps before", "range<years and months duration>", value2.type_of())
+        };
+      }
+      _ => {}
     }
   }
   invalid_argument_type!("overlaps", "range<scalar>", value1.type_of())
@@ -1954,11 +1960,7 @@ pub fn range(value: &Value) -> Value {
     Value::String(range_literal) => {
       let scope = FeelScope::default();
       if let Ok(range) = evaluate_range_literal(&scope, range_literal) {
-        if range.is_valid_range() {
-          range
-        } else {
-          value_null!("invalid range")
-        }
+        if range.is_valid_range() { range } else { value_null!("invalid range") }
       } else {
         value_null!("invalid range literal")
       }
@@ -1969,67 +1971,31 @@ pub fn range(value: &Value) -> Value {
 
 /// ???
 pub fn remove(list: &Value, position_value: &Value) -> Value {
-  if let Value::List(mut items) = list.clone() {
-    if let Value::Number(position_number) = position_value {
-      if position_number.is_positive() {
-        if let Ok(mut index) = position_number.try_into() {
-          index -= 1;
-          if index < items.len() {
-            items.remove(index);
-            return Value::List(items);
-          }
-        }
+  if let Value::List(mut items) = list.clone()
+    && let Value::Number(position_number) = position_value
+  {
+    if position_number.is_positive()
+      && let Ok(mut index) = position_number.try_into()
+    {
+      index -= 1;
+      if index < items.len() {
+        items.remove(index);
+        return Value::List(items);
       }
-      if position_number.is_negative() {
-        if let Ok(index) = <FeelNumber as TryInto<usize>>::try_into(position_number.abs()) {
-          if index <= items.len() {
-            items.remove(items.len() - index);
-            return Value::List(items);
-          }
-        }
-      }
+    }
+    if position_number.is_negative()
+      && let Ok(index) = <FeelNumber as TryInto<usize>>::try_into(position_number.abs())
+      && index <= items.len()
+    {
+      items.remove(items.len() - index);
+      return Value::List(items);
     }
   }
   value_null!("probably index is out of range")
 }
 
 // Rust implementation is eager when parsing matching groups, so place numbers in square brackets.
-static RG_REPLACE_NUM: Lazy<Regex> = Lazy::new(|| Regex::new("\\$([1-9][0-9]*)").unwrap());
-
-// PGDMN: H14 — replace/split recompiled their regular expression on every call
-// (upstream TODO defers pre-compilation). Small thread-local cache keyed by the
-// final pattern string; regex::Regex clones share the compiled program, so hits
-// are cheap. Least-recently-used eviction by stamp keeps the cache bounded.
-const REGEX_CACHE_CAPACITY: usize = 64;
-
-/// Compiled regex with the stamp of its last use (for LRU eviction).
-type CachedRegex = (u64, Regex);
-
-thread_local! {
-  static REGEX_CACHE: RefCell<(u64, HashMap<String, CachedRegex>)> = RefCell::new((0, HashMap::new()));
-}
-
-/// Returns the compiled regular expression for a pattern, using a thread-local cache.
-/// Returns `None` when the pattern is invalid (invalid patterns are not cached).
-// PGDMN: H14
-fn cached_regex(pattern: &str) -> Option<Regex> {
-  REGEX_CACHE.with(|cell| {
-    let (stamp, cache) = &mut *cell.borrow_mut();
-    *stamp += 1;
-    if let Some((last_used, regex)) = cache.get_mut(pattern) {
-      *last_used = *stamp;
-      return Some(regex.clone());
-    }
-    let regex = Regex::new(pattern).ok()?;
-    if cache.len() >= REGEX_CACHE_CAPACITY {
-      if let Some(oldest) = cache.iter().min_by_key(|(_, (last_used, _))| *last_used).map(|(key, _)| key.clone()) {
-        cache.remove(&oldest);
-      }
-    }
-    cache.insert(pattern.to_string(), (*stamp, regex.clone()));
-    Some(regex)
-  })
-}
+static RG_REPLACE_NUM: LazyLock<Regex> = LazyLock::new(|| Regex::new("\\$([1-9][0-9]*)").unwrap());
 
 /// ???
 pub fn replace(input_string_value: &Value, pattern_string_value: &Value, replacement_string_value: &Value, flags_string_value: &Value) -> Value {
@@ -2063,19 +2029,18 @@ pub fn replace(input_string_value: &Value, pattern_string_value: &Value, replace
             }
             patt.push(ch);
           }
-          // PGDMN: H14 — cached compilation
           if flags.is_empty() {
-            if let Some(re) = cached_regex(&patt) {
+            if let Ok(re) = Regex::new(&patt) {
               let result = re.replace_all(input_string.as_str(), repl.as_str()).to_string();
               return Value::String(result);
             }
-          } else if let Some(re) = cached_regex(format!("(?{flags}){patt}").as_str()) {
+          } else if let Ok(re) = Regex::new(format!("(?{flags}){patt}").as_str()) {
             let result = re.replace_all(input_string.as_str(), repl.as_str()).to_string();
             return Value::String(result);
           }
         }
         // replace without any flags
-        if let Some(re) = cached_regex(pattern_string) {
+        if let Ok(re) = Regex::new(pattern_string) {
           let result = re.replace_all(input_string.as_str(), repl.as_str()).to_string();
           Value::String(result)
         } else {
@@ -2176,11 +2141,7 @@ pub fn sort(list: &Value, ordering_function: &Value) -> Value {
           ctx.set_entry(&parameters[1].0, y.clone());
           let scope: FeelScope = ctx.into();
           if let Value::Boolean(result) = body.evaluate(&scope) {
-            if result {
-              Ordering::Less
-            } else {
-              Ordering::Equal
-            }
+            if result { Ordering::Less } else { Ordering::Equal }
           } else {
             Ordering::Equal
           }
@@ -2200,8 +2161,7 @@ pub fn sort(list: &Value, ordering_function: &Value) -> Value {
 pub fn split(input_string_value: &Value, delimiter_string_value: &Value) -> Value {
   if let Value::String(input_string) = input_string_value {
     if let Value::String(delimiter_string) = delimiter_string_value {
-      // PGDMN: H14 — cached compilation
-      if let Some(re) = cached_regex(delimiter_string) {
+      if let Ok(re) = Regex::new(delimiter_string) {
         Value::List(re.split(input_string).map(|s| Value::String(s.to_string())).collect())
       } else {
         value_null!("split: invalid delimiter")
@@ -2236,7 +2196,7 @@ pub fn sqrt(value: &Value) -> Value {
 /// Evaluates the value of the `started by` function for range and point.
 macro_rules! started_by_rp {
   ($rs:expr, $cs:expr, $p:expr) => {
-    *$cs && $rs == $p
+    $cs.closed() && $rs == $p
   };
 }
 
@@ -2321,103 +2281,96 @@ pub fn started_by(value1: &Value, value2: &Value) -> Value {
 /// Evaluates the value of the `starts` function for point and range.
 macro_rules! starts_pr {
   ($r1s:expr, $c1s:expr, $p:expr) => {
-    $r1s == $p && *$c1s
-  };
-}
-
-/// Evaluates the value of the `starts` function for two ranges.
-macro_rules! starts_rr {
-  ($r1s:expr, $c1s:expr, $r1e:expr, $c1e:expr, $r2s:expr, $c2s:expr, $r2e:expr, $c2e:expr) => {
-    $r1s == $r2s && *$c1s == *$c2s && ($r1e < $r2e || ($r1e == $r2e && (!*$c1e || *$c2e)))
+    $r1s == $p && $c1s.closed()
   };
 }
 
 pub fn starts(value1: &Value, value2: &Value) -> Value {
   match value1 {
     Value::Number(point) => {
-      if let Value::Range(range_start, c1s, _, _) = value2 {
-        if let Value::Number(r1s) = range_start.borrow() {
-          return Value::Boolean(starts_pr!(r1s, c1s, point));
-        }
+      if let Value::Range(range_start, c1s, _, _) = value2
+        && let Value::Number(r1s) = range_start.borrow()
+      {
+        return Value::Boolean(starts_pr!(r1s, c1s, point));
       }
     }
     Value::Date(point) => {
-      if let Value::Range(range_start, c1s, _, _) = value2 {
-        if let Value::Date(r1s) = range_start.borrow() {
-          return Value::Boolean(starts_pr!(r1s, c1s, point));
-        }
+      if let Value::Range(range_start, c1s, _, _) = value2
+        && let Value::Date(r1s) = range_start.borrow()
+      {
+        return Value::Boolean(starts_pr!(r1s, c1s, point));
       }
     }
 
     Value::Time(point) => {
-      if let Value::Range(range_start, c1s, _, _) = value2 {
-        if let Value::Time(r1s) = range_start.borrow() {
-          return Value::Boolean(starts_pr!(r1s, c1s, point));
-        }
+      if let Value::Range(range_start, c1s, _, _) = value2
+        && let Value::Time(r1s) = range_start.borrow()
+      {
+        return Value::Boolean(starts_pr!(r1s, c1s, point));
       }
     }
     Value::DateTime(point) => {
-      if let Value::Range(range_start, c1s, _, _) = value2 {
-        if let Value::DateTime(r1s) = range_start.borrow() {
-          return Value::Boolean(starts_pr!(r1s, c1s, point));
-        }
+      if let Value::Range(range_start, c1s, _, _) = value2
+        && let Value::DateTime(r1s) = range_start.borrow()
+      {
+        return Value::Boolean(starts_pr!(r1s, c1s, point));
       }
     }
     Value::DaysAndTimeDuration(point) => {
-      if let Value::Range(range_start, c1s, _, _) = value2 {
-        if let Value::DaysAndTimeDuration(r1s) = range_start.borrow() {
-          return Value::Boolean(starts_pr!(r1s, c1s, point));
-        }
+      if let Value::Range(range_start, c1s, _, _) = value2
+        && let Value::DaysAndTimeDuration(r1s) = range_start.borrow()
+      {
+        return Value::Boolean(starts_pr!(r1s, c1s, point));
       }
     }
     Value::YearsAndMonthsDuration(point) => {
-      if let Value::Range(range_start, c1s, _, _) = value2 {
-        if let Value::YearsAndMonthsDuration(r1s) = range_start.borrow() {
-          return Value::Boolean(starts_pr!(r1s, c1s, point));
-        }
+      if let Value::Range(range_start, c1s, _, _) = value2
+        && let Value::YearsAndMonthsDuration(r1s) = range_start.borrow()
+      {
+        return Value::Boolean(starts_pr!(r1s, c1s, point));
       }
     }
     Value::Range(range1_start, c1s, range1_end, c1e) => match (range1_start.borrow(), range1_end.borrow()) {
       (Value::Number(r1s), Value::Number(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(starts_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::Number(r2s), Value::Number(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(starts_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::Date(r1s), Value::Date(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(starts_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::Date(r2s), Value::Date(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(starts_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::Time(r1s), Value::Time(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(starts_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::Time(r2s), Value::Time(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(starts_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::DateTime(r1s), Value::DateTime(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(starts_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::DateTime(r2s), Value::DateTime(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(starts_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::DaysAndTimeDuration(r1s), Value::DaysAndTimeDuration(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(starts_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::DaysAndTimeDuration(r2s), Value::DaysAndTimeDuration(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(starts_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       (Value::YearsAndMonthsDuration(r1s), Value::YearsAndMonthsDuration(r1e)) => {
-        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2 {
-          if let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow()) {
-            return Value::Boolean(starts_rr!(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
-          }
+        if let Value::Range(range2_start, c2s, range2_end, c2e) = value2
+          && let (Value::YearsAndMonthsDuration(r2s), Value::YearsAndMonthsDuration(r2e)) = (range2_start.borrow(), range2_end.borrow())
+        {
+          return Value::Boolean(starts_rr(r1s, c1s, r1e, c1e, r2s, c2s, r2e, c2e));
         }
       }
       _ => {}
@@ -2852,10 +2805,10 @@ pub fn union(lists: &[Value]) -> Value {
 pub fn upper_case(input_string_value: &Value) -> Value {
   match input_string_value {
     Value::List(items) => {
-      if items.len() == 1 {
-        if let Value::String(input_string) = &items[0] {
-          return Value::String(input_string.to_uppercase());
-        }
+      if items.len() == 1
+        && let Value::String(input_string) = &items[0]
+      {
+        return Value::String(input_string.to_uppercase());
       }
     }
     Value::String(input_string) => return Value::String(input_string.to_uppercase()),
@@ -2901,6 +2854,58 @@ pub fn years_and_months_duration(from_value: &Value, to_value: &Value) -> Value 
     return invalid_argument_type!("years and months duration", "date, date and time", to_value.type_of());
   }
   invalid_argument_type!("years and months duration", "date, date and time", from_value.type_of())
+}
+
+/// Evaluates the value of the `includes` function for range and point.
+fn includes_rp<T: PartialOrd>(start: T, start_type: &IntervalType, end: T, end_type: &IntervalType, point: T) -> bool {
+  (point > start || (start_type.closed() && point >= start)) && (point < end || (end_type.closed() && point <= end))
+}
+
+/// Evaluates the value of the `includes` function for two ranges.
+#[allow(clippy::too_many_arguments)]
+fn includes_rr<T: PartialOrd>(
+  start_1: T,
+  start_type_1: &IntervalType,
+  end_1: T,
+  end_type_1: &IntervalType,
+  start_2: T,
+  start_type_2: &IntervalType,
+  end_2: T,
+  end_type_2: &IntervalType,
+) -> bool {
+  (start_2 > start_1 || ((start_type_1.closed() == start_type_2.closed() || start_type_1.closed()) && start_2 == start_1))
+    && (end_2 < end_1 || ((end_type_1.closed() == end_type_2.closed() || end_type_1.closed()) && end_2 == end_1))
+}
+
+/// Evaluates the value of the `starts` function for two ranges.
+#[allow(clippy::too_many_arguments)]
+fn starts_rr<T: PartialOrd>(
+  start_1: T,
+  start_type_1: &IntervalType,
+  end_1: T,
+  end_type_1: &IntervalType,
+  start_2: T,
+  start_type_2: &IntervalType,
+  end_2: T,
+  end_type_2: &IntervalType,
+) -> bool {
+  start_1 == start_2 && start_type_1.closed() == start_type_2.closed() && (end_1 < end_2 || (end_1 == end_2 && (end_type_1.opened() || end_type_2.closed())))
+}
+
+/// Evaluates value of the `during` function for two ranges.
+#[allow(clippy::too_many_arguments)]
+fn during_rr<T: PartialOrd>(
+  start_1: T,
+  start_type_1: &IntervalType,
+  end_1: T,
+  end_type_1: &IntervalType,
+  start_2: T,
+  start_type_2: &IntervalType,
+  end_2: T,
+  end_type_2: &IntervalType,
+) -> bool {
+  (start_1 > start_2 || (start_1 == start_2 && (start_type_1.closed() == start_type_2.closed() || start_type_2.closed())))
+    && (end_1 < end_2 || (end_1 == end_2 && (end_type_1.closed() == end_type_2.closed() || end_type_2.closed())))
 }
 
 #[cfg(test)]

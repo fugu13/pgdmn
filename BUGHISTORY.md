@@ -47,3 +47,32 @@ Resolved bugs, recorded so they can be recognised if they reappear. Every entry 
 - [ ] The Dockerfile chowns the PG17 extension and lib directories immediately after `useradd`, before `USER pgdmn`
 - [ ] `cargo pgrx init` (and every step after `USER pgdmn`) runs as `pgdmn`, not root
 - [ ] `make check` and `make test` succeed from a fresh worktree with no `target/` directory
+
+## BUG-004: FEEL decimal overflow panics in typed numeric conversions
+
+**Symptom:** `feel_eval_numeric` (or `feel_eval_numrange` via a range endpoint) on an expression whose result overflows decimal128 — e.g. the product of two ~3100-digit numbers — raises the opaque PG ERROR ``called `Option::unwrap()` on a `None` value`` (a Rust panic converted by pgrx) instead of a real error message.
+
+**Root cause:** dsntk-feel-number's arithmetic (`Mul`/`Add`) is not finiteness-guarded (unlike `pow`/`from_str`), so overflow rounds to ±Inf; `FeelNumber`'s `Display` assumes `bid128_to_string` output contains `'E'` and unwraps, but for ±Inf/NaN it returns `"+Inf"` etc., so `n.to_string()` panics at pgdmn's SQL boundary. Pre-existing on dsntk 0.2; found during the 0.3 migration review.
+
+**Fix:** shared `feel_number_is_finite` guard in `src/convert.rs` (`-Inf < n < Inf`, which also rejects NaN since NaN compares false to everything), applied before stringifying in both `feel_number_to_numeric` (typed paths) and `feel_to_json`'s `Value::Number` arm (JSONB paths, covering numbers nested in lists/contexts via recursion). Residual: a non-finite number inside a `Value::Range` endpoint still reaches the Display catch-all — that closes with the upstream fix tracked as DEPS-002 in TODO.md.
+
+**Files:** `src/functions/feel.rs`, `src/convert.rs`
+
+**Reoccurrence check:**
+- [ ] Every path that stringifies a `FeelNumber` checks `feel_number_is_finite` first
+- [ ] `test_feel_eval_numeric_rejects_decimal_overflow` and `test_feel_eval_rejects_decimal_overflow` pass
+
+## BUG-003: website build breaks when the wasm-bindgen crate outruns the host CLI
+
+**Symptom:** `make website-build` fails with `wasm-bindgen failed` and a message telling you to either downgrade the crate (`cargo update -p wasm-bindgen --precise <old>`) or reinstall the binary. Triggered by an ordinary `cargo update` of `website/Cargo.lock`, with no source change at all.
+
+**Root cause:** `wasm-bindgen` is two things that must be the *exact* same version: the crate compiled into the wasm bundle, and the `wasm-bindgen-cli` binary installed on the build host that post-processes it. The lockfile pins the crate; nothing pins the binary. Refreshing dependencies moved the crate to 0.2.126 while the host still had 0.2.114, and the build broke. Nothing in the repo could have prevented it, because the binary lives outside the repo.
+
+**Fix:** Removed the coupling rather than patching it. WEB-001 dropped the wasm bundle entirely — the site is prerendered to static HTML and has no `hydrate` feature, no `wasm-bindgen` dependency, no `cargo-leptos`, and therefore no host tool that has to be kept version-matched. Sass is compiled in-process by `grass`. (The immediate unblock at the time was `cargo install -f wasm-bindgen-cli --version 0.2.126`.)
+
+**Files:** `website/Cargo.toml`, `website/src/bin/prerender.rs`, `Makefile`
+
+**Reoccurrence check:**
+- [ ] `website/Cargo.toml` declares no `wasm-bindgen`, no `console_error_panic_hook`, no `hydrate` feature, and no `cdylib` crate type
+- [ ] The website build invokes no host binary other than `cargo` — in particular not `cargo-leptos`, `wasm-bindgen`, or `sass`
+- [ ] Any proposal to reintroduce client-side interactivity is weighed against WEB-001 in CLAUDE.md's Decided section first; reintroducing the wasm bundle reintroduces this bug class

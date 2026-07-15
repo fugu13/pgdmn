@@ -234,6 +234,41 @@ SELECT feel_eval_interval('duration("PT4H30M")');
 -- 04:30:00
 ```
 
+### feel_eval_numrange(expression, context?) -> numrange
+
+Evaluate a FEEL expression that returns a range of numbers, as a native PG
+`numrange`. Open/closed endpoints are preserved, and an unbounded FEEL endpoint
+becomes an infinite range bound.
+
+```sql
+SELECT feel_eval_numrange('range("[18..65)")');
+-- [18,65)
+
+SELECT feel_eval_numrange('range("[1..)")');
+-- [1,)
+
+-- Compose with native PG range operators
+SELECT feel_eval_numrange('[low..high)', '{"low": 18, "high": 65}'::jsonb) @> 42::numeric;
+-- true
+```
+
+### FEEL language notes
+
+- Ranges returned through the JSONB functions (`feel_eval`, `dmn_eval`, …)
+  appear as FEEL-syntax strings, e.g. `"[18..65)"`; an unbounded end renders
+  with nothing after the `..` (`"[1..)"`). Use `feel_eval_numrange` for a
+  structured value.
+- `in` works with unary-test lists (`5 in (=4, =5)`), variables may share names
+  with temporal builtins (a context key or column named `date` or `duration` is
+  fine), and multi-word range properties parse (`[1..10].end included`).
+- Malformed `\u` escapes in FEEL string literals are parse errors.
+- FEEL `external` function definitions (Java/PMML) are rejected: evaluating one
+  would make the backend perform a blocking HTTP call. This covers FEEL
+  expressions completely, and DMN models' declared function definitions
+  (business knowledge models and boxed expressions); an external definition
+  written inline in FEEL text — a literal expression or a decision-table
+  entry — is not detectable at load time.
+
 ## Build & Test
 
 All builds run in Docker and go through `make`. See [CLAUDE.md](CLAUDE.md) for the full target list and conventions.
@@ -263,4 +298,6 @@ at your option.
 - [docs/performance.md](docs/performance.md) - Evaluation performance: what is amortized, per-row costs, measurement infrastructure, vendored engine patch inventory
 - [docs/improvements.md](docs/improvements.md) - Investigation of approaches to bypass JSONB for more efficient PG-to-DMN data passing
 - [vendor/README.md](vendor/README.md) - Provenance and conventions for the vendored dsntk engine
-- [website/](website/) - Marketing and documentation site (Leptos + Axum SSR)
+- [docs/specifications/](docs/specifications/) - Specifications describing what a feature must do, written before implementation
+- [docs/ux/](docs/ux/) - Behavioral descriptions of the website's UI
+- [website/](website/) - Marketing and documentation site (Leptos, prerendered to static HTML; `make website-build`, deployed to GitHub Pages at www.pgdmn.com on push to `main`)

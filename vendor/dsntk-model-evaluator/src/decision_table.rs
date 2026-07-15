@@ -3,7 +3,7 @@
 use dsntk_common::Result;
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
-use dsntk_feel::{value_null, Evaluator, FeelScope, Name};
+use dsntk_feel::{Evaluator, FeelScope, Name, value_null};
 use dsntk_feel_parser::AstNode;
 use dsntk_model::{BuiltinAggregator, DecisionTable, HitPolicy};
 use std::cmp::Ordering;
@@ -21,12 +21,6 @@ struct ParsedRule {
 /// table are parsed into evaluation clauses and stored in this structure.
 struct ParsedDecisionTable {
   component_names: Vec<Name>,
-  // PGDMN (H10): input expressions are evaluated once per call and bound to '?';
-  // rule input entries and allowed input values test against that binding instead
-  // of embedding (and re-evaluating) the input expression per rule.
-  input_expression_evaluators: Vec<Evaluator>,
-  allowed_input_values_evaluators: Vec<Option<Evaluator>>,
-  input_value_name: Name,
   output_values_evaluators: Vec<Option<Evaluator>>,
   default_output_values_evaluators: Vec<Option<Evaluator>>,
   rules: Vec<ParsedRule>,
@@ -41,16 +35,14 @@ struct EvaluatedRule {
 /// Evaluated decision table.
 /// All evaluation clauses from [ParsedDecisionTable] are executed
 /// in specified context and results are stored as [Values](Value) in this structure.
-// PGDMN: component names are borrowed from the parsed decision table instead of
-// being cloned on every evaluation.
-struct EvaluatedDecisionTable<'a> {
-  component_names: &'a [Name],
+struct EvaluatedDecisionTable {
+  component_names: Vec<Name>,
   output_values: Vec<Value>,
   default_output_values: Vec<Value>,
   evaluated_rules: Vec<EvaluatedRule>,
 }
 
-impl EvaluatedDecisionTable<'_> {
+impl EvaluatedDecisionTable {
   /// Returns all matching rules in rule order.
   fn get_matching_rules(&self) -> Vec<&EvaluatedRule> {
     self.evaluated_rules.iter().filter(|evaluated_rule| evaluated_rule.matches).collect()
@@ -239,56 +231,18 @@ impl EvaluatedDecisionTable<'_> {
   }
 }
 
-// PGDMN: DMN unary-test semantics for `?` — an entry item that references the
-// tested input value as `?` is itself the boolean test (e.g. `? >= 18`), while
-// `?`-free items keep the implicit `? in (...)` membership form. Items of a
-// comma list are OR-combined, mirroring the membership list's any-match rule.
-// String literals containing '?' are unaffected (the check is on AST names).
-fn input_entry_test_node(entry_node: AstNode, input_value_name: &Name) -> AstNode {
-  let in_wrap = |node: AstNode| AstNode::In(Box::new(AstNode::Name(input_value_name.clone())), Box::new(node));
-  let AstNode::ExpressionList(items) = entry_node else {
-    return in_wrap(entry_node);
-  };
-  let (direct, membership): (Vec<AstNode>, Vec<AstNode>) = items
-    .into_iter()
-    .partition(|item| dsntk_feel_evaluator::ast_references_name(item, input_value_name));
-  if direct.is_empty() {
-    return in_wrap(AstNode::ExpressionList(membership));
-  }
-  let mut combined: Option<AstNode> = if membership.is_empty() {
-    None
-  } else {
-    Some(in_wrap(AstNode::ExpressionList(membership)))
-  };
-  for item in direct {
-    combined = Some(match combined {
-      Some(acc) => AstNode::Or(Box::new(acc), Box::new(item)),
-      None => item,
-    });
-  }
-  // `direct` was non-empty, so `combined` is always Some here.
-  combined.unwrap_or(AstNode::Irrelevant)
-}
-
 fn parse_decision_table(scope: &FeelScope, decision_table: &DecisionTable) -> Result<ParsedDecisionTable> {
-  // PGDMN (H10): the name the evaluated input expression value is bound to.
-  let input_value_name = Name::from("?");
   // parse input expressions and input values
-  let mut input_expression_evaluators = vec![];
-  let mut allowed_input_values_evaluators = vec![];
+  let mut input_expressions_and_values = vec![];
   for input_clause in decision_table.input_clauses() {
     let input_expression = dsntk_feel_parser::parse_expression(scope, &input_clause.input_expression, false)?;
-    input_expression_evaluators.push(dsntk_feel_evaluator::prepare(&input_expression));
-    // PGDMN (H10): allowed input values gate every rule identically, so they are
-    // checked once per input clause instead of once per (rule, input clause).
-    let allowed_input_values_evaluator = if let Some(input) = &input_clause.allowed_input_values {
+    let input_values = if let Some(input) = &input_clause.allowed_input_values {
       let node = dsntk_feel_parser::parse_unary_tests(scope, input, false)?;
-      let in_node = AstNode::In(Box::new(AstNode::Name(input_value_name.clone())), Box::new(node));
-      Some(dsntk_feel_evaluator::prepare(&in_node))
+      Some(node)
     } else {
       None
     };
-    allowed_input_values_evaluators.push(allowed_input_values_evaluator);
+    input_expressions_and_values.push((input_expression, input_values))
   }
   // parse output values and output component names
   let mut component_names = vec![];
@@ -315,12 +269,18 @@ fn parse_decision_table(scope: &FeelScope, decision_table: &DecisionTable) -> Re
   let mut parsed_rules = vec![];
   for rule in decision_table.rules() {
     // parse input clause
-    // PGDMN (H10): each input entry tests the '?'-bound input expression value.
     let mut input_entries_evaluators = vec![];
-    for i in 0..input_expression_evaluators.len() {
+    for (i, (input_expression, input_values)) in input_expressions_and_values.iter().enumerate() {
       let input_entry_node = dsntk_feel_parser::parse_unary_tests(scope, &rule.input_entries[i].text, false)?;
-      let node = input_entry_test_node(input_entry_node, &input_value_name);
-      input_entries_evaluators.push(dsntk_feel_evaluator::prepare(&node));
+      if let Some(input_values_node) = input_values {
+        let left = AstNode::In(Box::new(input_expression.clone()), Box::new(input_values_node.clone()));
+        let right = AstNode::In(Box::new(input_expression.clone()), Box::new(input_entry_node));
+        let node = AstNode::And(Box::new(left), Box::new(right));
+        input_entries_evaluators.push(dsntk_feel_evaluator::prepare(&node));
+      } else {
+        let node = AstNode::In(Box::new(input_expression.clone()), Box::new(input_entry_node));
+        input_entries_evaluators.push(dsntk_feel_evaluator::prepare(&node));
+      }
     }
     // parse output clause
     let mut output_entries_evaluators = vec![];
@@ -356,89 +316,48 @@ fn parse_decision_table(scope: &FeelScope, decision_table: &DecisionTable) -> Re
   }
   Ok(ParsedDecisionTable {
     component_names,
-    input_expression_evaluators,
-    allowed_input_values_evaluators,
-    input_value_name,
     output_values_evaluators,
     default_output_values_evaluators,
     rules: parsed_rules,
   })
 }
 
-fn evaluate_parsed_decision_table<'a>(scope: &FeelScope, parsed_decision_table: &'a ParsedDecisionTable, hit_policy: HitPolicy) -> EvaluatedDecisionTable<'a> {
-  // PGDMN (H10): evaluate each input expression once per call; every rule entry then
-  // tests against the value bound to '?', instead of re-evaluating the input
-  // expression for each of the N x M input entries.
-  let input_values: Vec<Value> = parsed_decision_table.input_expression_evaluators.iter().map(|evaluator| evaluator(scope)).collect();
-  // PGDMN (H4): determine matching rules first, so that output entries, allowed output
-  // values and default output values are evaluated only when actually consumed.
-  let mut rule_matches: Vec<bool> = Vec::with_capacity(parsed_decision_table.rules.len());
-  let mut match_count = 0_usize;
-  // PGDMN (H10): '?' is bound in a dedicated context for the duration of the rule scan.
-  scope.push(FeelContext::default());
-  // allowed input values gate every rule identically, so they are checked once per column
-  let allowed_inputs_ok = parsed_decision_table
-    .allowed_input_values_evaluators
-    .iter()
-    .zip(&input_values)
-    .all(|(opt_evaluator, input_value)| {
-      opt_evaluator.as_ref().is_none_or(|evaluator| {
-        scope.set_value(&parsed_decision_table.input_value_name, input_value.clone());
-        evaluator(scope).is_true()
-      })
-    });
-  if allowed_inputs_ok {
-    for parsed_rule in &parsed_decision_table.rules {
-      // PGDMN (H4): stop evaluating input entries at the first non-matching one.
-      let matches = parsed_rule.input_entries_evaluators.iter().zip(&input_values).all(|(evaluator, input_value)| {
-        scope.set_value(&parsed_decision_table.input_value_name, input_value.clone());
-        evaluator(scope).is_true()
-      });
-      if matches {
-        match_count += 1;
-      }
-      rule_matches.push(matches);
-      // PGDMN (H4): FIRST needs only the first matching rule; UNIQUE needs only to know
-      // whether a second matching rule exists. Remaining rules cannot change the result.
-      match hit_policy {
-        HitPolicy::First if match_count > 0 => break,
-        HitPolicy::Unique if match_count > 1 => break,
-        _ => {}
-      }
-    }
-  }
-  scope.pop();
-  // PGDMN (H4): output entries are consumed only for matching rules.
-  let mut evaluated_rules = vec![];
-  for (parsed_rule, matches) in parsed_decision_table.rules.iter().zip(rule_matches) {
-    let output_entry_values = if matches {
-      parsed_rule.output_entries_evaluators.iter().map(|evaluator| evaluator(scope)).collect()
-    } else {
-      vec![]
-    };
-    evaluated_rules.push(EvaluatedRule { matches, output_entry_values });
-  }
-  // PGDMN (H4): allowed output values are consumed only by prioritized hit policies.
+fn evaluate_parsed_decision_table(scope: &FeelScope, parsed_decision_table: &ParsedDecisionTable) -> EvaluatedDecisionTable {
+  // evaluate only non-empty output values
   let mut output_values = vec![];
-  if matches!(hit_policy, HitPolicy::Priority | HitPolicy::OutputOrder) {
-    for evaluator in parsed_decision_table.output_values_evaluators.iter().flatten() {
-      let value = evaluator(scope);
-      if let Value::ExpressionList(values) = value {
-        output_values.append(&mut values.to_owned());
-      }
+  for evaluator in parsed_decision_table.output_values_evaluators.iter().flatten() {
+    let value = evaluator(scope);
+    if let Value::ExpressionList(values) = value {
+      output_values.append(&mut values.to_owned());
     }
   }
-  // PGDMN (H4): default output values are consumed only when no rule matches.
+  // evaluate only non-empty default output values
   let mut default_output_values = vec![];
-  if match_count == 0 {
-    for evaluator in parsed_decision_table.default_output_values_evaluators.iter().flatten() {
-      if let Value::ExpressionList(values) = evaluator(scope) {
-        default_output_values.append(&mut values.to_owned());
-      }
+  for evaluator in parsed_decision_table.default_output_values_evaluators.iter().flatten() {
+    if let Value::ExpressionList(values) = evaluator(scope) {
+      default_output_values.append(&mut values.to_owned());
     }
+  }
+  // evaluate all rules
+  let mut evaluated_rules = vec![];
+  for parsed_rule in &parsed_decision_table.rules {
+    let mut input_entry_values = vec![];
+    let mut matches = true;
+    for evaluator in &parsed_rule.input_entries_evaluators {
+      let input_value: Value = evaluator(scope);
+      if !input_value.is_true() {
+        matches = false;
+      }
+      input_entry_values.push(input_value);
+    }
+    let mut output_entry_values = vec![];
+    for evaluator in &parsed_rule.output_entries_evaluators {
+      output_entry_values.push(evaluator(scope));
+    }
+    evaluated_rules.push(EvaluatedRule { matches, output_entry_values })
   }
   EvaluatedDecisionTable {
-    component_names: &parsed_decision_table.component_names,
+    component_names: parsed_decision_table.component_names.clone(),
     output_values,
     default_output_values,
     evaluated_rules,
@@ -447,18 +366,9 @@ fn evaluate_parsed_decision_table<'a>(scope: &FeelScope, parsed_decision_table: 
 
 pub fn build_decision_table_evaluator(scope: &FeelScope, decision_table: &DecisionTable) -> Result<Evaluator> {
   let hit_policy = decision_table.hit_policy();
-  // PGDMN: input entries may reference the tested input value as `?` (DMN spec
-  // unary tests); make the name resolvable while entries are parsed — it is
-  // bound to the actual input value at evaluation time. Pushed and popped
-  // around the whole parse so error returns don't leak it into the shared
-  // model-build scope.
-  scope.push(FeelContext::default());
-  scope.set_name(Name::from("?"));
-  let parsed = parse_decision_table(scope, decision_table);
-  scope.pop();
-  let parsed_decision_table = parsed?;
+  let parsed_decision_table = parse_decision_table(scope, decision_table)?;
   Ok(Box::new(move |scope: &FeelScope| {
-    let evaluated_decision_table = evaluate_parsed_decision_table(scope, &parsed_decision_table, hit_policy);
+    let evaluated_decision_table = evaluate_parsed_decision_table(scope, &parsed_decision_table);
     match hit_policy {
       HitPolicy::Unique => evaluated_decision_table.evaluate_hit_policy_unique(),
       HitPolicy::Any => evaluated_decision_table.evaluate_hit_policy_any(),
@@ -483,7 +393,7 @@ mod tests {
   use crate::tests::context;
   use dsntk_examples::decision_tables::H_000210;
   use dsntk_feel::values::Value;
-  use dsntk_feel::{value_number, FeelNumber};
+  use dsntk_feel::{FeelNumber, value_number};
   use dsntk_model::DecisionTable;
 
   #[test]

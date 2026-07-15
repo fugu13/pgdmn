@@ -1,4 +1,4 @@
-.PHONY: help test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-clean
+.PHONY: help test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-fmt website-clean
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -38,21 +38,24 @@ clean: ## Remove build artifacts
 	rm -rf target/
 
 website-clean: ## Remove website build artifacts
-	rm -rf $(WEBSITE_TARGET_DIR)
+	rm -rf $(WEBSITE_TARGET_DIR) website/dist
 
-website-dev: ## Run the website dev server with hot-reload
-	$(WEBSITE_CARGO) leptos watch
+website-build: ## Prerender the website to website/dist (the deployable artifact)
+	$(WEBSITE_CARGO) run --release --bin prerender
 
-website-build: ## Build the website for production
-	$(WEBSITE_CARGO) leptos build --release
+website-serve: ## Serve the prerendered site as a static host would
+	$(WEBSITE_CARGO) run --release --bin serve
 
-website-serve: ## Serve the production build
-	$(WEBSITE_TARGET_DIR)/release/pgdmn-website
+website-dev: website-build ## Prerender, then serve; re-run to pick up changes
+	$(MAKE) website-serve
 
 website-lint: ## Run clippy (deny warnings) and rustfmt check on the website
-	$(WEBSITE_CARGO) clippy --all-targets --features ssr -- -D warnings
+	$(WEBSITE_CARGO) clippy --all-targets -- -D warnings
 	$(WEBSITE_CARGO) fmt -- --check
 
-website: ## Open the website in the browser and start the dev server
+website-fmt: ## Auto-format the website
+	$(WEBSITE_CARGO) fmt
+
+website: website-build ## Prerender, open the site in the browser, and serve it
 	open http://127.0.0.1:3000
-	$(WEBSITE_CARGO) leptos watch
+	$(MAKE) website-serve

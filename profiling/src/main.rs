@@ -31,7 +31,13 @@ const LOANCOMP_DMN: &str = include_str!("../../examples/loan-comparison.dmn");
 // extension crate itself only compiles against pg_config inside Docker).
 #[path = "../../src/convert_core.rs"]
 mod convert_core;
-use convert_core::{feel_to_json, json_to_context};
+use convert_core::json_to_context;
+
+/// Bench-side wrapper: benchmark inputs are always finite, so a non-finite
+/// conversion failure is a harness bug (the extension raises a SQL error here).
+fn feel_to_json(value: &Value) -> serde_json::Value {
+    convert_core::try_feel_to_json(value).expect("non-finite number in benchmark data")
+}
 
 // --- Input generation ------------------------------------------------------
 

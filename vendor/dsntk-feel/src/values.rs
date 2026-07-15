@@ -1,13 +1,14 @@
 //! # FEEL values
 
+use crate::FunctionBody;
 use crate::bif::Bif;
 use crate::closure::Closure;
 use crate::context::FeelContext;
 use crate::errors::*;
 use crate::names::Name;
+use crate::ranges::IntervalType;
 use crate::strings::ToFeelString;
 use crate::types::FeelType;
-use crate::FunctionBody;
 use dsntk_common::{Jsonify, Result};
 use dsntk_feel_number::FeelNumber;
 use dsntk_feel_temporal::{FeelDate, FeelDateTime, FeelDaysAndTimeDuration, FeelTime, FeelYearsAndMonthsDuration};
@@ -52,9 +53,7 @@ macro_rules! value_null {
 
 #[macro_export]
 macro_rules! value_number {
-  ($n:expr) => {{
-    Value::Number($n.into())
-  }};
+  ($n:expr) => {{ Value::Number($n.into()) }};
   ($n:expr, $s:expr) => {
     Value::Number(FeelNumber::new($n, $s))
   };
@@ -62,12 +61,8 @@ macro_rules! value_number {
 
 #[macro_export]
 macro_rules! value_string {
-  ($s:literal) => {{
-    Value::String($s.to_string())
-  }};
-  ($s:expr) => {{
-    Value::String($s)
-  }};
+  ($s:literal) => {{ Value::String($s.to_string()) }};
+  ($s:expr) => {{ Value::String($s) }};
 }
 
 /// Utility constant for value `true `of type `Boolean`.
@@ -134,7 +129,7 @@ pub enum Value {
     String,
   ),
 
-  /// Value representing the `FEEL` type of a value.
+  /// Value representing the `FEEL` type of the value.
   FeelType(FeelType),
 
   /// Value representing function's formal parameter with name and type.
@@ -169,10 +164,20 @@ pub enum Value {
   ),
 
   /// Value representing interval end.
-  IntervalEnd(Box<Value>, bool),
+  IntervalEnd(
+    /// Value at the end of the interval.
+    Box<Value>,
+    /// Type of the interval end: opened or closed.
+    IntervalType,
+  ),
 
   /// Value representing interval start.
-  IntervalStart(Box<Value>, bool),
+  IntervalStart(
+    /// Value at the start of the interval.
+    Box<Value>,
+    /// Type of the interval start: opened or closed.
+    IntervalType,
+  ),
 
   /// Value representing `FEEL` `irrelevant` value.
   Irrelevant,
@@ -208,7 +213,16 @@ pub enum Value {
   QualifiedNameSegment(Name),
 
   /// Value representing a `range`.
-  Range(Box<Value>, bool, Box<Value>, bool),
+  Range(
+    /// Value at the start of the range.
+    Box<Value>,
+    /// Type of the interval at the start of the range: closed or opened.
+    IntervalType,
+    /// Value at the end of the range.
+    Box<Value>,
+    /// Type of the interval at the end of the range: closed or opened.
+    IntervalType,
+  ),
 
   /// `String` value...
   String(String),
@@ -297,13 +311,13 @@ impl Display for Value {
       Value::ParameterTypes(_) => write!(f, "ParameterTypes"),
       Value::PositionalParameters(_) => write!(f, "PositionalParameters"),
       Value::QualifiedNameSegment(_) => write!(f, "QualifiedNameSegment"),
-      Value::Range(v1, c1, v2, c2) => write!(
+      Value::Range(start, start_type, end, end_type) => write!(
         f,
         "{}{}..{}{}",
-        if *c1 { '[' } else { '(' },
-        if v1.is_null() { "".to_string() } else { v1.to_string() },
-        if v2.is_null() { "".to_string() } else { v2.to_string() },
-        if *c2 { ']' } else { ')' }
+        if start_type.closed() { '[' } else { '(' },
+        if start_type.undefined() { "".to_string() } else { start.to_string() },
+        if end_type.undefined() { "".to_string() } else { end.to_string() },
+        if end_type.closed() { ']' } else { ')' }
       ),
       Value::String(s) => write!(f, "\"{s}\""),
       Value::Time(time) => write!(f, "{time}"),
@@ -398,46 +412,50 @@ impl Value {
 
   /// Returns `true` when the value is a valid range.
   pub fn is_valid_range(&self) -> bool {
-    if let Value::Range(start, start_closed, end, end_closed) = self {
+    if let Value::Range(start, start_type, end, end_type) = self {
+      if (start_type.undefined() && start_type.closed()) || (end_type.undefined() && end_type.closed()) {
+        // Ranges with undefined interval values can not be closed.
+        return false;
+      }
       match start.borrow() {
         Value::String(start) => match end.borrow() {
           Value::String(end) => start <= end,
-          Value::Null(_) => !*end_closed,
+          Value::Null(_) => end_type.opened(),
           _ => false,
         },
         Value::Number(start) => match end.borrow() {
           Value::Number(end) => start <= end,
-          Value::Null(_) => !*end_closed,
+          Value::Null(_) => end_type.opened(),
           _ => false,
         },
         Value::Date(start) => match end.borrow() {
           Value::Date(end) => start <= end,
-          Value::Null(_) => !*end_closed,
+          Value::Null(_) => end_type.opened(),
           _ => false,
         },
         Value::DateTime(start) => match end.borrow() {
           Value::DateTime(end) => start <= end,
-          Value::Null(_) => !*end_closed,
+          Value::Null(_) => end_type.opened(),
           _ => false,
         },
         Value::Time(start) => match end.borrow() {
           Value::Time(end) => start <= end,
-          Value::Null(_) => !*end_closed,
+          Value::Null(_) => end_type.opened(),
           _ => false,
         },
         Value::YearsAndMonthsDuration(start) => match end.borrow() {
           Value::YearsAndMonthsDuration(end) => start <= end,
-          Value::Null(_) => !*end_closed,
+          Value::Null(_) => end_type.opened(),
           _ => false,
         },
         Value::DaysAndTimeDuration(start) => match end.borrow() {
           Value::DaysAndTimeDuration(end) => start <= end,
-          Value::Null(_) => !*end_closed,
+          Value::Null(_) => end_type.opened(),
           _ => false,
         },
         Value::Null(_) => match end.borrow() {
           Value::Null(_) => false,
-          _ => !*start_closed,
+          _ => start_type.opened(),
         },
         _ => false,
       }
@@ -448,11 +466,7 @@ impl Value {
 
   /// Returns `true` when the value is of type [Value::Null] indicating invalid coercion.
   pub fn is_invalid_coercion(&self) -> bool {
-    if let Value::Null(Some(message)) = self {
-      message == INVALID_COERCION
-    } else {
-      false
-    }
+    if let Value::Null(Some(message)) = self { message == INVALID_COERCION } else { false }
   }
 
   /// Returns the type of this [Value].
@@ -628,33 +642,22 @@ impl Value {
   /// All these conversion rules are implemented in this function.
   ///
   pub fn coerced(&self, target_type: &FeelType) -> Value {
-    // PGDMN: H6 — delegate to the owned variant; call sites that own the value
-    // should call `coerced_owned` directly to avoid this clone.
-    self.clone().coerced_owned(target_type)
-  }
-
-  /// Like [Value::coerced], but consumes the value, so the common case where the
-  /// value already conforms to the target type returns it unchanged without cloning.
-  // PGDMN: H6 — added owned coercion path; every result and argument coercion in the
-  // evaluator wraps an already-conformant value, which previously paid a deep clone.
-  pub fn coerced_owned(self, target_type: &FeelType) -> Value {
     if let Value::FunctionDefinition(_, _, _, _, _, _) = self {
-      return self;
+      return self.clone();
     }
-    if let Value::BuiltInFunction(bif) = &self {
-      if bif.feel_type().is_conformant(target_type) {
-        return self;
-      }
+    if let Value::BuiltInFunction(bif) = self
+      && bif.feel_type().is_conformant(target_type)
+    {
+      return self.clone();
     }
     if self.is_conformant(target_type) {
-      return self;
+      return self.clone();
     }
     match self {
       // from singleton list
-      Value::List(mut items) => {
+      Value::List(items) => {
         if items.len() == 1 {
-          // remove below never panics, the length is checked above
-          let value = items.remove(0);
+          let value = items[0].clone();
           if value.is_conformant(target_type) {
             return value;
           }
@@ -662,10 +665,10 @@ impl Value {
       }
       // to singleton list
       value => {
-        if let FeelType::List(list_type) = target_type {
-          if value.is_conformant(list_type) {
-            return Value::List(vec![value]);
-          }
+        if let FeelType::List(list_type) = target_type
+          && value.is_conformant(list_type)
+        {
+          return Value::List(vec![value.clone()]);
         }
       }
     }

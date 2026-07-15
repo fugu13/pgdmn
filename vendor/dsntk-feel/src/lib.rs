@@ -1,9 +1,11 @@
-//! # FEEL definitions
+#![doc = include_str!("../docs/README.md")]
+#![deny(rustdoc::broken_intra_doc_links)]
 
 #[macro_use]
 extern crate dsntk_macros;
 
 pub mod bif;
+pub mod bip;
 pub mod closure;
 pub mod context;
 pub mod dto;
@@ -17,6 +19,7 @@ mod strings;
 mod types;
 pub mod values;
 
+mod ranges;
 #[cfg(test)]
 mod tests;
 
@@ -25,6 +28,7 @@ pub use evaluator::Evaluator;
 pub use function::FunctionBody;
 pub use names::Name;
 pub use qualified_names::QualifiedName;
+pub use ranges::IntervalType;
 pub use scope::FeelScope;
 pub use strings::ToFeelString;
 pub use types::*;

@@ -1,3 +1,6 @@
+#![doc = include_str!("../docs/README.md")]
+#![deny(rustdoc::broken_intra_doc_links)]
+
 #[macro_use]
 extern crate dsntk_macros;
 
@@ -86,9 +89,9 @@ mod utilities {
 
   /// Prepares the difference in text format.
   fn diff(a: usize, b: usize) -> String {
-    let diff = if a > b { a - b } else { b - a };
+    let diff = a.abs_diff(b);
     if diff > 0 {
-      Text::new(ColorMode::On).red().s(format!("{:>9}", diff)).clear().to_string()
+      Text::new(ColorMode::On).red().s(format!("{:>9}", diff)).reset().to_string()
     } else {
       "".to_string()
     }
