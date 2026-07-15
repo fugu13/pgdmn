@@ -217,7 +217,8 @@ SELECT feel_eval('1 + 2');
         <H2 id="feel-functions" title="FEEL functions"/>
         <p>
             "FEEL is the expression language DMN is built on. These evaluate it directly,
-            with no model involved."
+            with no model involved. These utility functions aren't usually what you should use,
+            but are here in case you want to cross check how something evaluates."
         </p>
         <dl class="fn-list">
             <Fun signature="feel_eval(expression text, context jsonb DEFAULT NULL) RETURNS jsonb">
