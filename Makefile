@@ -1,4 +1,4 @@
-.PHONY: help test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-fmt website-clean
+.PHONY: help test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-fmt website-clean vendor-status vendor-diff vendor-test vendor-bench vendor-upgrade vendor-inspect
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -36,6 +36,36 @@ verify: fmt lint ## Run after code changes: fmt + lint (clippy --all-targets sub
 
 clean: ## Remove build artifacts
 	rm -rf target/
+
+# --- Vendored dsntk management ------------------------------------------
+# The git history under vendor/ is a pristine upstream base plus a minimal
+# patch layer (one commit per change, PGDMN: markers). See vendor/README.md
+# and docs/performance.md. scripts/vendor.sh implements the mechanics.
+
+# Most recent commit that swapped in a pristine upstream tree.
+VENDOR_PRISTINE ?= $(shell git log --format='%H' --grep='pristine' -i -1 -- vendor)
+# Upstream tests that need an external service, wall clocks, or a timezone.
+VENDOR_SKIPS = --skip external_functions --skip bif_now --skip dmn_3_0076 --skip dmn_3_0103::_0017
+VENDOR_TEST_PKGS = -p dsntk-common -p dsntk-feel -p dsntk-feel-number -p dsntk-feel-parser -p dsntk-feel-evaluator -p dsntk-model -p dsntk-model-evaluator
+
+vendor-status: ## Show vendored dsntk version, pristine base, and patch-layer size
+	@scripts/vendor.sh status "$(VENDOR_PRISTINE)"
+
+vendor-diff: ## Diff vendor/ against the pristine base (the carried patch layer)
+	@git diff $(VENDOR_PRISTINE) -- vendor/ ':(exclude)vendor/README.md' ':(exclude)vendor/rustfmt.toml'
+
+vendor-test: test-image ## Run the vendored engine test suites (env-dependent upstream tests skipped)
+	$(DOCKER_RUN) cargo test --no-fail-fast $(VENDOR_TEST_PKGS) -- $(VENDOR_SKIPS)
+
+vendor-bench: ## Host-native engine benchmarks over the vendored code (see docs/performance.md for canary methodology)
+	cd profiling && cargo +stable-aarch64-apple-darwin build --release && ./target/release/pgdmn-profiling --samples 30
+
+vendor-upgrade: ## Stage a new pristine upstream version (VERSION=x.y.z): download, verify, swap, commit
+	@test -n "$(VERSION)" || { echo "usage: make vendor-upgrade VERSION=x.y.z"; exit 1; }
+	@scripts/vendor.sh upgrade "$(VERSION)"
+
+vendor-inspect: ## Kick off a Claude session that audits upstream changes and re-layers the patch set (after vendor-upgrade)
+	claude "$$(cat scripts/vendor-inspect-prompt.md)"
 
 website-clean: ## Remove website build artifacts
 	rm -rf $(WEBSITE_TARGET_DIR) website/dist
