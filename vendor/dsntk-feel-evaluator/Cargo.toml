@@ -85,6 +85,9 @@ version = "0.3.0"
 [dependencies.regex]
 version = "1.12.3"
 
+# PGDMN: DEPS-001 — the HTTP client exists only for external Java-function
+# evaluation; off-by-default so embedders (a PostgreSQL extension here) do not
+# link an HTTP/TLS stack. Upstreamable feature-gate shape.
 [dependencies.reqwest]
 version = "0.13.3"
 features = [
@@ -92,6 +95,7 @@ features = [
     "json",
     "rustls",
 ]
+optional = true
 
 [dependencies.serde]
 version = "1.0.228"
@@ -99,3 +103,8 @@ features = ["derive"]
 
 [dependencies.serde_json]
 version = "1.0.149"
+
+# PGDMN: DEPS-001 — external (Java/PMML) function evaluation is optional;
+# when disabled, invoking an external function yields an explained null.
+[features]
+external-functions = ["dep:reqwest"]

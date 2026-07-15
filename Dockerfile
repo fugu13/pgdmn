@@ -11,9 +11,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libclang-dev \
     clang \
     pkg-config \
-    # cmake builds aws-lc-sys, pulled in by dsntk-feel-evaluator 0.3's reqwest/rustls
-    # dependency; removable if upstream feature-gates it — see DEPS-001 in TODO.md
-    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # pgrx tests must run as a non-root user (initdb refuses root). Create that

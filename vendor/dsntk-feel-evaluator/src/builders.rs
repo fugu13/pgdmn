@@ -1,6 +1,9 @@
 //! # Evaluator builders for FEEL expressions
 
+// PGDMN: DEPS-001
+#[cfg(feature = "external-functions")]
 use crate::evaluator_java::evaluate_external_java_function;
+#[cfg(feature = "external-functions")]
 use crate::evaluator_pmml::evaluate_external_pmml_function;
 use crate::iterations::{EveryExpressionEvaluator, ForExpressionEvaluator, SomeExpressionEvaluator};
 use crate::macros::invalid_argument_type;
@@ -2735,9 +2738,20 @@ fn eval_external_function_with_named_parameters(scope: &FeelScope, args: &Value,
 
 /// Evaluates external function definition.
 fn eval_external_function_definition(scope: &FeelScope, arguments: &[Value], body: &FunctionBody, result_type: FeelType) -> Value {
+  // PGDMN: DEPS-001 — with external functions disabled, report an explained
+  // null instead of performing (or linking the machinery for) an HTTP call.
+  #[cfg(feature = "external-functions")]
   let result = match &body.evaluate(scope) {
     Value::ExternalJavaFunction(class_name, method_signature) => evaluate_external_java_function(class_name, method_signature, arguments),
     Value::ExternalPmmlFunction(document, model_name) => evaluate_external_pmml_function(document, model_name, arguments),
+    other => value_null!("expected JAVA or PMML mapping, actual value is {}", other),
+  };
+  #[cfg(not(feature = "external-functions"))]
+  let result = match &body.evaluate(scope) {
+    Value::ExternalJavaFunction(..) | Value::ExternalPmmlFunction(..) => {
+      let _ = arguments;
+      value_null!("external functions are disabled in this build")
+    }
     other => value_null!("expected JAVA or PMML mapping, actual value is {}", other),
   };
   // PGDMN: H6 — owned coercion, conformant results are returned without cloning

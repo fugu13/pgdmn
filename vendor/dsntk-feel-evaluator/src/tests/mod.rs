@@ -25,6 +25,8 @@ mod division;
 mod empty_input;
 mod every_expression;
 mod exponentiation;
+// PGDMN: DEPS-001 — these tests call a local Java RPC service.
+#[cfg(feature = "external-functions")]
 mod external_functions;
 mod filter;
 mod for_expression;

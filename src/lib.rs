@@ -278,6 +278,34 @@ mod tests {
     // behavior change to document, not a pgdmn regression.
 
     #[pg_test]
+    fn test_feel_unary_equal_not_equal_tests() {
+        // 0.3 behavior pin: unary '=' / '!=' tests evaluate (0.2 returned
+        // null for these forms). Decision-table entries using them now match.
+        let eq = Spi::get_one::<bool>("SELECT feel_eval_bool('5 in (= 5)')").expect("SPI failed");
+        assert_eq!(eq, Some(true));
+        let ne = Spi::get_one::<bool>("SELECT feel_eval_bool('5 in (!= 5)')").expect("SPI failed");
+        assert_eq!(ne, Some(false));
+        let ne_list =
+            Spi::get_one::<bool>("SELECT feel_eval_bool('5 in (!= 3, != 4)')").expect("SPI failed");
+        assert_eq!(ne_list, Some(true));
+    }
+
+    #[pg_test]
+    fn test_parser_scope_derivation_contract() {
+        // Pins the parser's scope-shape derivation (ParsingContext flattening)
+        // that the FEEL evaluator cache key mirrors: a multi-word key inside a
+        // nested context is only resolvable as a path if the parser flattens
+        // nested keys as "parent . child". If an upstream dsntk change alters
+        // that derivation, this fails loudly instead of silently skewing the
+        // cache key (see cache.rs::context_shape_digest).
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"SELECT feel_eval('order.line total * 2', '{"order": {"line total": 5}}'::jsonb)"#,
+        )
+        .expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!(10));
+    }
+
+    #[pg_test]
     fn test_feel_in_operator_accepts_unary_test_list() {
         // 0.2 evaluated this to null('eval_in_list')
         let result =

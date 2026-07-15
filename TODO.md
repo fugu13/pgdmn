@@ -198,13 +198,28 @@ Going live still needs three manual steps, recorded in RELEASEPLAN.md: a paid pl
 
 ## Dependencies
 
-### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension
+### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension (done in vendor; upstream PR pending)
 
 dsntk-feel-evaluator 0.3.0 hard-depends on reqwest 0.13 with the rustls/aws-lc provider, used only by its `evaluator_java.rs` — a blocking HTTP client that calls a local Java RPC server (127.0.0.1:22023) when a model invokes an "external Java function". pgdmn never wants that inside a PostgreSQL backend, but feature unification is additive so it cannot be opted out downstream; the extension `.so` now statically links reqwest, rustls, and the AWS-LC C library, and the Docker image needs cmake to build aws-lc-sys. The fix is upstream (fits the minimal-upstreamable-patch working agreement): land a small PR on DecisionToolkit/dsntk putting `evaluator_java`/`evaluator_pmml` and the reqwest dependency behind an off-by-default cargo feature (e.g. `external-functions`) that returns an explained null when disabled; 0.2's `default-features = false` reqwest with a ring provider is the fallback shape. pgdmn then consumes dsntk-feel-evaluator with the feature off, removing the HTTP/TLS stack from the backend entirely and demoting the `src/guard.rs` boundary rejection from load-bearing to belt-and-suspenders (the guard is inherently partial for DMN models — see the module docs in `src/guard.rs`). Once merged and adopted, remove cmake from the Dockerfile (comment there points here). No local `[patch]`/fork in the interim.
 
-### DEPS-002: Upstream fix for non-finite FeelNumber Display panic
+Resolved in the vendored copy (the vendoring decision superseded the
+no-fork constraint): `vendor/dsntk-feel-evaluator` now has an
+off-by-default `external-functions` cargo feature gating the evaluators
+and the optional reqwest dependency; disabled builds return an explained
+null for external invocations. reqwest/rustls/aws-lc/hyper/quinn are
+unreachable in the extension graph (verified with cargo tree) and cmake
+is out of the Dockerfile. The feature gate is the shape to offer
+upstream; `src/guard.rs` remains as belt-and-suspenders and its FEEL
+literal-expression gap is now closed at the build level.
+
+### DEPS-002: Upstream fix for non-finite FeelNumber Display panic (done in vendor; upstream PR pending)
 
 dsntk-feel-number's `Display` unwraps on the assumption that `bid128_to_string` output contains `'E'`; ±Inf/NaN — reachable because `Mul`/`Add` results are not finiteness-guarded, unlike `pow`/`from_str` — panic instead of printing. pgdmn guards its direct number conversions (BUG-004), but a non-finite number inside a `Value::Range` endpoint still panics via the Display catch-all in `feel_to_json`, and every other dsntk consumer stays exposed. Propose upstream either guarding arithmetic like `pow` does (overflow → FEEL null) or making `Display` total (print `+Inf`/`-Inf`/`NaN`). Minimal upstreamable patch per the working agreement.
+
+Fixed in the vendored copy: `Display` is now total (non-finite values
+print the Intel library's textual form instead of panicking on a missing
+exponent). pgdmn's BUG-004 SQL-error guards stay in place — the SQL
+boundary still rejects non-finite results with a clear error.
 
 ## Chores
 

@@ -3,6 +3,7 @@
 # for in-tree engine optimizations. Cargo commands in the root still default
 # to the pgdmn package; profiling/ is a separate host-native workspace.
 [workspace]
+resolver = "3"
 members = [
     "vendor/dsntk-common",
     "vendor/dsntk-examples",

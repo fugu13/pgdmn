@@ -7,7 +7,11 @@ extern crate dsntk_macros;
 mod bifs;
 mod builders;
 mod errors;
+// PGDMN: DEPS-001 — external evaluators (and their HTTP/TLS dependency tree)
+// compile only when the `external-functions` feature is enabled.
+#[cfg(feature = "external-functions")]
 mod evaluator_java;
+#[cfg(feature = "external-functions")]
 mod evaluator_pmml;
 mod evaluators;
 mod filters;

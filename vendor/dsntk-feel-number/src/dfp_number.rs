@@ -468,8 +468,15 @@ impl Display for FeelNumber {
     let s = bid128_to_str(self.0, &mut buf);
     let negative = s.starts_with('-');
     let mut split = s[1..].split('E');
-    let (sb, sa) = split.next().zip(split.next()).unwrap(); // unwrap is ok, there is always E present
-    let exponent = sa.parse::<isize>().unwrap(); // unwrap is ok, there is always correct exponent present
+    // PGDMN: DEPS-002 — ±Inf/NaN have no exponent part; print the library's
+    // textual form instead of panicking (arithmetic can overflow decimal128).
+    let Some((sb, sa)) = split.next().zip(split.next()) else {
+      return f.write_str(s);
+    };
+    let Ok(exponent) = sa.parse::<isize>() else {
+      // PGDMN: DEPS-002 — same totality principle for a malformed exponent.
+      return f.write_str(s);
+    };
     let decimal_points = exponent.unsigned_abs();
     let (mut before, mut after) = if exponent < 0 {
       let digit_count = sb.len();
