@@ -275,10 +275,9 @@ engine (by Dariusz Depta / Engos Software) under `vendor/`: verbatim,
 checksum-verified crates.io releases plus a minimal, deliberately upstreamable
 patch layer (performance work, one bug fix, and an off-by-default feature gate
 that keeps an HTTP/TLS stack out of the PostgreSQL backend). Each change is
-its own commit with `PGDMN:` markers, and the patches are being offered
-upstream. See [vendor/README.md](vendor/README.md) for provenance and
-conventions, and [docs/performance.md](docs/performance.md) for what the
-patches do; `make vendor-status` shows the carried layer at any time.
+its own commit with `PGDMN:` markers. See [vendor/README.md](vendor/README.md)
+for provenance and conventions, and [vendor/PATCHES.md](vendor/PATCHES.md) for
+what each patch does; `make vendor-status` shows the carried layer at any time.
 
 ## Build & Test
 
@@ -306,7 +305,6 @@ at your option.
 - [TODO.md](TODO.md) - Tracked work items
 - [BUGHISTORY.md](BUGHISTORY.md) - Resolved bugs with reoccurrence checklists
 - [RELEASEPLAN.md](RELEASEPLAN.md) - Release, promotion, and go-to-market plan
-- [docs/performance.md](docs/performance.md) - Evaluation performance: what is amortized, per-row costs, measurement infrastructure, vendored engine patch inventory
 - [docs/improvements.md](docs/improvements.md) - Investigation of approaches to bypass JSONB for more efficient PG-to-DMN data passing
 - [vendor/README.md](vendor/README.md) - Provenance and conventions for the vendored dsntk engine
 - [docs/specifications/](docs/specifications/) - Specifications describing what a feature must do, written before implementation

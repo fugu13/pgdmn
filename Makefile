@@ -40,7 +40,7 @@ clean: ## Remove build artifacts
 # --- Vendored dsntk management ------------------------------------------
 # The git history under vendor/ is a pristine upstream base plus a minimal
 # patch layer (one commit per change, PGDMN: markers). See vendor/README.md
-# and docs/performance.md. scripts/vendor.sh implements the mechanics.
+# and the Performance section of CLAUDE.md. scripts/vendor.sh implements the mechanics.
 
 # Most recent commit that swapped in a pristine upstream tree, identified by
 # its subject line ("Vendor pristine dsntk X" from vendor-upgrade, or the
@@ -59,7 +59,7 @@ vendor-status: ## Show vendored dsntk version, pristine base, and patch-layer si
 	@scripts/vendor.sh status "$(VENDOR_PRISTINE)"
 
 vendor-diff: ## Diff vendor/ against the pristine base (the carried patch layer)
-	@git diff $(VENDOR_PRISTINE) -- vendor/ ':(exclude)vendor/README.md' ':(exclude)vendor/rustfmt.toml' ':(exclude)vendor/LICENSE-*' ':(exclude)vendor/NOTICE'
+	@git diff $(VENDOR_PRISTINE) -- vendor/ ':(exclude)vendor/README.md' ':(exclude)vendor/PATCHES.md' ':(exclude)vendor/rustfmt.toml' ':(exclude)vendor/LICENSE-*' ':(exclude)vendor/NOTICE'
 
 vendor-test: test-image ## Run the vendored engine test suites (env-dependent upstream tests skipped)
 	$(DOCKER_RUN) cargo test --no-fail-fast $(VENDOR_TEST_PKGS) -- $(VENDOR_SKIPS)
@@ -68,7 +68,7 @@ vendor-test: test-image ## Run the vendored engine test suites (env-dependent up
 # and unusable for measurement; override VENDOR_BENCH_TOOLCHAIN elsewhere.
 VENDOR_BENCH_TOOLCHAIN ?= stable-aarch64-apple-darwin
 
-vendor-bench: ## Host-native engine benchmarks over the vendored code (see docs/performance.md for canary methodology)
+vendor-bench: ## Host-native engine benchmarks over the vendored code (canary methodology: CLAUDE.md Performance section)
 	cd profiling && cargo +$(VENDOR_BENCH_TOOLCHAIN) build --release && ./target/release/pgdmn-profiling --samples 30
 
 vendor-check: ## Fail if any dsntk crate resolves from the registry (silent unvendoring) or versions skew

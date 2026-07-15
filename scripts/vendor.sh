@@ -11,10 +11,11 @@ status() {
     echo "vendored dsntk version: $version"
     echo "pristine base commit:   ${pristine:-<none found>}"
     if [ -n "$pristine" ]; then
+        echo "patch summaries: vendor/PATCHES.md"
         echo "patch layer (commits since pristine base touching vendor/):"
         git log --oneline --no-merges "$pristine"..HEAD -- vendor/ | sed 's/^/  /'
         echo "patch layer size (excluding vendor README/rustfmt config):"
-        git diff --shortstat "$pristine" -- vendor/ ':(exclude)vendor/README.md' ':(exclude)vendor/rustfmt.toml' ':(exclude)vendor/LICENSE-*' ':(exclude)vendor/NOTICE' | sed 's/^/  /'
+        git diff --shortstat "$pristine" -- vendor/ ':(exclude)vendor/README.md' ':(exclude)vendor/PATCHES.md' ':(exclude)vendor/rustfmt.toml' ':(exclude)vendor/LICENSE-*' ':(exclude)vendor/NOTICE' | sed 's/^/  /'
     fi
 }
 

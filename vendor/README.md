@@ -28,8 +28,9 @@ hot path in-tree.
   *pristine upstream commit* followed by a minimal, separable patch layer —
   one commit per logical change, each marked with `PGDMN:` comments at the
   change sites. Upgrades replace the pristine base and re-apply the layer
-  (`make vendor-upgrade` / `make vendor-inspect` drive this). The performance
-  report documents each patch's measured effect and upstream-PR viability.
+  (`make vendor-upgrade` / `make vendor-inspect` drive this). `PATCHES.md` in
+  this directory summarizes every carried patch and its measured effect;
+  update it as part of the one-commit-per-change discipline.
 - **Dependency slicing:** vendored crates may gate upstream functionality we
   do not want in a PostgreSQL backend behind off-by-default cargo features
   (e.g. the external Java/PMML evaluators and their HTTP/TLS stack —

@@ -34,7 +34,7 @@ Two host-native exceptions (always with `cargo +stable-aarch64-apple-darwin` —
 | `make bench` | DMN eval benchmark |
 | `make vendor-status` / `vendor-diff` | Vendored dsntk version, pristine base, carried patch layer |
 | `make vendor-test` | Vendored engine suites in Docker (env-dependent upstream tests skipped) |
-| `make vendor-bench` | Host-native engine benchmarks (canary methodology in docs/performance.md) |
+| `make vendor-bench` | Host-native engine benchmarks (canary methodology: Performance section below) |
 | `make vendor-upgrade VERSION=x.y.z` | Stage a new pristine upstream tree (drops the patch layer) |
 | `make vendor-inspect` | Claude session: audit upstream delta, re-layer patches, gate, measure |
 | `make website-build` | Prerender the site to `website/dist` (the deployable artifact) |
@@ -73,7 +73,7 @@ website/
 ### Decided
 
 - **dsntk is vendored (`vendor/`, 13 crates) and patched in-tree for performance.** The patch set must stay minimal, separable (one commit per change), and upstreamable: `PGDMN:` comments at every change site, no reformatting of surrounding code, repo lint/style conventions do not apply to vendor code (`vendor/rustfmt.toml` disables formatting; cap-lints still surfaces default clippy lints in `make lint`). The user trades ~10% of a speedup for substantially less vendor diff — always report scope alongside speed. Safety net: the vendored crates are workspace members and their test suites (3,600+ evaluator tests, DMN TCK corpus) must stay green after any vendor change.
-- **Perf claims are canary-gated measurements.** Benchmark windows are gated on an untouched-code micro-benchmark canary (see docs/performance.md, methodology); sub-microsecond deltas across separate builds are noise below ~8%. Candidate optimization removals are measured at the final tip, not only in isolation — optimizations interact.
+- **Perf claims are canary-gated measurements.** Benchmark windows are gated on an untouched-code micro-benchmark canary (Performance section below); sub-microsecond deltas across separate builds are noise below ~8%. Candidate optimization removals are measured at the final tip, not only in isolation — optimizations interact.
 - **Evaluation caches are content-addressed by 128-bit double-seeded rapidhash** (DMN: model XML hash; FEEL: expression text + context-shape digest). The shape digest deliberately mirrors the vendored parser's scope derivation — an accepted, test-pinned tradeoff; re-verify on dsntk upgrades.
 - **Docker-only extension builds.** The pgrx toolchain and PG17 live in the images; the host never needs them. The Dockerfile copies `Cargo.lock` and fetches `--locked` so the image's crate cache matches the repo (see BUG-001 in BUGHISTORY.md).
 - **Error model:** SQL-facing errors are raised with `pgrx::error!` (unwinds into a PostgreSQL ERROR — the idiomatic pgrx mechanism). Internal fallible functions return `Result<_, String>` and callers convert at the SQL boundary with `unwrap_or_else(|e| pgrx::error!(...))`. This is an accepted deviation from the thiserror convention: errors here terminate at the SQL boundary as messages, so enum error types add no value. Revisit if errors ever need programmatic matching.
@@ -117,6 +117,79 @@ website/
 - `pgrx::datum::Interval::new(months, days, micros)` — months first
 - `pgrx_embed` binary required: `[[bin]] name = "pgrx_embed_pgdmn"`
 
+## Performance
+
+The evaluation hot path is per-SQL-row; everything below is load-bearing
+knowledge for changing it. Detailed measurements live in the benchmark
+outputs (`make bench`, `make vendor-bench`); deferred levers are PERF-* in
+TODO.md.
+
+### Caches (per backend thread, content-addressed)
+
+| Cache | Key | Bound |
+|---|---|---|
+| DMN evaluator | 128-bit content hash of the model XML (computed once at `dmn_load`) + XML length | unbounded; one entry per distinct model |
+| FEEL prepared evaluator | full expression text + 128-bit digest of the context *shape* | 1024 entries, then cleared wholesale |
+
+- Collision safety rests on 128-bit double-seeded rapidhash (~2⁻¹²⁸ per pair);
+  hot-path probes never re-hash or memcmp the underlying bytes.
+- **The context-shape digest mirrors the FEEL parser's scope derivation**
+  (`ParsingContext::from(&FeelContext)`): FEEL name tokenization depends on
+  which names are in scope, so the same expression parses differently under
+  different key sets. The mirror covers entry names, nested-context structure,
+  and whether lists contain contexts — never leaf values. It is pinned by unit
+  tests in `src/cache.rs` and by `test_parser_scope_derivation_contract`;
+  **re-verify it on every dsntk upgrade** (a silent upstream change here means
+  wrong answers from stale cached ASTs, not errors).
+- The external-function AST guard runs once per parse inside the FEEL cache;
+  the DMN guard runs at evaluator build. Cached entries were screened when
+  first built.
+
+### Per-row cost model
+
+`dmn_eval` row: model datum CBOR decode (scales with XML size — PERF-001 is
+the biggest remaining lever), cache probe, JSONB→FEEL conversion (integer
+fast paths, by-value inserts), engine evaluation, FEEL→JSONB conversion.
+`feel_eval` row: conversion, shape digest, cache probe, evaluation,
+conversion. Parsing never happens per row on warm paths.
+
+### Vendored engine patch inventory (stable IDs)
+
+H4 hit-policy-aware decision tables (short-circuit) · H10 input expressions
+once per call, bound to `?` · H5/H11/H12 per-call clone cuts + single-dispatch
+BKM · H18 allocation-free invocable lookup · H3 copy-on-write FeelContext
+(Arc) · H13 O(n) for-expressions + quantifier early-exit · H14 regex cache for
+replace()/split() · H9 stack-buffer number formatting · H19 lazy memoized
+builtin resolution · H6 owned coercion path · H20 filter waste cuts · BUG-003
+`?`-entry semantics · DEPS-001 external-functions gate · DEPS-002 total
+Display. Constraints: **H20 ships only with H3** (each alone regresses
+filters — measured interaction); **H19 must stay lazy** (eager build-time
+`Bif::from_str` regressed 3× in both the 0.2 and 0.3 cycles); the H13 AST
+walker is exhaustive by design and fails the build on new parser variants.
+
+### Behavioral deviations from pristine upstream
+
+Never-consumed FEEL sub-expressions are not evaluated (hit-policy
+short-circuit, quantifier early-exit — observable only via side-effecting
+external functions, which are compiled out anyway); one diagnostic null
+message no longer embeds the whole input context; BUG-003 spec alignment;
+external invocations yield an explained null (DEPS-001); non-finite Display
+is total (DEPS-002). pgdmn-side: integral JSON literals normalize on
+pass-through (`5.0` → `5`; numeric value preserved, property-tested).
+
+### Measuring
+
+- `make bench` (SQL tier): per-row suite with plain-SQL and jsonb-extraction
+  baselines; the pure-PostgreSQL control queries are cross-run canaries.
+- `make vendor-bench` (engine tier): host-native harness in `profiling/`;
+  it includes `src/convert_core.rs` as shared source so numbers always
+  describe shipping conversion code. Hot-loop mode for sampling profilers.
+- Cargo `[profile.dev.package.*]` overrides build every measured package at
+  opt-level 3 so `cargo pgrx test` benches reflect release-grade codegen.
+- Methodology: canary-gate every window (untouched FFI micro within 12% of
+  idle baseline); sub-µs cross-build deltas under ~8% are layout noise;
+  measure candidate removals at the final tip — optimizations interact.
+
 ## Testing
 
 - **Test-first:** write signatures, then tests expressing the behavior, confirm they fail for the right reason, then implement. Do not add untested behavior.
@@ -143,7 +216,6 @@ website/
 | `BUGHISTORY.md` | Resolved bugs with reoccurrence checks | Immediately when a bug is fixed |
 | `RELEASEPLAN.md` | Release and go-to-market plan | As the plan changes |
 | `docs/{feature}.md` | Feature descriptions (user actions, no code blocks; mermaid for diagrams) | When feature behavior changes |
-| `docs/performance.md` | Evaluation performance: amortization architecture, measurement methodology, vendored patch inventory | When caches, benchmarks, or the vendor patch set change |
 | `docs/ux/{aspect}.md` | Website UI behavioral descriptions | When UI changes |
 | `docs/specifications/{ID}-{slug}.md` | Specifications (via `/spec`; historical artifacts) | Created before planning |
 | `docs/plans/{ID}-{slug}.md` | Implementation plans (via `/blueprint`; status header kept current) | When work completes or is superseded |

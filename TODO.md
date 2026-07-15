@@ -30,11 +30,12 @@ Dependabot for path deps) and a guard against stray duplicate files
 ### PUBLIC-004: Durable vendor manifests
 
 Commit a CHECKSUMS manifest (per-crate sha256 of the vendored tarballs,
-written by vendor-upgrade) and a vendor/PATCHES.md (stable patch ID,
-description, upstream-PR status, current SHA — updated as part of the
-one-commit-per-change discipline). Teach vendor-status to reconcile
-against the manifest, and disable squash-merge for vendor PRs so
-patch-layer separability survives GitHub merges.
+written by vendor-upgrade). vendor/PATCHES.md exists (summaries +
+measured effects; update it as part of the one-commit-per-change
+discipline) — extend it with upstream-PR links as PUBLIC-006 executes,
+teach vendor-status to reconcile the git layer against it, and disable
+squash-merge for vendor PRs so patch-layer separability survives GitHub
+merges.
 
 ### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction
 
@@ -52,9 +53,8 @@ so the public repo visibly demonstrates the upstream-first posture.
 
 ### PUBLIC-007: Commit a benchmark baseline for the vendor-inspect flow
 
-vendor-inspect step 4 compares against "the numbers in
-docs/performance.md", which holds no numbers (the detailed report is a
-private session artifact). Commit a per-scenario baseline table
+vendor-inspect step 4 needs a committed reference (the detailed
+measurement report is a private session artifact). Commit a per-scenario baseline table
 (median, machine, toolchain, date — e.g. profiling/baselines/) and
 point the prompt at it, so someone other than the original author can
 run the regression gate.
