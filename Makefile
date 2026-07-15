@@ -2,6 +2,14 @@
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
+# Extra flags for the image build. Empty locally, so `test-image` just uses
+# Docker's own layer cache. CI sets this to a GitHub Actions layer cache
+# (`--cache-from`/`--cache-to type=gha`) so the ~7-minute image -- apt
+# PostgreSQL 17 plus `cargo install cargo-pgrx` -- is reused across runs
+# instead of rebuilt every time. buildx (the default builder in modern Docker)
+# is what supports these flags and `--load`.
+DOCKER_BUILD_CACHE ?=
+
 # Shared cargo target dir so worktrees reuse the main repo's build cache
 REPO_ROOT = $(shell cd "$$(git rev-parse --git-common-dir)/.." && pwd)
 WEBSITE_TARGET_DIR = $(REPO_ROOT)/website/target
@@ -11,7 +19,7 @@ help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "%-16s %s\n", $$1, $$2}'
 
 test-image: ## Build the Docker image (PG17 + pgrx toolchain, non-root pgdmn user)
-	docker build -t pgdmn-test .
+	docker buildx build $(DOCKER_BUILD_CACHE) --load -t pgdmn-test .
 
 check: test-image ## Run cargo check (fast compilation check, no tests)
 	$(DOCKER_RUN) cargo check --all-targets

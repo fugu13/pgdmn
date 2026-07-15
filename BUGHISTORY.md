@@ -76,3 +76,19 @@ Resolved bugs, recorded so they can be recognised if they reappear. Every entry 
 - [ ] `website/Cargo.toml` declares no `wasm-bindgen`, no `console_error_panic_hook`, no `hydrate` feature, and no `cdylib` crate type
 - [ ] The website build invokes no host binary other than `cargo` — in particular not `cargo-leptos`, `wasm-bindgen`, or `sass`
 - [ ] Any proposal to reintroduce client-side interactivity is weighed against WEB-001 in CLAUDE.md's Decided section first; reintroducing the wasm bundle reintroduces this bug class
+
+## BUG-005: CI target cache poisons pgrx tests with a non-0700 Postgres data dir
+
+**Symptom:** The first (cold) CI run of `.github/workflows/ci.yml` passes, but the next run that restores the cached `target/` fails **every** `pg_test_*` at once. The first test panics with `pg_ctl: could not start server` / `FATAL: data directory "/pgdmn/target/test-pgdata/17" has invalid permissions` / `DETAIL: Permissions should be u=rwx (0700) or u=rwx,g=rx (0750).`; every subsequent test then panics with `Could not obtain test mutex. A previous test may have hard-aborted while holding it.`
+
+**Root cause:** The `extension` job caches the whole bind-mounted `target/` to skip recompilation. `cargo pgrx test` initialises a throwaway Postgres cluster at `target/test-pgdata/17` with the mode `0700` that Postgres requires. A cache-archival step then ran `chmod -R a+rX target` (so the runner's non-uid-1000 user could tar the tree), which relaxed the data dir to `0755`. That `0755` cluster was cached and restored on the next run; `cargo pgrx test` reuses the existing data dir rather than reinitialising, Postgres rejects the permissions and aborts before releasing the test mutex, and the whole suite cascades to failure. Related to BUG-002 (both are about pgrx's non-root/permission requirements), but distinct: this one is CI-cache-specific and does not reproduce locally, where Docker Desktop does not enforce the mode check the same way.
+
+**Fix:** Never cache the throwaway cluster. `ci.yml` now `rm -rf target/test-pgdata` both after cache restore (so a poisoned cache can't be reused) and before cache save (so it is never archived), and the archival `chmod` runs only on what remains. The `target` cache key prefix was bumped to `-v2-` to retire already-poisoned entries. pgrx reinitialises a fresh `0700` cluster every run.
+
+**Files:** `.github/workflows/ci.yml`
+
+**Reoccurrence check:**
+- [ ] `ci.yml` deletes `target/test-pgdata` before `make test` runs (after cache restore) and again before the cache is saved
+- [ ] No cache-archival or permission step runs `chmod` over `target/test-pgdata` (or the whole `target/` while the cluster is still present)
+- [ ] If the caching scheme changes so the cluster could be archived again, bump the `-vN-` key prefix to abandon poisoned entries
+- [ ] A warm CI run (one that restores the `target/` cache) is green, not just the first cold run

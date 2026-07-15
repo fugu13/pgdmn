@@ -292,6 +292,24 @@ Done 2026-07-13. The `Website` workflow (`.github/workflows/website.yml`) lints,
 
 Going live still needs three manual steps, recorded in RELEASEPLAN.md: a paid plan for Pages from a private repo, the Route 53 A/AAAA/CNAME records, and enforcing HTTPS once the certificate is issued.
 
+## CI
+
+### CI-001: Publish the extension test image to GHCR as a cache fallback
+
+Today `ci.yml` rebuilds `pgdmn-test` with a `type=gha` buildx layer cache injected via the Makefile's `DOCKER_BUILD_CACHE` variable. If cold-cache runs (e.g. after `Cargo.lock` changes) get too slow, publish a prebuilt image to GitHub Container Registry whenever the Dockerfile or `Cargo.lock` changes, and pull it in CI as a fallback. This would cap the worst-case build time without changing the normal cache path.
+
+### CI-002: Scheduled DMN eval benchmark with regression tracking
+
+`make bench` is gated behind `PGDMN_BENCH=1` and deliberately excluded from PR CI because microbenchmark numbers are noisy on shared runners (see the canary-gated benchmarking notes). Add a nightly or otherwise scheduled workflow that runs the benchmark and records results over time, so drift is caught without flaking PRs.
+
+### CI-003: Path-based job skipping for docs-only and website-only PRs
+
+`ci.yml` intentionally has no `paths:` filter so the required `CI aggregate` check always reports; a path-filtered required check stays pending forever and blocks merges. Add a `dorny/paths-filter`-style gate (or equivalent) that skips the extension lint/test work for docs-only and website-only PRs while still letting the aggregate job run unconditionally, restoring the savings without reintroducing that failure mode.
+
+### CI-004: Documentation-integrity check in CI
+
+Add a CI check that enforces this project's documentation conventions automatically: the README has a SQL example for every function, and `docs/` structure invariants hold. The sibling `datasend` repo runs a `scripts/doc_check.py` in CI for the same purpose; pgdmn's doc conventions are currently enforced only by review.
+
 ## Dependencies
 
 ### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension (done in vendor; upstream PR pending)
