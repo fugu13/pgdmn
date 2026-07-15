@@ -41,19 +41,26 @@ jobs:
       # caching it keeps pgrx/dsntk from recompiling every run. The run_id in
       # the key makes every run save a fresh entry (an exact-key hit would skip
       # the save and discard this run's incremental progress); restore-keys
-      # falls back to the newest prior entry for the same Cargo.lock.
+      # falls back to the newest prior entry for the same Cargo.lock. The `-v2-`
+      # prefix retires caches saved before target/test-pgdata was excluded (see
+      # the prune steps below) -- those carry a 0755 PG data dir that Postgres
+      # refuses to start on.
       - uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          key: ${{ runner.os }}-cargo-target-v2-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}-
-            ${{ runner.os }}-cargo-target-
+            ${{ runner.os }}-cargo-target-v2-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-cargo-target-v2-
 
-      # The image's `pgdmn` user is uid 1000, and pgrx/initdb refuse to run as
-      # root, so the bind-mounted workspace must be writable by uid 1000.
-      - name: Grant the container's non-root user write access to the workspace
-        run: sudo chown -R 1000:1000 .
+      # Two prep steps folded together: (1) drop any pgrx test cluster a restored
+      # cache might carry so Postgres always starts from a fresh mode-0700 data
+      # dir, and (2) hand the bind-mounted workspace to uid 1000 -- the image's
+      # `pgdmn` user, since pgrx/initdb refuse to run as root.
+      - name: Prepare the workspace for the container
+        run: |
+          sudo rm -rf target/test-pgdata
+          sudo chown -R 1000:1000 .
 
       # One `make` invocation so the shared `test-image` prerequisite -- and the
       # multi-GB `docker buildx --load` it performs -- runs once; separate
@@ -63,11 +70,16 @@ jobs:
       - name: Build the test image, then lint and test
         run: make lint test
 
-      # Belt-and-suspenders so the runner can tar the uid-1000-owned dir for
-      # cache archival; never fail the job on this.
-      - name: Make target readable for cache archival
+      # pgrx's throwaway Postgres cluster (target/test-pgdata) must never be
+      # cached: Postgres refuses to start unless the data dir is mode 0700, but
+      # the `a+rX` below -- needed so the runner can tar the uid-1000-owned tree
+      # -- would leave it 0755 and poison the next run. Delete it first, then
+      # make the remaining compiled artifacts readable for cache archival.
+      - name: Prune the PG test cluster and make target cache-readable
         if: always()
-        run: sudo chmod -R a+rX target || true
+        run: |
+          sudo rm -rf target/test-pgdata
+          sudo chmod -R a+rX target || true
 
       - name: Upload proptest regressions on failure
         if: failure()
