@@ -36,6 +36,17 @@ fn H3(#[prop(into)] id: String, #[prop(into)] title: String) -> impl IntoView {
     view! { <h3 id=id class="anchored"><a href=href>{title}</a></h3> }
 }
 
+/// A block of shell commands. Same presentation and keyboard behaviour as a SQL
+/// block, but not syntax-highlighted — shell is not SQL, and these are short.
+#[component]
+fn Shell(#[prop(into)] label: String, #[prop(into)] code: String) -> impl IntoView {
+    view! {
+        <pre class="sql-block" role="region" aria-label=label tabindex="0">
+            <code>{code}</code>
+        </pre>
+    }
+}
+
 #[component]
 pub fn DocsPage() -> impl IntoView {
     view! {
@@ -52,17 +63,68 @@ pub fn DocsPage() -> impl IntoView {
         <H2 id="install" title="Install"/>
         <p>
             "pgdmn is a PostgreSQL extension. To install it, you build it from source, then copy
-            the compiled extension into place."
+            the compiled extension into place. Both are done with "
+            <a
+                href="https://github.com/pgcentralfoundation/pgrx"
+                rel="noopener noreferrer"
+                target="_blank"
+            >
+                "pgrx"
+            </a>", the framework pgdmn is built on."
         </p>
-        <pre class="sql-block" role="region" aria-label="Build and install commands" tabindex="0">
-            <code>"# Build pgdmn and copy it into your PostgreSQL installation.\ncargo pgrx install --release"</code>
-        </pre>
+
+        <H3 id="set-up-pgrx" title="Step one: set up pgrx for your database"/>
         <p>
-            "That needs the pgrx toolchain; the full setup is in the "
-            <a href="https://github.com/fugu13/pgdmn#readme" rel="noopener noreferrer" target="_blank">
-                "project README"
-            </a>". Next, enable it and verify it works."
+            "Install the pgrx command-line tool. It needs a C compiler and a few build
+            libraries; the "
+            <a
+                href="https://github.com/pgcentralfoundation/pgrx#system-requirements"
+                rel="noopener noreferrer"
+                target="_blank"
+            >
+                "pgrx system requirements"
+            </a>" list them for each platform."
         </p>
+        <Shell
+            label="Install the pgrx CLI"
+            code="cargo install --locked cargo-pgrx"
+        />
+        <p>
+            "Then initialise pgrx. Here you choose whether pgrx manages a PostgreSQL for you, or
+            uses one you already run."
+        </p>
+
+        <p>
+            <strong>"If you want pgrx to manage PostgreSQL"</strong>
+            ", it downloads and builds its own — the quickest way to try pgdmn end to end. "
+            <code>"cargo pgrx run"</code>" builds pgdmn, installs it into that instance, and drops
+            you into a "<code>"psql"</code>" shell:"
+        </p>
+        <Shell
+            label="Let pgrx manage PostgreSQL"
+            code="# Download and build a PostgreSQL 17 that pgrx manages.
+cargo pgrx init --pg17 download
+
+# Build pgdmn, install it into that PostgreSQL, and open psql.
+cargo pgrx run pg17"
+        />
+
+        <p>
+            <strong>"To use a PostgreSQL you already run"</strong>", point pgrx at its "
+            <code>"pg_config"</code>", then build and copy the extension into the directories that "
+            <code>"pg_config"</code>" reports (you may need write permission there):"
+        </p>
+        <Shell
+            label="Install into an existing PostgreSQL"
+            code="# Point pgrx at your server's pg_config.
+cargo pgrx init --pg17 $(which pg_config)
+
+# Build pgdmn and copy it into that PostgreSQL's install.
+cargo pgrx install --release"
+        />
+
+        <H3 id="enable" title="Step two: enable and verify"/>
+        <p>"In a database on that server, enable the extension and check it works:"</p>
         <SqlBlock
             label="Enable and verify"
             code="CREATE EXTENSION pgdmn;
