@@ -134,14 +134,20 @@ fn build_decision_evaluator(def_definitions: &DefDefinitions, def_decision: &Def
   };
 
   // prepare required knowledge, required decisions and required input data references
-  let mut required_knowledge_references: Vec<(Option<Name>, DefKey)> = vec![];
+  // PGDMN (H12): each required knowledge reference is tagged at build time with
+  // whether it targets a business knowledge model (true) or a decision service
+  // (false), so evaluation dispatches to a single evaluator instead of probing both.
+  let mut required_knowledge_references: Vec<(Option<Name>, DefKey, bool)> = vec![];
   let mut required_decision_references: Vec<(Option<Name>, DefKey)> = vec![];
   let mut required_input_data_references: Vec<DefKey> = vec![];
 
   // required business knowledge models and decision services
   for knowledge_requirement in def_decision.knowledge_requirements() {
     let required_knowledge = knowledge_requirement.required_knowledge();
-    required_knowledge_references.push((required_knowledge.import_name().cloned(), required_knowledge.into()));
+    let is_bkm = def_definitions
+      .business_knowledge_model_by_key(required_knowledge.namespace(), required_knowledge.id())
+      .is_some();
+    required_knowledge_references.push((required_knowledge.import_name().cloned(), required_knowledge.into(), is_bkm));
   }
 
   // required decisions and required input data
@@ -179,7 +185,8 @@ fn build_decision_evaluator(def_definitions: &DefDefinitions, def_decision: &Def
       };
 
       // evaluate required knowledge given as value from business knowledge models
-      required_knowledge_references.iter().for_each(|(import_name, def_key)| {
+      // PGDMN (H12): dispatch each requirement only to the evaluator it targets.
+      required_knowledge_references.iter().filter(|(_, _, is_bkm)| *is_bkm).for_each(|(import_name, def_key, _)| {
         if let Some(import_name_parent) = import_name.clone() {
           if let Some(name) = business_knowledge_model_evaluator.evaluate(def_key, global_context, &input_data, model_evaluator, &mut requirements_ctx) {
             requirements_ctx.move_entry(name, import_name_parent);
@@ -190,7 +197,7 @@ fn build_decision_evaluator(def_definitions: &DefDefinitions, def_decision: &Def
       });
 
       // evaluate required knowledge given as value from decision service function definitions
-      required_knowledge_references.iter().for_each(|(import_name, def_key)| {
+      required_knowledge_references.iter().filter(|(_, _, is_bkm)| !*is_bkm).for_each(|(import_name, def_key, _)| {
         if let Some(import_name_parent) = import_name.clone() {
           if let Some(name) = decision_service_evaluator.evaluate_fd(def_key, &input_data, &mut requirements_ctx) {
             requirements_ctx.move_entry(name, import_name_parent);
