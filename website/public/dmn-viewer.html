@@ -39,12 +39,23 @@
       href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-font/css/dmn.css"
     />
     <style>
+      html,
+      body {
+        height: 100%;
+      }
+      /* Flex column: the header takes what it needs (it may wrap on a narrow
+         screen), the canvas fills the rest and scrolls inside itself, so the
+         page as a whole never scrolls. */
       body {
         margin: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         color: #1a1a2e;
       }
       header {
+        flex: none;
         display: flex;
         flex-wrap: wrap;
         align-items: baseline;
@@ -65,7 +76,9 @@
         color: #336791;
       }
       #canvas {
-        height: calc(100vh - 54px);
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
       }
       .msg {
         padding: 2rem;
@@ -81,7 +94,7 @@
       <a id="download" download>Download the model</a>
       <a href="/articles/">← Back to pgdmn</a>
     </header>
-    <div id="canvas"><p class="msg">Loading…</p></div>
+    <div id="canvas"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/dmn-navigated-viewer.production.min.js"></script>
     <script>
