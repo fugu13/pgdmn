@@ -32,6 +32,20 @@ Resolved bugs, recorded so they can be recognised if they reappear. Every entry 
 - [ ] `cargo pgrx init` (and every step after `USER pgdmn`) runs as `pgdmn`, not root
 - [ ] `make check` and `make test` succeed from a fresh worktree with no `target/` directory
 
+## BUG-004: FEEL decimal overflow panics in typed numeric conversions
+
+**Symptom:** `feel_eval_numeric` (or `feel_eval_numrange` via a range endpoint) on an expression whose result overflows decimal128 — e.g. the product of two ~3100-digit numbers — raises the opaque PG ERROR ``called `Option::unwrap()` on a `None` value`` (a Rust panic converted by pgrx) instead of a real error message.
+
+**Root cause:** dsntk-feel-number's arithmetic (`Mul`/`Add`) is not finiteness-guarded (unlike `pow`/`from_str`), so overflow rounds to ±Inf; `FeelNumber`'s `Display` assumes `bid128_to_string` output contains `'E'` and unwraps, but for ±Inf/NaN it returns `"+Inf"` etc., so `n.to_string()` panics at pgdmn's SQL boundary. Pre-existing on dsntk 0.2; found during the 0.3 migration review.
+
+**Fix:** shared `feel_number_is_finite` guard in `src/convert.rs` (`-Inf < n < Inf`, which also rejects NaN since NaN compares false to everything), applied before stringifying in both `feel_number_to_numeric` (typed paths) and `feel_to_json`'s `Value::Number` arm (JSONB paths, covering numbers nested in lists/contexts via recursion). Residual: a non-finite number inside a `Value::Range` endpoint still reaches the Display catch-all — that closes with the upstream fix tracked as DEPS-002 in TODO.md.
+
+**Files:** `src/functions/feel.rs`, `src/convert.rs`
+
+**Reoccurrence check:**
+- [ ] Every path that stringifies a `FeelNumber` checks `feel_number_is_finite` first
+- [ ] `test_feel_eval_numeric_rejects_decimal_overflow` and `test_feel_eval_rejects_decimal_overflow` pass
+
 ## BUG-003: website build breaks when the wasm-bindgen crate outruns the host CLI
 
 **Symptom:** `make website-build` fails with `wasm-bindgen failed` and a message telling you to either downgrade the crate (`cargo update -p wasm-bindgen --precise <old>`) or reinstall the binary. Triggered by an ordinary `cargo update` of `website/Cargo.lock`, with no source change at all.
@@ -46,3 +60,19 @@ Resolved bugs, recorded so they can be recognised if they reappear. Every entry 
 - [ ] `website/Cargo.toml` declares no `wasm-bindgen`, no `console_error_panic_hook`, no `hydrate` feature, and no `cdylib` crate type
 - [ ] The website build invokes no host binary other than `cargo` — in particular not `cargo-leptos`, `wasm-bindgen`, or `sass`
 - [ ] Any proposal to reintroduce client-side interactivity is weighed against WEB-001 in CLAUDE.md's Decided section first; reintroducing the wasm bundle reintroduces this bug class
+
+## BUG-005: CI target cache poisons pgrx tests with a non-0700 Postgres data dir
+
+**Symptom:** The first (cold) CI run of `.github/workflows/ci.yml` passes, but the next run that restores the cached `target/` fails **every** `pg_test_*` at once. The first test panics with `pg_ctl: could not start server` / `FATAL: data directory "/pgdmn/target/test-pgdata/17" has invalid permissions` / `DETAIL: Permissions should be u=rwx (0700) or u=rwx,g=rx (0750).`; every subsequent test then panics with `Could not obtain test mutex. A previous test may have hard-aborted while holding it.`
+
+**Root cause:** The `extension` job caches the whole bind-mounted `target/` to skip recompilation. `cargo pgrx test` initialises a throwaway Postgres cluster at `target/test-pgdata/17` with the mode `0700` that Postgres requires. A cache-archival step then ran `chmod -R a+rX target` (so the runner's non-uid-1000 user could tar the tree), which relaxed the data dir to `0755`. That `0755` cluster was cached and restored on the next run; `cargo pgrx test` reuses the existing data dir rather than reinitialising, Postgres rejects the permissions and aborts before releasing the test mutex, and the whole suite cascades to failure. Related to BUG-002 (both are about pgrx's non-root/permission requirements), but distinct: this one is CI-cache-specific and does not reproduce locally, where Docker Desktop does not enforce the mode check the same way.
+
+**Fix:** Never cache the throwaway cluster. `ci.yml` now `rm -rf target/test-pgdata` both after cache restore (so a poisoned cache can't be reused) and before cache save (so it is never archived), and the archival `chmod` runs only on what remains. The `target` cache key prefix was bumped to `-v2-` to retire already-poisoned entries. pgrx reinitialises a fresh `0700` cluster every run.
+
+**Files:** `.github/workflows/ci.yml`
+
+**Reoccurrence check:**
+- [ ] `ci.yml` deletes `target/test-pgdata` before `make test` runs (after cache restore) and again before the cache is saved
+- [ ] No cache-archival or permission step runs `chmod` over `target/test-pgdata` (or the whole `target/` while the cluster is still present)
+- [ ] If the caching scheme changes so the cluster could be archived again, bump the `-vN-` key prefix to abandon poisoned entries
+- [ ] A warm CI run (one that restores the `target/` cache) is green, not just the first cold run

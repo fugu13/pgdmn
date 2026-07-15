@@ -19,9 +19,12 @@ pub fn get_or_build_evaluator(xml: &str) -> Result<Arc<ModelEvaluator>, String> 
         return Ok(evaluator);
     }
 
-    // Parse and build
+    // Parse and build. The guard re-runs here (not just at input parsing) so
+    // dmn_model values stored before the external-function guard existed are
+    // still rejected at evaluation time.
     let definitions =
         dsntk_model::parse(xml).map_err(|e| format!("failed to parse DMN XML: {e}"))?;
+    crate::guard::reject_external_definitions(&definitions)?;
     let evaluator = ModelEvaluator::new(&[definitions])
         .map_err(|e| format!("failed to build model evaluator: {e}"))?;
 

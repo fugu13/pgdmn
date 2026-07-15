@@ -8,7 +8,7 @@ PostgreSQL extension that brings DMN (Decision Model and Notation) support to Po
 |---|---|
 | Language | Rust 2024 edition (extension and website) |
 | Extension framework | pgrx 0.16 |
-| DMN/FEEL engine | dsntk 0.2 |
+| DMN/FEEL engine | dsntk 0.3 |
 | Target | PostgreSQL 17 |
 | Website | Leptos 0.8, prerendered to static HTML (`website/`) |
 
@@ -32,9 +32,13 @@ All extension builds run in Docker (single `pgdmn-test` image: PG17 + pgrx toolc
 | `make website-dev` | Prerender, then serve; re-run to pick up changes |
 | `make website-lint` | clippy + rustfmt check for the website |
 
+`make test-image` builds with `docker buildx build $(DOCKER_BUILD_CACHE) --load -t pgdmn-test .`. `DOCKER_BUILD_CACHE` is empty locally (plain buildx build using Docker's own cache); CI sets it to a GitHub Actions layer cache (`--cache-from`/`--cache-to type=gha`; the exact flags live in `ci.yml`) so the image (apt PostgreSQL 17 + `cargo install cargo-pgrx`) is reused across CI runs instead of rebuilt from scratch. Same `make` target either way — only the cache backend differs.
+
 The website builds on the host rather than in Docker, but needs no host tools beyond cargo: Sass is compiled in-process by the `grass` crate, and there is no wasm step. There is deliberately no hot-reload — it depended on `cargo-leptos`, which cannot survive the removal of the wasm target (see WEB-001).
 
 The website's toolchain is pinned in `website/rust-toolchain.toml` (the extension's lives in the Dockerfile). CI installs no toolchain of its own and honours that pin, so clippy and rustfmt behave identically on a laptop and in CI. Do not pin a toolchain in the workflow instead — CI drifting ahead of developers is what broke the first run of the `Website` workflow.
+
+**Continuous integration:** `.github/workflows/ci.yml` (`CI`) runs `make test-image`, `make lint`, and `make test` on every pull request and push to `main`, gated by a required `CI aggregate` job (plus a non-blocking `cargo audit` job). `.github/workflows/website.yml` (`Website`) builds and deploys the site (see Website below). `.github/dependabot.yml` opens weekly dependency-update PRs for both Cargo workspaces, Docker, and GitHub Actions.
 
 ## Architecture
 
@@ -43,10 +47,11 @@ src/
   lib.rs            — pg_module_magic, integration tests
   cache.rs          — thread-local ModelEvaluator cache (keyed by XML hash)
   convert.rs        — FEEL value ↔ PG type conversions
+  guard.rs          — rejection of external (Java/PMML) function definitions
   types/
     dmn_model.rs    — custom DmnModel PG type (InOutFuncs: XML in, namespace::name out)
   functions/
-    feel.rs         — feel_eval (JSONB), feel_record_eval (record), + 6 typed variants (numeric, bool, text, date, timestamp, interval)
+    feel.rs         — feel_eval (JSONB), feel_record_eval (record), + 7 typed variants (numeric, bool, text, date, timestamp, interval, numrange)
     dmn.rs          — dmn_load, dmn_eval, dmn_record_eval
     introspection.rs — dmn_invocables, dmn_info, dmn_xml, dmn_name, dmn_namespace
 website/
@@ -62,11 +67,13 @@ website/
 ### Decided
 
 - **Docker-only extension builds.** The pgrx toolchain and PG17 live in the images; the host never needs them. The Dockerfile copies `Cargo.lock` and fetches `--locked` so the image's crate cache matches the repo (see BUG-001 in BUGHISTORY.md).
+- **CI runs the same `make` targets developers do.** No CI-only build path to drift out of sync; the only difference is the Docker image being layer-cached via `type=gha` instead of Docker's local cache (see `DOCKER_BUILD_CACHE` under Build & Run).
 - **Error model:** SQL-facing errors are raised with `pgrx::error!` (unwinds into a PostgreSQL ERROR — the idiomatic pgrx mechanism). Internal fallible functions return `Result<_, String>` and callers convert at the SQL boundary with `unwrap_or_else(|e| pgrx::error!(...))`. This is an accepted deviation from the thiserror convention: errors here terminate at the SQL boundary as messages, so enum error types add no value. Revisit if errors ever need programmatic matching.
 - **Website is prerendered to static HTML, with no hydration** (WEB-001). Leptos renders every route once at build time; `dist/` is served as plain files by GitHub Pages, with no server process and no JavaScript shipped. The site had no client-side interactivity, so the wasm bundle it used to ship (343 KB) bought nothing while forcing a `wasm-bindgen` crate/CLI version match and a server-capable host. Consequences that bind new work: **no route may depend on request state**, and anything dynamic (e.g. the FEAT-004 blog) must render at build time. Reintroducing hydration means reintroducing both couplings — do not do it for a page that merely *looks* interactive.
 - **Website uses Leptos** — an accepted deviation from the no-client-framework frontend rule, decided before this convention existed. It is now used purely as a server-side template engine. New pages follow the existing Leptos patterns.
 - **JSONB is not the bottleneck** (measured 2026-07-14, `make bench`). `dmn_record_eval` skips the JSONB path entirely and is only **5–9% faster** than `dmn_eval`. The time is in FEEL evaluation itself, so any scheme to bypass serialization — direct datum conversion, SPI batch functions, hstore, variadic inputs — is chasing at most a tenth of the runtime. Do not spend effort there without profiling FEEL first. What *does* pay is letting Postgres parallelize: the functions are already `IMMUTABLE` and `PARALLEL SAFE`, and parallelism measures 3.8× (`make bench-shapes`). See PERF-001 and PERF-002.
-- **No LTO in dev profile** (causes ICE on Rust 1.85/aarch64).
+- **External (Java/PMML) function definitions are rejected at the SQL boundary** (`src/guard.rs`). dsntk 0.3's evaluator resolves them with a blocking, untimed HTTP POST from the backend, which would falsify the `immutable, parallel_safe` declaration on every pgdmn function. Coverage limits and the upstream endgame (DEPS-001) are documented in the module docs of `src/guard.rs`.
+- **No LTO in dev profile** (caused an ICE on Rust 1.85/aarch64; not re-tested since the Docker toolchain moved to 1.95).
 
 ### Undecided
 

@@ -2,6 +2,8 @@
 
 PostgreSQL extension that brings DMN (Decision Model and Notation) support to Postgres. Built with Rust, pgrx, and dsntk.
 
+[![CI](https://github.com/fugu13/pgdmn/actions/workflows/ci.yml/badge.svg)](https://github.com/fugu13/pgdmn/actions/workflows/ci.yml) [![Website](https://github.com/fugu13/pgdmn/actions/workflows/website.yml/badge.svg)](https://github.com/fugu13/pgdmn/actions/workflows/website.yml)
+
 ## Quick Start
 
 ```sql
@@ -295,6 +297,41 @@ SELECT feel_eval_interval('duration("P2Y3M")');
 SELECT feel_eval_interval('duration("PT4H30M")');
 -- 04:30:00
 ```
+
+### feel_eval_numrange(expression, context?) -> numrange
+
+Evaluate a FEEL expression that returns a range of numbers, as a native PG
+`numrange`. Open/closed endpoints are preserved, and an unbounded FEEL endpoint
+becomes an infinite range bound.
+
+```sql
+SELECT feel_eval_numrange('range("[18..65)")');
+-- [18,65)
+
+SELECT feel_eval_numrange('range("[1..)")');
+-- [1,)
+
+-- Compose with native PG range operators
+SELECT feel_eval_numrange('[low..high)', '{"low": 18, "high": 65}'::jsonb) @> 42::numeric;
+-- true
+```
+
+### FEEL language notes
+
+- Ranges returned through the JSONB functions (`feel_eval`, `dmn_eval`, …)
+  appear as FEEL-syntax strings, e.g. `"[18..65)"`; an unbounded end renders
+  with nothing after the `..` (`"[1..)"`). Use `feel_eval_numrange` for a
+  structured value.
+- `in` works with unary-test lists (`5 in (=4, =5)`), variables may share names
+  with temporal builtins (a context key or column named `date` or `duration` is
+  fine), and multi-word range properties parse (`[1..10].end included`).
+- Malformed `\u` escapes in FEEL string literals are parse errors.
+- FEEL `external` function definitions (Java/PMML) are rejected: evaluating one
+  would make the backend perform a blocking HTTP call. This covers FEEL
+  expressions completely, and DMN models' declared function definitions
+  (business knowledge models and boxed expressions); an external definition
+  written inline in FEEL text — a literal expression or a decision-table
+  entry — is not detectable at load time.
 
 ## Build & Test
 

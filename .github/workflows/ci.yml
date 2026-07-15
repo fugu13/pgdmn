@@ -1,81 +1,123 @@
 name: CI
 
-# The extension builds only in Docker (the pgrx toolchain and PostgreSQL 17 live
-# in the image, not on the host), so CI runs the exact targets a contributor
-# runs. See CONTRIBUTING.md.
-
 on:
+  pull_request:
   push:
     branches: [main]
-    paths-ignore:
-      - 'website/**'
-  pull_request:
-    paths-ignore:
-      - 'website/**'
 
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+
+# Cancel a superseded PR run (the new push makes the old one moot), but let a
+# run on main finish rather than leaving results incomplete for a merged commit.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  test:
-    name: Lint and test (PostgreSQL 17)
+  extension:
+    name: Extension (lint + pgrx tests)
     runs-on: ubuntu-latest
-    # Building the image (pgrx toolchain + PG17) and running the pgrx suite is
-    # not fast; the ceiling is generous rather than tight.
-    timeout-minutes: 60
+    env:
+      DOCKER_BUILD_CACHE: "--cache-from type=gha,scope=pgdmn-test --cache-to type=gha,mode=max,scope=pgdmn-test"
     steps:
       - uses: actions/checkout@v4
 
-      # Cache the Docker build layers across runs. Keyed on the files that change
-      # what the image contains, so a run that only touches src/ reuses the whole
-      # toolchain layer and just recompiles.
-      - uses: actions/cache@v4
-        with:
-          path: /tmp/.docker-cache
-          key: docker-${{ hashFiles('Dockerfile', 'Cargo.lock', 'Cargo.toml') }}
-          restore-keys: docker-
-
+      # Creates a docker-container builder so `--cache-to type=gha` and
+      # `--load` work; sets it as the default buildx builder that
+      # `make test-image`'s `docker buildx build` will use.
       - uses: docker/setup-buildx-action@v3
 
-      # The image is a single stage (CHORE-004 collapsed the old base/test split),
-      # so there is no target to select — this matches `make test-image`.
-      - name: Build the test image
-        uses: docker/build-push-action@v6
+      # Exposes ACTIONS_RUNTIME_TOKEN / ACTIONS_CACHE_URL into the environment
+      # so a raw `docker buildx build --cache-to type=gha` (invoked by the
+      # Makefile, not by build-push-action) can read/write the GitHub Actions
+      # cache.
+      - uses: crazy-max/ghaction-github-runtime@v3
+
+      # The container writes compiled artifacts to the bind-mounted `target/`;
+      # caching it keeps pgrx/dsntk from recompiling every run. The run_id in
+      # the key makes every run save a fresh entry (an exact-key hit would skip
+      # the save and discard this run's incremental progress); restore-keys
+      # falls back to the newest prior entry for the same Cargo.lock. The `-v2-`
+      # prefix retires caches saved before target/test-pgdata was excluded (see
+      # the prune steps below) -- those carry a 0755 PG data dir that Postgres
+      # refuses to start on.
+      - uses: actions/cache@v4
         with:
-          context: .
-          tags: pgdmn-test
-          load: true
-          cache-from: type=local,src=/tmp/.docker-cache
-          cache-to: type=local,dest=/tmp/.docker-cache-new,mode=max
+          path: target
+          key: ${{ runner.os }}-cargo-target-v2-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-v2-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-cargo-target-v2-
 
-      # actions/cache cannot update a key it restored, so buildx writes to a new
-      # directory and we swap it in for the save step.
-      - name: Rotate the build cache
+      # Two prep steps folded together: (1) drop any pgrx test cluster a restored
+      # cache might carry so Postgres always starts from a fresh mode-0700 data
+      # dir, and (2) hand the bind-mounted workspace to uid 1000 -- the image's
+      # `pgdmn` user, since pgrx/initdb refuse to run as root.
+      - name: Prepare the workspace for the container
         run: |
-          rm -rf /tmp/.docker-cache
-          mv /tmp/.docker-cache-new /tmp/.docker-cache
+          sudo rm -rf target/test-pgdata
+          sudo chown -R 1000:1000 .
 
-      # Run the commands directly rather than through `make lint` / `make test`:
-      # those targets depend on `test-image`, which would rebuild the image
-      # instead of using the cached one built above.
-      #
-      # CARGO_TARGET_DIR points at the pgdmn user's home, not the mounted repo.
-      # On a Linux runner the bind mount keeps the host's ownership (the runner
-      # uid), so the container's pgdmn user cannot create `/pgdmn/target` — cargo
-      # only needs to *read* the source from the mount and *write* artifacts
-      # somewhere it owns. Docker Desktop hides this locally by mapping uids.
-      - name: Lint (clippy + rustfmt)
-        run: |
-          docker run --rm -e USER=pgdmn -e CARGO_TARGET_DIR=/home/pgdmn/target \
-            -v "$PWD":/pgdmn -w /pgdmn pgdmn-test \
-            sh -c 'cargo clippy --all-targets -- -D warnings && cargo fmt -- --check'
+      # One `make` invocation so the shared `test-image` prerequisite -- and the
+      # multi-GB `docker buildx --load` it performs -- runs once; separate
+      # `make lint` and `make test` calls would each rebuild and reload the
+      # image first. The build reuses the GitHub Actions layer cache set via
+      # DOCKER_BUILD_CACHE above.
+      - name: Build the test image, then lint and test
+        run: make lint test
 
-      - name: Test (pgrx suite against PG17)
+      # pgrx's throwaway Postgres cluster (target/test-pgdata) must never be
+      # cached: Postgres refuses to start unless the data dir is mode 0700, but
+      # the `a+rX` below -- needed so the runner can tar the uid-1000-owned tree
+      # -- would leave it 0755 and poison the next run. Delete it first, then
+      # make the remaining compiled artifacts readable for cache archival.
+      - name: Prune the PG test cluster and make target cache-readable
+        if: always()
         run: |
-          docker run --rm -e USER=pgdmn -e CARGO_TARGET_DIR=/home/pgdmn/target \
-            -v "$PWD":/pgdmn -w /pgdmn pgdmn-test \
-            cargo pgrx test pg17
+          sudo rm -rf target/test-pgdata
+          sudo chmod -R a+rX target || true
+
+      - name: Upload proptest regressions on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proptest-regressions
+          path: |
+            proptest-regressions/**
+            src/**/proptest-regressions/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Security-advisory scan of the dependency tree; kept OFF the required
+  # aggregate so an unfixable upstream advisory in the pgrx/dsntk tree never
+  # blocks unrelated PRs.
+  audit:
+    name: cargo-audit (advisories, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - run: cargo audit
+
+  ci:
+    name: CI aggregate
+    if: always()
+    # audit is deliberately excluded here because it is non-blocking.
+    needs: [extension]
+    runs-on: ubuntu-latest
+    steps:
+      # A single required status check that goes green only if every needed job
+      # succeeded. `skipped` is intentionally allowed so a future path-filtered
+      # `extension` (see CI-003) never blocks a docs-only PR.
+      - name: Fail if a required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
