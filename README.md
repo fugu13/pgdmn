@@ -266,7 +266,8 @@ SELECT feel_eval_numrange('[low..high)', '{"low": 18, "high": 65}'::jsonb) @> 42
   would make the backend perform a blocking HTTP call. This covers FEEL
   expressions completely, and DMN models' declared function definitions
   (business knowledge models and boxed expressions); an external definition
-  written inline in literal-expression text is not detectable at load time.
+  written inline in FEEL text — a literal expression or a decision-table
+  entry — is not detectable at load time.
 
 ## Build & Test
 

@@ -30,9 +30,13 @@ fn feel_null_error(msg: Option<String>) -> ! {
 /// Convert a FEEL number to a PG NUMERIC (string round trip is the only
 /// lossless bridge between the two decimal representations).
 fn feel_number_to_numeric(n: &FeelNumber) -> pgrx::AnyNumeric {
-    n.to_string()
-        .parse::<pgrx::AnyNumeric>()
-        .unwrap_or_else(|e| pgrx::error!("cannot convert FEEL number to NUMERIC: {}", e))
+    if crate::convert::feel_number_is_finite(n) {
+        n.to_string()
+            .parse::<pgrx::AnyNumeric>()
+            .unwrap_or_else(|e| pgrx::error!("cannot convert FEEL number to NUMERIC: {}", e))
+    } else {
+        pgrx::error!("FEEL number result is not finite and cannot be converted to NUMERIC")
+    }
 }
 
 /// Evaluate a FEEL expression and return the result.

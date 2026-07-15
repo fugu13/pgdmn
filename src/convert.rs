@@ -35,12 +35,24 @@ pub fn json_to_feel(json: &serde_json::Value) -> Value {
     }
 }
 
+/// Whether a FEEL number is finite. dsntk arithmetic can overflow decimal128
+/// to ±Inf/NaN, whose Display panics inside dsntk (BUG-004) — callers must
+/// check before stringifying. NaN compares false to everything, so it fails
+/// the range check too.
+pub fn feel_number_is_finite(n: &FeelNumber) -> bool {
+    let infinite = FeelNumber::infinite();
+    -infinite < *n && *n < infinite
+}
+
 /// Convert a dsntk FEEL Value to serde_json::Value.
 pub fn feel_to_json(value: &Value) -> serde_json::Value {
     match value {
         Value::Null(_) => serde_json::Value::Null,
         Value::Boolean(b) => serde_json::Value::Bool(*b),
         Value::Number(n) => {
+            if !feel_number_is_finite(n) {
+                pgrx::error!("FEEL number result is not finite and cannot be represented");
+            }
             let s = n.to_string();
             if let Ok(i) = s.parse::<i64>() {
                 serde_json::Value::Number(serde_json::Number::from(i))

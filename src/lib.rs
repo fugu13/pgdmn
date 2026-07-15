@@ -205,6 +205,25 @@ mod tests {
         Spi::get_one::<String>("SELECT feel_eval_numrange('5')::text").expect("SPI failed");
     }
 
+    #[pg_test(error = "FEEL number result is not finite and cannot be converted to NUMERIC")]
+    fn test_feel_eval_numeric_rejects_decimal_overflow() {
+        // decimal128 overflow rounds to +Inf, whose Display panics inside
+        // dsntk — the boundary must reject before stringifying (BUG-004)
+        Spi::get_one::<pgrx::AnyNumeric>(
+            "SELECT feel_eval_numeric(repeat('9', 3100) || ' * ' || repeat('9', 3100))",
+        )
+        .expect("SPI failed");
+    }
+
+    #[pg_test(error = "FEEL number result is not finite and cannot be represented")]
+    fn test_feel_eval_rejects_decimal_overflow() {
+        // same overflow through the JSONB path (BUG-004)
+        Spi::get_one::<pgrx::JsonB>(
+            "SELECT feel_eval(repeat('9', 3100) || ' * ' || repeat('9', 3100))",
+        )
+        .expect("SPI failed");
+    }
+
     #[pg_test(
         error = "business knowledge model 'CosFn' uses an external Java function, which pgdmn does not support"
     )]
