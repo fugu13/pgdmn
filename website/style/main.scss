@@ -235,6 +235,14 @@ ul, ol {
   margin-bottom: 1.5rem;
 }
 
+// An aside — a "Note:" line set slightly apart from the surrounding prose.
+.note {
+  font-size: 0.95rem;
+  color: var(--color-muted);
+  border-left: 3px solid var(--color-border);
+  padding-left: 0.75rem;
+}
+
 // What is on this page, and how to jump to it.
 .quicklinks {
   margin: 1rem 0 2.5rem;

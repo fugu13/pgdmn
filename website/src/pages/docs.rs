@@ -89,6 +89,13 @@ pub fn DocsPage() -> impl IntoView {
             label="Install the pgrx CLI"
             code="cargo install --locked cargo-pgrx"
         />
+        <p class="note">
+            "Note: to run pgrx you need Cargo, the Rust package manager. If you do not have
+            Cargo, you will need to "
+            <a href="https://rust-lang.org/tools/install/" rel="noopener noreferrer" target="_blank">
+                "install Rust"
+            </a>"."
+        </p>
         <p>
             "Then initialise pgrx. Here you choose whether pgrx manages a PostgreSQL for you, or
             uses one you already run."
@@ -156,14 +163,13 @@ SELECT feel_eval('1 + 2');
         <H3 id="dmn-typed-variants" title="Typed variants"/>
         <p>
             <code>"dmn_eval"</code>" returns JSONB, so a decision that produces the string "
-            <em>"Approved"</em>" comes back as "<code>"\"Approved\""</code>" — quoted. Unwrapping
+            <em>"Approved"</em>" comes back as "<code>"\"Approved\""</code>", a quoted JSONB string. Unwrapping
             that by hand means "<code>"dmn_eval(…) #>> '{}'"</code>", and a numeric decision means
             "<code>"(dmn_eval(…) #>> '{}')::numeric"</code>"."
         </p>
         <p>
             "These take the same arguments and hand back a native PostgreSQL type instead. Each
-            errors if the decision returns something else — asking for a number and getting a
-            string is a mistake worth hearing about."
+            errors if the decision returns something else."
         </p>
         <dl class="fn-list">
             <Fun signature="dmn_eval_text(model dmnmodel, invocable text, input jsonb DEFAULT NULL) RETURNS text">
@@ -228,8 +234,7 @@ SELECT feel_eval('1 + 2');
         <p>
             "Each returns a native PostgreSQL type instead of JSONB, so the result drops into
             a typed column or a comparison without a cast. Each raises an error if the
-            expression returns something else — asking for a number and getting a string is a
-            mistake worth hearing about."
+            expression returns something else."
         </p>
         <dl class="fn-list">
             <Fun signature="feel_eval_numeric(expression text, context jsonb DEFAULT NULL) RETURNS numeric">
