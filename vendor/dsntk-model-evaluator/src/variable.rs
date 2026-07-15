@@ -1,11 +1,14 @@
 use crate::item_definition::ItemDefinitionEvaluator;
 use crate::item_definition_type::ItemDefinitionTypeEvaluator;
 use crate::model_definitions::{DefInformationItem, DefKey};
+use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
 use dsntk_feel::{FeelType, Name, value_null};
 
 /// Type of closure that evaluates values from variable definition.
-pub type VariableEvaluatorFn = Box<dyn Fn(&Value, &ItemDefinitionEvaluator) -> (Name, Value) + Send + Sync>;
+// PGDMN (H5): variable evaluators always receive the input data context, so they
+// take &FeelContext directly - callers no longer clone the context into a Value.
+pub type VariableEvaluatorFn = Box<dyn Fn(&FeelContext, &ItemDefinitionEvaluator) -> (Name, Value) + Send + Sync>;
 
 /// Variable properties.
 #[derive(Clone)]
@@ -68,19 +71,15 @@ impl Variable {
     let variable_name = self.name.clone();
     let variable_type_ref = self.type_ref.clone();
     match variable_type_ref.as_str() {
-      "Any" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "Any" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return (variable_name.clone(), v.clone());
         }
 
         (variable_name.clone(), value_null!())
       }),
-      "Null" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "Null" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return if let Value::Null(_) = v {
             (variable_name.clone(), v.clone())
           } else {
@@ -89,10 +88,8 @@ impl Variable {
         }
         (variable_name.clone(), value_null!())
       }),
-      "string" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "string" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return if let Value::String(_) = v {
             (variable_name.clone(), v.clone())
           } else {
@@ -101,10 +98,8 @@ impl Variable {
         }
         (variable_name.clone(), value_null!())
       }),
-      "number" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "number" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return if let Value::Number(_) = v {
             (variable_name.clone(), v.clone())
           } else {
@@ -113,10 +108,8 @@ impl Variable {
         }
         (variable_name.clone(), value_null!())
       }),
-      "boolean" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "boolean" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return if let Value::Boolean(_) = v {
             (variable_name.clone(), v.clone())
           } else {
@@ -125,10 +118,8 @@ impl Variable {
         }
         (variable_name.clone(), value_null!())
       }),
-      "date" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "date" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return if let Value::Date(_) = v {
             (variable_name.clone(), v.clone())
           } else {
@@ -137,10 +128,8 @@ impl Variable {
         }
         (variable_name.clone(), value_null!())
       }),
-      "time" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "time" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return if let Value::Time(_) = v {
             (variable_name.clone(), v.clone())
           } else {
@@ -149,10 +138,8 @@ impl Variable {
         }
         (variable_name.clone(), value_null!())
       }),
-      "dateTime" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "dateTime" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return if let Value::DateTime(_) = v {
             (variable_name.clone(), v.clone())
           } else {
@@ -161,10 +148,8 @@ impl Variable {
         }
         (variable_name.clone(), value_null!())
       }),
-      "dayTimeDuration" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "dayTimeDuration" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return if let Value::DaysAndTimeDuration(_) = v {
             (variable_name.clone(), v.clone())
           } else {
@@ -173,10 +158,8 @@ impl Variable {
         }
         (variable_name.clone(), value_null!())
       }),
-      "yearMonthDuration" => Box::new(move |value: &Value, _: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value
-          && let Some(v) = ctx.get_entry(&variable_name)
-        {
+      "yearMonthDuration" => Box::new(move |ctx: &FeelContext, _: &ItemDefinitionEvaluator| {
+        if let Some(v) = ctx.get_entry(&variable_name) {
           return if let Value::YearsAndMonthsDuration(_) = v {
             (variable_name.clone(), v.clone())
           } else {
@@ -185,20 +168,22 @@ impl Variable {
         }
         (variable_name.clone(), value_null!())
       }),
-      _ => Box::new(move |value: &Value, item_definition_evaluator: &ItemDefinitionEvaluator| {
-        if let Value::Context(ctx) = value {
+      _ => {
+        // PGDMN (H11): the item definition key is fixed at build time, so it is
+        // created once here instead of on every evaluation.
+        let def_key = DefKey::new(&variable_namespace, &variable_type_ref);
+        Box::new(move |ctx: &FeelContext, item_definition_evaluator: &ItemDefinitionEvaluator| {
           if let Some(entry_value) = ctx.get_entry(&variable_name) {
             let evaluated_value = item_definition_evaluator
-              .eval(&DefKey::new(&variable_namespace, &variable_type_ref), entry_value)
+              .eval(&def_key, entry_value)
               .unwrap_or_else(|| value_null!("input data evaluator: item definition evaluator '{}' not found", variable_type_ref));
             (variable_name.clone(), evaluated_value)
           } else {
-            (variable_name.clone(), value_null!("no name {} in context {}", variable_name, ctx))
+            // PGDMN (H11): the message no longer renders the whole input context.
+            (variable_name.clone(), value_null!("no name {} in input data", variable_name))
           }
-        } else {
-          (variable_name.clone(), value_null!("expected context, actual value is {}", value))
-        }
-      }),
+        })
+      }
     }
   }
 }
