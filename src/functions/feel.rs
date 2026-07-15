@@ -1,10 +1,11 @@
 use pgrx::prelude::*;
 
-use dsntk_feel::FeelScope;
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
+use dsntk_feel::{FeelNumber, FeelScope, IntervalType};
 use dsntk_feel_evaluator::evaluate;
 use dsntk_feel_parser::parse_expression;
+use pgrx::datum::{Range, RangeBound};
 
 use crate::convert::{feel_to_json, json_to_context, tuple_to_context};
 
@@ -14,6 +15,7 @@ fn eval_feel_ctx(expression: &str, ctx: FeelContext) -> Value {
     scope.push(ctx);
     let node = parse_expression(&scope, expression, false)
         .unwrap_or_else(|e| pgrx::error!("FEEL parse error: {}", e));
+    crate::guard::reject_external_functions(&node).unwrap_or_else(|e| pgrx::error!("{}", e));
     evaluate(&scope, &node)
 }
 
@@ -23,6 +25,14 @@ fn feel_null_error(msg: Option<String>) -> ! {
         "FEEL expression returned null{}",
         msg.map(|m| format!(": {m}")).unwrap_or_default()
     )
+}
+
+/// Convert a FEEL number to a PG NUMERIC (string round trip is the only
+/// lossless bridge between the two decimal representations).
+fn feel_number_to_numeric(n: &FeelNumber) -> pgrx::AnyNumeric {
+    n.to_string()
+        .parse::<pgrx::AnyNumeric>()
+        .unwrap_or_else(|e| pgrx::error!("cannot convert FEEL number to NUMERIC: {}", e))
 }
 
 /// Evaluate a FEEL expression and return the result.
@@ -63,11 +73,7 @@ pub fn feel_eval_numeric(
 ) -> pgrx::AnyNumeric {
     let result = eval_feel(expression, context);
     match result {
-        Value::Number(n) => {
-            let s = n.to_string();
-            s.parse::<pgrx::AnyNumeric>()
-                .unwrap_or_else(|e| pgrx::error!("cannot convert FEEL number to NUMERIC: {}", e))
-        }
+        Value::Number(n) => feel_number_to_numeric(&n),
         Value::Null(msg) => feel_null_error(msg),
         other => pgrx::error!("expected FEEL number, got: {}", other),
     }
@@ -141,6 +147,41 @@ pub fn feel_eval_timestamp(
         }
         Value::Null(msg) => feel_null_error(msg),
         other => pgrx::error!("expected FEEL date-time, got: {}", other),
+    }
+}
+
+/// Convert one FEEL range endpoint to a NUMRANGE bound.
+fn numrange_bound(endpoint: &Value, interval_type: IntervalType) -> RangeBound<pgrx::AnyNumeric> {
+    if interval_type.undefined() {
+        return RangeBound::Infinite;
+    }
+    match endpoint {
+        Value::Number(n) => {
+            let numeric = feel_number_to_numeric(n);
+            if interval_type.closed() {
+                RangeBound::Inclusive(numeric)
+            } else {
+                RangeBound::Exclusive(numeric)
+            }
+        }
+        other => pgrx::error!("expected FEEL number as range endpoint, got: {}", other),
+    }
+}
+
+/// Evaluate a FEEL expression expecting a range of numbers, returned as NUMRANGE.
+#[pg_extern(immutable, parallel_safe)]
+pub fn feel_eval_numrange(
+    expression: &str,
+    context: default!(Option<pgrx::JsonB>, "NULL"),
+) -> Range<pgrx::AnyNumeric> {
+    let result = eval_feel(expression, context);
+    match result {
+        Value::Range(start, start_type, end, end_type) => Range::new(
+            numrange_bound(&start, start_type),
+            numrange_bound(&end, end_type),
+        ),
+        Value::Null(msg) => feel_null_error(msg),
+        other => pgrx::error!("expected FEEL range, got: {}", other),
     }
 }
 

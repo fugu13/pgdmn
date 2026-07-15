@@ -43,10 +43,11 @@ src/
   lib.rs            — pg_module_magic, integration tests
   cache.rs          — thread-local ModelEvaluator cache (keyed by XML hash)
   convert.rs        — FEEL value ↔ PG type conversions
+  guard.rs          — rejection of external (Java/PMML) function definitions
   types/
     dmn_model.rs    — custom DmnModel PG type (InOutFuncs: XML in, namespace::name out)
   functions/
-    feel.rs         — feel_eval (JSONB), feel_record_eval (record), + 6 typed variants (numeric, bool, text, date, timestamp, interval)
+    feel.rs         — feel_eval (JSONB), feel_record_eval (record), + 7 typed variants (numeric, bool, text, date, timestamp, interval, numrange)
     dmn.rs          — dmn_load, dmn_eval, dmn_record_eval
     introspection.rs — dmn_invocables, dmn_info, dmn_xml, dmn_name, dmn_namespace
 website/
@@ -66,11 +67,11 @@ website/
 - **Website is prerendered to static HTML, with no hydration** (WEB-001). Leptos renders every route once at build time; `dist/` is served as plain files by GitHub Pages, with no server process and no JavaScript shipped. The site had no client-side interactivity, so the wasm bundle it used to ship (343 KB) bought nothing while forcing a `wasm-bindgen` crate/CLI version match and a server-capable host. Consequences that bind new work: **no route may depend on request state**, and anything dynamic (e.g. the FEAT-004 blog) must render at build time. Reintroducing hydration means reintroducing both couplings — do not do it for a page that merely *looks* interactive.
 - **Website uses Leptos** — an accepted deviation from the no-client-framework frontend rule, decided before this convention existed. It is now used purely as a server-side template engine. New pages follow the existing Leptos patterns.
 - **No LTO in dev profile** (caused an ICE on Rust 1.85/aarch64; not re-tested since the Docker toolchain moved to 1.95).
+- **External (Java/PMML) function definitions are rejected at the SQL boundary** (`src/guard.rs`). dsntk 0.3's evaluator resolves them with a blocking, untimed HTTP POST from the backend, which would falsify the `immutable, parallel_safe` declaration on every pgdmn function. Coverage limits and the upstream endgame (DEPS-001) are documented in the module docs of `src/guard.rs`.
 
 ### Undecided
 
 - Efficient PG→DMN data passing beyond JSONB and records — candidate approaches tracked in `docs/improvements.md`.
-- FEEL type compatibility rules for FEAT-002 (`dmn_compat`).
 
 ## Conventions
 
