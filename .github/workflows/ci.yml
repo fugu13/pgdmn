@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Cancel a superseded PR run (the new push makes the old one moot), but let a
+# run on main finish rather than leaving results incomplete for a merged commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  extension:
+    name: Extension (lint + pgrx tests)
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_BUILD_CACHE: "--cache-from type=gha,scope=pgdmn-test --cache-to type=gha,mode=max,scope=pgdmn-test"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Creates a docker-container builder so `--cache-to type=gha` and
+      # `--load` work; sets it as the default buildx builder that
+      # `make test-image`'s `docker buildx build` will use.
+      - uses: docker/setup-buildx-action@v3
+
+      # Exposes ACTIONS_RUNTIME_TOKEN / ACTIONS_CACHE_URL into the environment
+      # so a raw `docker buildx build --cache-to type=gha` (invoked by the
+      # Makefile, not by build-push-action) can read/write the GitHub Actions
+      # cache.
+      - uses: crazy-max/ghaction-github-runtime@v3
+
+      # The container writes compiled artifacts to the bind-mounted `target/`;
+      # caching it keeps pgrx/dsntk from recompiling every run. The run_id in
+      # the key makes every run save a fresh entry (an exact-key hit would skip
+      # the save and discard this run's incremental progress); restore-keys
+      # falls back to the newest prior entry for the same Cargo.lock.
+      - uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-cargo-target-
+
+      # The image's `pgdmn` user is uid 1000, and pgrx/initdb refuse to run as
+      # root, so the bind-mounted workspace must be writable by uid 1000.
+      - name: Grant the container's non-root user write access to the workspace
+        run: sudo chown -R 1000:1000 .
+
+      # One `make` invocation so the shared `test-image` prerequisite -- and the
+      # multi-GB `docker buildx --load` it performs -- runs once; separate
+      # `make lint` and `make test` calls would each rebuild and reload the
+      # image first. The build reuses the GitHub Actions layer cache set via
+      # DOCKER_BUILD_CACHE above.
+      - name: Build the test image, then lint and test
+        run: make lint test
+
+      # Belt-and-suspenders so the runner can tar the uid-1000-owned dir for
+      # cache archival; never fail the job on this.
+      - name: Make target readable for cache archival
+        if: always()
+        run: sudo chmod -R a+rX target || true
+
+      - name: Upload proptest regressions on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proptest-regressions
+          path: |
+            proptest-regressions/**
+            src/**/proptest-regressions/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Security-advisory scan of the dependency tree; kept OFF the required
+  # aggregate so an unfixable upstream advisory in the pgrx/dsntk tree never
+  # blocks unrelated PRs.
+  audit:
+    name: cargo-audit (advisories, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - run: cargo audit
+
+  ci:
+    name: CI aggregate
+    if: always()
+    # audit is deliberately excluded here because it is non-blocking.
+    needs: [extension]
+    runs-on: ubuntu-latest
+    steps:
+      # A single required status check that goes green only if every needed job
+      # succeeded. `skipped` is intentionally allowed so a future path-filtered
+      # `extension` (see CI-003) never blocks a docs-only PR.
+      - name: Fail if a required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

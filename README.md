@@ -2,6 +2,8 @@
 
 PostgreSQL extension that brings DMN (Decision Model and Notation) support to Postgres. Built with Rust, pgrx, and dsntk.
 
+[![CI](https://github.com/fugu13/pgdmn/actions/workflows/ci.yml/badge.svg)](https://github.com/fugu13/pgdmn/actions/workflows/ci.yml) [![Website](https://github.com/fugu13/pgdmn/actions/workflows/website.yml/badge.svg)](https://github.com/fugu13/pgdmn/actions/workflows/website.yml)
+
 ## Quick Start
 
 ```sql
