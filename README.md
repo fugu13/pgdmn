@@ -262,12 +262,23 @@ SELECT feel_eval_numrange('[low..high)', '{"low": 18, "high": 65}'::jsonb) @> 42
   with temporal builtins (a context key or column named `date` or `duration` is
   fine), and multi-word range properties parse (`[1..10].end included`).
 - Malformed `\u` escapes in FEEL string literals are parse errors.
-- FEEL `external` function definitions (Java/PMML) are rejected: evaluating one
-  would make the backend perform a blocking HTTP call. This covers FEEL
-  expressions completely, and DMN models' declared function definitions
-  (business knowledge models and boxed expressions); an external definition
-  written inline in FEEL text — a literal expression or a decision-table
-  entry — is not detectable at load time.
+- FEEL `external` function definitions (Java/PMML) are not supported: the
+  machinery that would evaluate them (a blocking HTTP client) is compiled out
+  of the extension entirely, so any external invocation yields an explained
+  null — and definitions detectable at load time are rejected with a clear
+  error before evaluation.
+
+## Vendored dsntk engine
+
+pgdmn vendors the [dsntk](https://github.com/DecisionToolkit/dsntk) DMN/FEEL
+engine (by Dariusz Depta / Engos Software) under `vendor/`: verbatim,
+checksum-verified crates.io releases plus a minimal, deliberately upstreamable
+patch layer (performance work, one bug fix, and an off-by-default feature gate
+that keeps an HTTP/TLS stack out of the PostgreSQL backend). Each change is
+its own commit with `PGDMN:` markers, and the patches are being offered
+upstream. See [vendor/README.md](vendor/README.md) for provenance and
+conventions, and [docs/performance.md](docs/performance.md) for what the
+patches do; `make vendor-status` shows the carried layer at any time.
 
 ## Build & Test
 
@@ -301,3 +312,14 @@ at your option.
 - [docs/specifications/](docs/specifications/) - Specifications describing what a feature must do, written before implementation
 - [docs/ux/](docs/ux/) - Behavioral descriptions of the website's UI
 - [website/](website/) - Marketing and documentation site (Leptos, prerendered to static HTML; `make website-build`, deployed to GitHub Pages at www.pgdmn.com on push to `main`)
+
+### Third-party content
+
+- `vendor/` — the dsntk engine, copyright Dariusz Depta / Engos Software,
+  licensed MIT OR Apache-2.0 at your option; the upstream license texts and
+  NOTICE are included in that directory. The sources carry local
+  modifications, each marked with a `PGDMN:` comment.
+- `examples/` — DMN example models from the DMN TCK (DMN TCK Contributors)
+  and Camunda Services GmbH, licensed Apache-2.0 (see file headers).
+
+pgdmn's own license applies to everything else in the repository.

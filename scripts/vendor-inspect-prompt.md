@@ -10,7 +10,7 @@ Follow this procedure — it is the tested workflow from the original vendoring 
 
 4. RE-MEASURE. `make vendor-bench` before (pristine) and after (re-layered), canary-gated per docs/performance.md methodology (num_add within 12% of its idle baseline; sub-µs cross-build deltas under ~8% are noise). Compare against the numbers in docs/performance.md; investigate anything that regressed beyond the noise floor before accepting it.
 
-5. DEPENDENCY SLICING. Verify the dependency gates still hold: the extension's Cargo.lock must not contain reqwest, rustls, aws-lc-sys, tokio, hyper, or quinn (DEPS-001 slicing). If upstream added new heavy or network-touching dependencies, gate them the same way (off-by-default cargo feature in the vendored crate, upstreamable shape).
+5. DEPENDENCY SLICING. Verify the gates still hold with `make vendor-check` (no dsntk crate may resolve from the registry) plus the reachability test: `cargo tree -i reqwest` (and rustls, aws-lc-rs, hyper, quinn) must produce no dependency path — note that Cargo.lock WILL still list these crates (lockfiles record optional dependencies regardless of features), so the lockfile is NOT the test; tokio remains reachable only via pgrx-tests' dev-only postgres client. If upstream added new heavy or network-touching dependencies, gate them the same way (off-by-default cargo feature in the vendored crate, upstreamable shape).
 
 6. DOCUMENT. Update vendor/README.md (version), docs/performance.md (numbers and patch inventory), TODO.md (upstreaming status per patch), and BUGHISTORY reoccurrence checks (BUG-003's checklist names vendored code). Commit per repo discipline (/simplify, make verify, bug-check) and push to the PR branch.
 

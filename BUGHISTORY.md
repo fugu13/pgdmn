@@ -62,7 +62,7 @@ Resolved bugs, recorded so they can be recognised if they reappear. Every entry 
 - [ ] Every path that stringifies a `FeelNumber` checks `feel_number_is_finite` first
 - [ ] `test_feel_eval_numeric_rejects_decimal_overflow` and `test_feel_eval_rejects_decimal_overflow` pass
 
-## BUG-003: website build breaks when the wasm-bindgen crate outruns the host CLI
+## BUG-005: website build breaks when the wasm-bindgen crate outruns the host CLI
 
 **Symptom:** `make website-build` fails with `wasm-bindgen failed` and a message telling you to either downgrade the crate (`cargo update -p wasm-bindgen --precise <old>`) or reinstall the binary. Triggered by an ordinary `cargo update` of `website/Cargo.lock`, with no source change at all.
 

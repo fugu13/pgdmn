@@ -1,5 +1,75 @@
 # TODO
 
+## Public release readiness
+
+### PUBLIC-001: Strip RELEASEPLAN.md before flipping public (user decision)
+
+The panel flagged RELEASEPLAN.md's promotion-target names and upsell
+strategy as the one item that cannot be un-seen after publication (it is
+linked from the README). Move internal marketing content to private
+notes, and decide explicitly whether the git history containing it is
+acceptable or the repository should be published with fresh history.
+
+### PUBLIC-002: SECURITY.md and private vulnerability reporting
+
+Add SECURITY.md (report via GitHub private security advisories; trust
+model: DMN XML and FEEL expressions are untrusted SQL input evaluated
+in-process; no network stack linked — external evaluation compiled out;
+vendored-engine issues coordinated with upstream). Enable private
+vulnerability reporting when the repo goes public.
+
+### PUBLIC-003: Extension CI workflow
+
+.github/workflows currently covers only the website. Add a workflow for
+PRs touching src/, vendor/, Cargo.*, Makefile, Dockerfile: at minimum
+`make vendor-check` + `cargo check` + the vendored test gate, plus
+cargo-audit (advisories against vendored versions do not surface via
+Dependabot for path deps) and a guard against stray duplicate files
+(a "* 2.toml" incident occurred once).
+
+### PUBLIC-004: Durable vendor manifests
+
+Commit a CHECKSUMS manifest (per-crate sha256 of the vendored tarballs,
+written by vendor-upgrade) and a vendor/PATCHES.md (stable patch ID,
+description, upstream-PR status, current SHA — updated as part of the
+one-commit-per-change discipline). Teach vendor-status to reconcile
+against the manifest, and disable squash-merge for vendor PRs so
+patch-layer separability survives GitHub merges.
+
+### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction
+
+Document the vendor/ contribution rules where outsiders will look
+(never edit vendor/ in feature PRs; one commit per change; PGDMN:
+markers; no reformatting), route vendor/ changes via CODEOWNERS, and
+add .github/instructions/vendor.instructions.md so Copilot review stops
+proposing stylistic rewrites of vendored code.
+
+### PUBLIC-006: Open the upstream PRs and link them (executes PERF-006)
+
+BUG-003 first, then the DEPS-001 feature gate, DEPS-002, H4, H14, H9,
+and H3+H20 as a pair. Link each PR from TODO.md and vendor/PATCHES.md
+so the public repo visibly demonstrates the upstream-first posture.
+
+### PUBLIC-007: Commit a benchmark baseline for the vendor-inspect flow
+
+vendor-inspect step 4 compares against "the numbers in
+docs/performance.md", which holds no numbers (the detailed report is a
+private session artifact). Commit a per-scenario baseline table
+(median, machine, toolchain, date — e.g. profiling/baselines/) and
+point the prompt at it, so someone other than the original author can
+run the regression gate.
+
+### PUBLIC-008: Decide the lint-churn policy for vendored code
+
+`make lint`'s -D warnings covers vendored code (path deps escape
+cap-lints), so toolchain bumps force edits to pristine upstream files
+(rustc 1.95 already did). Either scope the hard gate to the pgdmn
+package (`cargo clippy -p pgdmn`) or record lint-only vendor commits as
+fold-into-next-pristine-swap churn in PATCHES.md. Also decide whether
+the personal content-preference rule in CLAUDE.md's Behaviors section
+should ship in a public repo, and add a DMN trademark acknowledgment
+(OMG) to the README if counsel thinks it worthwhile.
+
 ## Performance
 
 ### PERF-001: Zero-copy DmnModel datum layout

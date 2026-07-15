@@ -12,14 +12,37 @@ status() {
     echo "pristine base commit:   ${pristine:-<none found>}"
     if [ -n "$pristine" ]; then
         echo "patch layer (commits since pristine base touching vendor/):"
-        git log --oneline "$pristine"..HEAD -- vendor/ | sed 's/^/  /'
+        git log --oneline --no-merges "$pristine"..HEAD -- vendor/ | sed 's/^/  /'
         echo "patch layer size (excluding vendor README/rustfmt config):"
-        git diff --shortstat "$pristine" -- vendor/ ':(exclude)vendor/README.md' ':(exclude)vendor/rustfmt.toml' | sed 's/^/  /'
+        git diff --shortstat "$pristine" -- vendor/ ':(exclude)vendor/README.md' ':(exclude)vendor/rustfmt.toml' ':(exclude)vendor/LICENSE-*' ':(exclude)vendor/NOTICE' | sed 's/^/  /'
     fi
+}
+
+check() {
+    # All dsntk crates must resolve through the vendor patch, never the registry.
+    bad=$(awk '/^name = "dsntk-/{n=$3} /^source = "registry/{if (n != "") print n; n=""} /^$/{n=""}' Cargo.lock)
+    if [ -n "$bad" ]; then
+        echo "vendor-check FAILED: dsntk crates resolving from the registry (patch unused):" >&2
+        echo "$bad" >&2
+        echo "Likely version skew between root Cargo.toml requirements and vendor/ - cargo only WARNS on this." >&2
+        exit 1
+    fi
+    vendored=$(grep -m1 '^version' vendor/dsntk-feel/Cargo.toml | cut -d'"' -f2)
+    required=$(grep -m1 '^dsntk-feel = ' Cargo.toml | cut -d'"' -f2)
+    case "$vendored" in
+        "$required"*) ;;
+        *) echo "vendor-check FAILED: vendor holds dsntk $vendored but root Cargo.toml requires $required" >&2; exit 1 ;;
+    esac
+    echo "vendor-check OK: all dsntk crates resolve from vendor/ ($vendored)"
 }
 
 upgrade() {
     version="$1"
+    if [ "$(git symbolic-ref --short HEAD 2>/dev/null)" = "main" ]; then
+        echo "refusing to stage a pristine swap on main; create a branch first" >&2
+        echo "(flow: branch -> make vendor-upgrade -> make vendor-inspect -> PR)" >&2
+        exit 1
+    fi
     stage=$(mktemp -d)
     trap 'rm -rf "$stage"' EXIT
     echo "downloading dsntk $version crates to $stage"
@@ -51,5 +74,6 @@ tree; the extension will not build until the layer is re-applied."
 case "${1:-}" in
     status)  shift; status "${1:-}" ;;
     upgrade) shift; upgrade "$1" ;;
-    *) echo "usage: vendor.sh {status <pristine-sha>|upgrade <version>}"; exit 2 ;;
+    check)   check ;;
+    *) echo "usage: vendor.sh {status <pristine-sha>|upgrade <version>|check}"; exit 2 ;;
 esac
