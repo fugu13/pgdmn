@@ -3,6 +3,7 @@
 mod cache;
 mod convert;
 mod functions;
+mod guard;
 mod types;
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -103,6 +104,192 @@ mod tests {
     fn test_feel_eval_null_context() {
         let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('1 + 1')").expect("SPI failed");
         assert_eq!(result.unwrap().0, serde_json::json!(2));
+    }
+
+    // dsntk 0.3 behavior pins: these lock in SQL-visible upstream behavior that
+    // changed in the 0.2 -> 0.3 bump, so the next dsntk upgrade cannot shift it
+    // silently. If one of these fails after a dependency bump, treat it as a
+    // behavior change to document, not a pgdmn regression.
+
+    #[pg_test]
+    fn test_feel_in_operator_accepts_unary_test_list() {
+        // 0.2 evaluated this to null('eval_in_list')
+        let result =
+            Spi::get_one::<bool>("SELECT feel_eval_bool('5 in (=4, =5)')").expect("SPI failed");
+        assert_eq!(result, Some(true));
+    }
+
+    #[pg_test]
+    fn test_feel_temporal_keyword_as_variable_name() {
+        // 0.2 lexed 'duration' as a temporal function name and failed to parse
+        let result = Spi::get_one::<bool>(
+            r#"SELECT feel_eval_bool('duration > 30', '{"duration": 45}'::jsonb)"#,
+        )
+        .expect("SPI failed");
+        assert_eq!(result, Some(true));
+    }
+
+    #[pg_test]
+    fn test_feel_multiword_property_end_included() {
+        // 0.2 could not parse multi-word built-in properties after a dot
+        let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('[1..10].end included')")
+            .expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!(true));
+    }
+
+    #[pg_test]
+    fn test_feel_unbounded_range_renders_without_null() {
+        // 0.2 rendered this as "[1..null)"
+        let result = Spi::get_one::<pgrx::JsonB>(r#"SELECT feel_eval('range("[1..)")')"#)
+            .expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!("[1..)"));
+    }
+
+    #[pg_test(error = "FEEL parse error: <LexerError> expected hex digit but encountered 'G'")]
+    fn test_feel_invalid_unicode_escape_is_parse_error() {
+        // 0.2 silently produced a garbage code point for malformed \u escapes
+        Spi::get_one::<pgrx::JsonB>(r#"SELECT feel_eval('"\uGGGG"')"#).expect("SPI failed");
+    }
+
+    // External (Java/PMML) function rejection: dsntk 0.3 would otherwise make a
+    // blocking HTTP call from inside the backend (see src/guard.rs).
+
+    #[pg_test(error = "FEEL 'external' function definitions are not supported")]
+    fn test_feel_external_function_rejected() {
+        Spi::get_one::<pgrx::JsonB>(
+            r#"SELECT feel_eval('function(x) external { java: { class: "java.lang.Math", method signature: "cos(double)" } }')"#,
+        )
+        .expect("SPI failed");
+    }
+
+    #[pg_test(error = "FEEL 'external' function definitions are not supported")]
+    fn test_feel_nested_external_function_rejected() {
+        Spi::get_one::<pgrx::JsonB>(
+            r#"SELECT feel_eval('{ f: function(x) external { java: { class: "java.lang.Math", method signature: "cos(double)" } } }')"#,
+        )
+        .expect("SPI failed");
+    }
+
+    #[pg_test]
+    fn test_feel_eval_numrange_bounded() {
+        let result =
+            Spi::get_one::<String>(r#"SELECT feel_eval_numrange('range("[18..65)")')::text"#)
+                .expect("SPI failed");
+        assert_eq!(result.as_deref(), Some("[18,65)"));
+    }
+
+    #[pg_test]
+    fn test_feel_eval_numrange_unbounded_end() {
+        let result = Spi::get_one::<String>(r#"SELECT feel_eval_numrange('range("[1..)")')::text"#)
+            .expect("SPI failed");
+        assert_eq!(result.as_deref(), Some("[1,)"));
+    }
+
+    #[pg_test]
+    fn test_feel_eval_numrange_from_context() {
+        let result = Spi::get_one::<String>(
+            r#"SELECT feel_eval_numrange('[low..high)', '{"low": 18, "high": 65}'::jsonb)::text"#,
+        )
+        .expect("SPI failed");
+        assert_eq!(result.as_deref(), Some("[18,65)"));
+
+        let contained = Spi::get_one::<bool>(
+            r#"SELECT 42::numeric <@ feel_eval_numrange('[low..high)', '{"low": 18, "high": 65}'::jsonb)"#,
+        )
+        .expect("SPI failed");
+        assert_eq!(contained, Some(true));
+    }
+
+    #[pg_test(error = "expected FEEL range, got: 5")]
+    fn test_feel_eval_numrange_rejects_non_range() {
+        Spi::get_one::<String>("SELECT feel_eval_numrange('5')::text").expect("SPI failed");
+    }
+
+    #[pg_test(error = "FEEL number result is not finite and cannot be converted to NUMERIC")]
+    fn test_feel_eval_numeric_rejects_decimal_overflow() {
+        // decimal128 overflow rounds to +Inf, whose Display panics inside
+        // dsntk — the boundary must reject before stringifying (BUG-004)
+        Spi::get_one::<pgrx::AnyNumeric>(
+            "SELECT feel_eval_numeric(repeat('9', 3100) || ' * ' || repeat('9', 3100))",
+        )
+        .expect("SPI failed");
+    }
+
+    #[pg_test(error = "FEEL number result is not finite and cannot be represented")]
+    fn test_feel_eval_rejects_decimal_overflow() {
+        // same overflow through the JSONB path (BUG-004)
+        Spi::get_one::<pgrx::JsonB>(
+            "SELECT feel_eval(repeat('9', 3100) || ' * ' || repeat('9', 3100))",
+        )
+        .expect("SPI failed");
+    }
+
+    #[pg_test(
+        error = "business knowledge model 'CosFn' uses an external Java function, which pgdmn does not support"
+    )]
+    fn test_dmn_load_rejects_java_bkm() {
+        const JAVA_BKM_DMN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="java_bkm_model"
+             name="JavaBkmModel"
+             namespace="https://example.org/javabkm">
+    <businessKnowledgeModel id="CosFn" name="CosFn">
+        <variable name="CosFn"/>
+        <encapsulatedLogic kind="Java">
+            <formalParameter typeRef="number" name="x"/>
+            <context>
+                <contextEntry>
+                    <variable name="class"/>
+                    <literalExpression><text>"java.lang.Math"</text></literalExpression>
+                </contextEntry>
+                <contextEntry>
+                    <variable name="method signature"/>
+                    <literalExpression><text>"cos(double)"</text></literalExpression>
+                </contextEntry>
+            </context>
+        </encapsulatedLogic>
+    </businessKnowledgeModel>
+</definitions>"##;
+        Spi::get_one::<String>(&format!("SELECT dmn_name(dmn_load('{JAVA_BKM_DMN}'))"))
+            .expect("SPI failed");
+    }
+
+    #[pg_test(
+        error = "decision 'UsesJava' uses an external Java function, which pgdmn does not support"
+    )]
+    fn test_dmn_load_rejects_java_function_boxed_in_decision() {
+        const JAVA_BOXED_DMN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="java_boxed_model"
+             name="JavaBoxedModel"
+             namespace="https://example.org/javaboxed">
+    <decision id="UsesJava" name="UsesJava">
+        <variable name="UsesJava"/>
+        <context>
+            <contextEntry>
+                <variable name="cos"/>
+                <functionDefinition kind="Java">
+                    <formalParameter typeRef="number" name="x"/>
+                    <context>
+                        <contextEntry>
+                            <variable name="class"/>
+                            <literalExpression><text>"java.lang.Math"</text></literalExpression>
+                        </contextEntry>
+                        <contextEntry>
+                            <variable name="method signature"/>
+                            <literalExpression><text>"cos(double)"</text></literalExpression>
+                        </contextEntry>
+                    </context>
+                </functionDefinition>
+            </contextEntry>
+            <contextEntry>
+                <literalExpression><text>cos(0)</text></literalExpression>
+            </contextEntry>
+        </context>
+    </decision>
+</definitions>"##;
+        Spi::get_one::<String>(&format!("SELECT dmn_name(dmn_load('{JAVA_BOXED_DMN}'))"))
+            .expect("SPI failed");
     }
 
     // DMN model tests using a simple inline model

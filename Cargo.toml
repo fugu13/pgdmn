@@ -41,12 +41,12 @@ pgrx = "0.16"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_cbor = "0.11"
-dsntk-model = "0.2"
-dsntk-feel = "0.2"
-dsntk-feel-parser = "0.2"
-dsntk-feel-evaluator = "0.2"
-dsntk-model-evaluator = "0.2"
-dsntk-feel-temporal = "0.2"
+dsntk-model = "0.3"
+dsntk-feel = "0.3"
+dsntk-feel-parser = "0.3"
+dsntk-feel-evaluator = "0.3"
+dsntk-model-evaluator = "0.3"
+dsntk-feel-temporal = "0.3"
 rapidhash = "1"
 
 [dev-dependencies]
