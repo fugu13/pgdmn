@@ -1,31 +1,31 @@
 ---
-title: Loan eligibility, row by row
+title: Loan eligibility, or, only define complex rules once
 date: 2026-07-13
-summary: Four rules and eight applicants. Two sit either side of the boundary, one is a 17-year-old earning 95000, and one out-earns the lot and is declined anyway — because the order of the rules is part of the decision.
+summary: Loan eligibility criteria are often very complex and strictly validated. In this simplified example, see how DMN expressing an exact set of rules that would be a bit tricky in SQL encapsulate that complexity, avoiding double implementation.
 files: loan-eligibility.dmn, applicants.csv
 example: loan
 ---
 
-A lender has to turn a handful of applicant facts — age, income, whether there has been a prior bankruptcy — into a single approve-or-decline, and the rules that do it are exactly the sort that read badly and break quietly when they live in application code. The policy also changes, and when it does the people who own it need to see what changed.
+A lender has to turn a handful of applicant facts into a single approve-or-decline, and the rules that do it are exactly the sort that read opaquely and break quietly when they live in application code. Additionally, the details of the approval rules are updated frequently.
 
-This example encodes that eligibility policy as a DMN decision table and evaluates it across a table of applicants in SQL. It is deliberately small — one decision, a first-hit table over three inputs — to show how the rules read, how their order decides the outcome, and how the answer behaves like any other column. Model authoring tools and multi-version compatibility are out of scope; this is the shape of the thing, running.
+This example encodes an eligibility policy as a DMN decision table and evaluates it across a table of applicants in SQL.
 
 ## The rules
 
-A decision table takes inputs across the top and tries each rule in turn. This one asks three questions — how old is the applicant, what do they earn, and have they been bankrupt — and answers a fourth.
+A decision table lists inputs and outputs as headers and rules as rows. This one takes three inputs — how old is the applicant, what do they earn, and have they been bankrupt — and outputs loan eligibility.
 
 Table: Eligibility — hit policy: F (first)
 
-| F | Age | Income | Bankrupt | Eligibility |
-| --- | --- | --- | --- | --- |
-| 1 | `< 18` | — | — | Denied: underage |
-| 2 | — | — | `true` | Denied: prior bankruptcy |
-| 3 | `>= 18` | `>= 50000` | `false` | Approved |
-| 4 | `>= 18` | `< 50000` | `false` | Denied: low income |
+| F   | Age     | Income     | Bankrupt | Eligibility              |
+| --- | ------- | ---------- | -------- | ------------------------ |
+| 1   | `< 18`  | —          | —        | Denied: underage         |
+| 2   | —       | —          | `true`   | Denied: prior bankruptcy |
+| 3   | `>= 18` | `>= 50000` | `false`  | Approved                 |
+| 4   | `>= 18` | `< 50000`  | `false`  | Denied: low income       |
 
-The dash is a wildcard: the first rule does not care what you earn, and the second does not care how old you are or how much you make. The third input is a plain boolean, and it is treated exactly like the numbers — a column in, a rule matched.
+The dash is a wildcard: the first rule does not care what you earn, and the second does not care how old you are or how much you make.
 
-The hit policy is **first**, which means the rules are tried top to bottom and the first one that matches wins. No rule further down gets a say. That is a design decision, not an implementation detail, and it is visible right here in the model.
+The hit policy is **first**, which means the rules are tried top to bottom and the first one that matches wins. DMN supports several different hit policies, suitable for different decision scenarios.
 
 ## Set up
 
@@ -50,7 +50,7 @@ CREATE TABLE applicants (
 
 ## One applicant
 
-No table is needed to ask a single question. Hand the decision a JSON object and get a native text answer back — `dmn_eval_text` unwraps the result, so there are no JSONB quotes to strip.
+A short query determines eligibility. Pass the DMN model, the decision to return, and a JSON object containing the inputs, and get an answer back — `dmn_eval_text` unwraps the result, so there are no JSONB quotes to strip.
 
 ```sql
 SELECT dmn_eval_text(model, 'Eligibility', '{
@@ -82,18 +82,18 @@ ORDER BY a.id;
 
 Table: Every applicant, decided
 
-| Name | Age | Income | Bankrupt | Decision |
-| --- | --- | --- | --- | --- |
-| Ada Okafor | 34 | 82000 | false | Approved |
-| Bo Zhang | 17 | 0 | false | Denied: underage |
-| Chen Ruiz | 29 | 41000 | false | Denied: low income |
-| Dara Singh | 45 | 120000 | true | Denied: prior bankruptcy |
-| Eli Novak | 22 | 50000 | false | Approved |
-| Fay Mbeki | 19 | 49999 | false | Denied: low income |
-| Gus Halvorsen | 64 | 68000 | false | Approved |
-| Hana Ito | 17 | 95000 | false | Denied: underage |
+| Name          | Age | Income | Bankrupt | Decision                 |
+| ------------- | --- | ------ | -------- | ------------------------ |
+| Ada Okafor    | 34  | 82000  | false    | Approved                 |
+| Bo Zhang      | 17  | 0      | false    | Denied: underage         |
+| Chen Ruiz     | 29  | 41000  | false    | Denied: low income       |
+| Dara Singh    | 45  | 120000 | true     | Denied: prior bankruptcy |
+| Eli Novak     | 22  | 50000  | false    | Approved                 |
+| Fay Mbeki     | 19  | 49999  | false    | Denied: low income       |
+| Gus Halvorsen | 64  | 68000  | false    | Approved                 |
+| Hana Ito      | 17  | 95000  | false    | Denied: underage         |
 
-Three rows earn a second look.
+A brief explanation follows for how some of the rows evaluated against the DMN model.
 
 ### Eli and Fay: the boundary
 
@@ -109,9 +109,9 @@ This is the shape most real policies have: a handful of disqualifiers that short
 
 ### Hana: why order is the decision
 
-Hana earns 95000 and is turned away. She is 17. The underage rule sits first, and under a *first* hit policy the engine stops there; the income rule below never runs.
+Hana earns 95000 and is turned away. She is 17. The underage rule sits first, and under a _first_ hit policy the engine stops there; the income rule below never runs.
 
-Move the underage rule to the bottom and Hana gets approved. The rules would look identical in a summary, and the system would behave differently. This is exactly the kind of change you want a reviewer to see in a diff of the model, rather than discover in production.
+With a decision table, verifying this constraint only involves looking at the underage rule, seeing it is the first in the table, and looking at the hit policy. In code, the details are easily buried.
 
 ## So how did we do?
 
@@ -129,16 +129,14 @@ GROUP BY 1
 ORDER BY count(*) DESC, 1;
 ```
 
-Table: The book, by outcome
+Table: The book of applications, by outcome
 
-| Decision | Applicants |
-| --- | --- |
-| Approved | 3 |
-| Denied: low income | 2 |
-| Denied: underage | 2 |
-| Denied: prior bankruptcy | 1 |
-
-Nothing left the database to work that out.
+| Decision                 | Applicants |
+| ------------------------ | ---------- |
+| Approved                 | 3          |
+| Denied: low income       | 2          |
+| Denied: underage         | 2          |
+| Denied: prior bankruptcy | 1          |
 
 ## Going further
 
