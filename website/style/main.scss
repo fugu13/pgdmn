@@ -423,6 +423,12 @@ ul, ol {
       background: var(--color-code-bg);
     }
 
+    // In a decision table, tint the output column's header the way a DMN tool
+    // sets outputs apart from inputs. The output is the last column.
+    table.decision-table th:last-child {
+      background: color-mix(in srgb, var(--color-primary) 14%, var(--color-code-bg));
+    }
+
     td {
       font-family: var(--font-mono);
       font-size: 0.88rem;

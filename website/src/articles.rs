@@ -218,18 +218,32 @@ fn tables_accessible(html: &str) -> String {
         let id = format!("table-{index}");
         let table = &from_table[OPEN.len()..end];
 
+        // A decision table (its caption names a hit policy) gets a class so the
+        // output column — the last one — can be tinted like a DMN tool does.
+        let is_decision = caption.is_some_and(|c| c.contains("hit policy"));
+        let table_open = if is_decision {
+            "<table class=\"decision-table\">"
+        } else {
+            "<table>"
+        };
+
         out.push_str(before);
         match caption {
             Some(caption) => {
                 let _ = write!(
                     out,
                     "<div class=\"table-scroll\" role=\"region\" aria-labelledby=\"{id}\" \
-                     tabindex=\"0\"><table><caption id=\"{id}\">{caption}</caption>"
+                     tabindex=\"0\">{table_open}<caption id=\"{id}\">{caption}</caption>"
                 );
             }
             // No caption, so no accessible name — and an unnamed `region` is
             // worse than none. Still focusable, so it can still be scrolled.
-            None => out.push_str("<div class=\"table-scroll\" tabindex=\"0\"><table>"),
+            None => {
+                let _ = write!(
+                    out,
+                    "<div class=\"table-scroll\" tabindex=\"0\">{table_open}"
+                );
+            }
         }
         out.push_str(&table.replace("<th>", "<th scope=\"col\">"));
         out.push_str("</table></div>");
