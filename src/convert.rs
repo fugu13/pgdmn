@@ -99,10 +99,18 @@ fn null_error(detail: Option<&String>) -> String {
 /// an expression or a decision.
 pub fn feel_to_numeric(value: &Value) -> Result<pgrx::AnyNumeric, String> {
     match value {
-        Value::Number(n) => n
-            .to_string()
-            .parse::<pgrx::AnyNumeric>()
-            .map_err(|e| format!("cannot convert FEEL number to NUMERIC: {e}")),
+        Value::Number(n) => {
+            // dsntk 0.3 FEEL numbers can be non-finite; a NUMERIC cannot.
+            if !feel_number_is_finite(n) {
+                return Err(
+                    "FEEL number result is not finite and cannot be converted to NUMERIC"
+                        .to_string(),
+                );
+            }
+            n.to_string()
+                .parse::<pgrx::AnyNumeric>()
+                .map_err(|e| format!("cannot convert FEEL number to NUMERIC: {e}"))
+        }
         Value::Null(detail) => Err(null_error(detail.as_ref())),
         other => Err(format!("expected FEEL number, got: {other}")),
     }

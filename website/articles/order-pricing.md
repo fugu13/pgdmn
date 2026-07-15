@@ -33,14 +33,14 @@ Load both models — [`order-pricing.dmn`](/examples/order-pricing.dmn) and [`or
 
 CREATE TABLE models (name text PRIMARY KEY, model dmnmodel NOT NULL);
 INSERT INTO models VALUES
-    ('pricing-standard', dmn_load(:'standard')),
-    ('pricing-promo',    dmn_load(:'promo'));
+  ('pricing-standard', dmn_load(:'standard')),
+  ('pricing-promo',    dmn_load(:'promo'));
 
 CREATE TABLE orders (
-    id         int PRIMARY KEY,
-    customer   text,
-    base_price numeric,
-    tax_rate   numeric
+  id         int PRIMARY KEY,
+  customer   text,
+  base_price numeric,
+  tax_rate   numeric
 );
 \copy orders FROM 'orders.csv' WITH (FORMAT csv, HEADER true)
 ```
@@ -49,8 +49,8 @@ A single order prices in one call. `dmn_eval_numeric` hands back a `numeric`, so
 
 ```sql
 SELECT round(dmn_eval_numeric(model, 'Total Price', '{
-        "Base Price": 100.00, "Tax Rate": 0.10
-    }'::jsonb), 2) AS total
+    "Base Price": 100.00, "Tax Rate": 0.10
+  }'::jsonb), 2) AS total
 FROM models WHERE name = 'pricing-standard';
 
 --  total
@@ -76,14 +76,14 @@ So both live in the `models` table under different names, and choosing a policy 
 
 ```sql
 SELECT o.customer, o.base_price,
-    round(dmn_eval_numeric(s.model, 'Total Price', p.input), 2) AS standard,
-    round(dmn_eval_numeric(t.model, 'Total Price', p.input), 2) AS promo
+  round(dmn_eval_numeric(s.model, 'Total Price', p.input), 2) AS standard,
+  round(dmn_eval_numeric(t.model, 'Total Price', p.input), 2) AS promo
 FROM orders o
 CROSS JOIN LATERAL (
-    SELECT jsonb_build_object(
-        'Base Price', o.base_price,
-        'Tax Rate',   o.tax_rate
-    ) AS input
+  SELECT jsonb_build_object(
+    'Base Price', o.base_price,
+    'Tax Rate',   o.tax_rate
+  ) AS input
 ) p
 JOIN models s ON s.name = 'pricing-standard'
 JOIN models t ON t.name = 'pricing-promo'
@@ -118,12 +118,12 @@ What does the promotion cost the business? The saving is just the difference bet
 
 ```sql
 SELECT round(sum(dmn_eval_numeric(s.model, 'Total Price', p.input)), 2) AS standard_book,
-    round(sum(dmn_eval_numeric(t.model, 'Total Price', p.input)), 2) AS promo_book,
-    round(sum(dmn_eval_numeric(s.model, 'Total Price', p.input)
-        - dmn_eval_numeric(t.model, 'Total Price', p.input)), 2) AS given_away
+  round(sum(dmn_eval_numeric(t.model, 'Total Price', p.input)), 2) AS promo_book,
+  round(sum(dmn_eval_numeric(s.model, 'Total Price', p.input)
+    - dmn_eval_numeric(t.model, 'Total Price', p.input)), 2) AS given_away
 FROM orders o
 CROSS JOIN LATERAL (
-    SELECT jsonb_build_object('Base Price', o.base_price, 'Tax Rate', o.tax_rate) AS input
+  SELECT jsonb_build_object('Base Price', o.base_price, 'Tax Rate', o.tax_rate) AS input
 ) p
 JOIN models s ON s.name = 'pricing-standard'
 JOIN models t ON t.name = 'pricing-promo';

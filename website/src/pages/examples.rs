@@ -59,18 +59,18 @@ pub fn ExamplesPage() -> impl IntoView {
             label="Loan eligibility: decide one applicant, then all of them"
             code="-- One applicant.
 SELECT dmn_eval_text(model, 'Eligibility', '{
-        \"Age\": 34, \"Income\": 82000, \"Bankrupt\": false
-    }'::jsonb) AS decision
+    \"Age\": 34, \"Income\": 82000, \"Bankrupt\": false
+  }'::jsonb) AS decision
 FROM models WHERE name = 'loan';
 --  Approved
 
 -- Now check it for everybody.
 SELECT a.name, a.age, a.income, a.bankrupt,
-    dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
-        'Age',      a.age,
-        'Income',   a.income,
-        'Bankrupt', a.bankrupt
-    )) AS decision
+  dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+    'Age',      a.age,
+    'Income',   a.income,
+    'Bankrupt', a.bankrupt
+  )) AS decision
 FROM applicants a
 CROSS JOIN models m
 WHERE m.name = 'loan'
@@ -108,14 +108,14 @@ ORDER BY a.id;
 -- Both answer to the same name, 'Total Price'.
 -- Identical queries get the right result for the current model.
 SELECT o.customer, o.base_price,
-    round(dmn_eval_numeric(s.model, 'Total Price', p.input), 2) AS standard,
-    round(dmn_eval_numeric(t.model, 'Total Price', p.input), 2) AS promo
+  round(dmn_eval_numeric(s.model, 'Total Price', p.input), 2) AS standard,
+  round(dmn_eval_numeric(t.model, 'Total Price', p.input), 2) AS promo
 FROM orders o
 CROSS JOIN LATERAL (
-    SELECT jsonb_build_object(
-        'Base Price', o.base_price,
-        'Tax Rate',   o.tax_rate
-    ) AS input
+  SELECT jsonb_build_object(
+    'Base Price', o.base_price,
+    'Tax Rate',   o.tax_rate
+  ) AS input
 ) p
 JOIN models s ON s.name = 'pricing-standard'
 JOIN models t ON t.name = 'pricing-promo'
@@ -147,10 +147,10 @@ ORDER BY o.id;
             code="-- With a view, always have the correct policy outcome as a column.
 CREATE VIEW obligations AS
 SELECT c.id, c.name, c.region, c.data_class,
-    dmn_eval_text(m.model, 'Handling', jsonb_build_object(
-        'Region',     c.region,
-        'Data Class', c.data_class
-    )) AS handling
+  dmn_eval_text(m.model, 'Handling', jsonb_build_object(
+    'Region',     c.region,
+    'Data Class', c.data_class
+  )) AS handling
 FROM customers c
 CROSS JOIN models m
 WHERE m.name = 'compliance';
@@ -200,10 +200,10 @@ ORDER BY count(*) DESC, handling;
 -- reroutes automatically.
 CREATE VIEW routed_tickets AS
 SELECT t.id, t.subject, t.priority, t.customer_tier,
-    dmn_eval_text(m.model, 'Queue', jsonb_build_object(
-        'Priority',      t.priority,
-        'Customer Tier', t.customer_tier
-    )) AS queue
+  dmn_eval_text(m.model, 'Queue', jsonb_build_object(
+    'Priority',      t.priority,
+    'Customer Tier', t.customer_tier
+  )) AS queue
 FROM tickets t
 CROSS JOIN models m
 WHERE m.name = 'routing';

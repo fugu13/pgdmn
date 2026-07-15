@@ -38,10 +38,10 @@ CREATE TABLE models (name text PRIMARY KEY, model dmnmodel NOT NULL);
 INSERT INTO models VALUES ('compliance', dmn_load(:'compliance'));
 
 CREATE TABLE customers (
-    id         int PRIMARY KEY,
-    name       text,
-    region     text,
-    data_class text
+  id         int PRIMARY KEY,
+  name       text,
+  region     text,
+  data_class text
 );
 \copy customers FROM 'customers.csv' WITH (FORMAT csv, HEADER true)
 ```
@@ -51,10 +51,10 @@ The obligation for every row becomes a column, computed from the rules in force 
 ```sql
 CREATE VIEW obligations AS
 SELECT c.id, c.name, c.region, c.data_class,
-    dmn_eval_text(m.model, 'Handling', jsonb_build_object(
-        'Region',     c.region,
-        'Data Class', c.data_class
-    )) AS handling
+  dmn_eval_text(m.model, 'Handling', jsonb_build_object(
+    'Region',     c.region,
+    'Data Class', c.data_class
+  )) AS handling
 FROM customers c
 CROSS JOIN models m
 WHERE m.name = 'compliance';

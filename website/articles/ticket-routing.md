@@ -39,10 +39,10 @@ CREATE TABLE models (name text PRIMARY KEY, model dmnmodel NOT NULL);
 INSERT INTO models VALUES ('routing', dmn_load(:'routing'));
 
 CREATE TABLE tickets (
-    id            int PRIMARY KEY,
-    subject       text,
-    priority      text,
-    customer_tier text
+  id            int PRIMARY KEY,
+  subject       text,
+  priority      text,
+  customer_tier text
 );
 \copy tickets FROM 'tickets.csv' WITH (FORMAT csv, HEADER true)
 ```
@@ -54,10 +54,10 @@ Rather than run the decision by hand each time, make it part of the schema. A vi
 ```sql
 CREATE VIEW routed_tickets AS
 SELECT t.id, t.subject, t.priority, t.customer_tier,
-    dmn_eval_text(m.model, 'Queue', jsonb_build_object(
-        'Priority',      t.priority,
-        'Customer Tier', t.customer_tier
-    )) AS queue
+  dmn_eval_text(m.model, 'Queue', jsonb_build_object(
+    'Priority',      t.priority,
+    'Customer Tier', t.customer_tier
+  )) AS queue
 FROM tickets t
 CROSS JOIN models m
 WHERE m.name = 'routing';

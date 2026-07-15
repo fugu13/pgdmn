@@ -39,11 +39,11 @@ CREATE TABLE models (name text PRIMARY KEY, model dmnmodel NOT NULL);
 INSERT INTO models VALUES ('loan', dmn_load(:'loan'));
 
 CREATE TABLE applicants (
-    id       int PRIMARY KEY,
-    name     text,
-    age      int,
-    income   numeric,
-    bankrupt boolean
+  id       int PRIMARY KEY,
+  name     text,
+  age      int,
+  income   numeric,
+  bankrupt boolean
 );
 \copy applicants FROM 'applicants.csv' WITH (FORMAT csv, HEADER true)
 ```
@@ -54,8 +54,8 @@ No table is needed to ask a single question. Hand the decision a JSON object and
 
 ```sql
 SELECT dmn_eval_text(model, 'Eligibility', '{
-        "Age": 34, "Income": 82000, "Bankrupt": false
-    }'::jsonb) AS decision
+    "Age": 34, "Income": 82000, "Bankrupt": false
+  }'::jsonb) AS decision
 FROM models WHERE name = 'loan';
 
 --  decision
@@ -69,11 +69,11 @@ The same decision, evaluated against every row of the table. This is the whole p
 
 ```sql
 SELECT a.name, a.age, a.income, a.bankrupt,
-    dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
-        'Age',      a.age,
-        'Income',   a.income,
-        'Bankrupt', a.bankrupt
-    )) AS decision
+  dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+    'Age',      a.age,
+    'Income',   a.income,
+    'Bankrupt', a.bankrupt
+  )) AS decision
 FROM applicants a
 CROSS JOIN models m
 WHERE m.name = 'loan'
@@ -119,9 +119,9 @@ Because the decision is just an expression, the outcome is groupable, aggregatab
 
 ```sql
 SELECT dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
-        'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
-    )) AS decision,
-    count(*)
+    'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
+  )) AS decision,
+  count(*)
 FROM applicants a
 CROSS JOIN models m
 WHERE m.name = 'loan'
@@ -146,11 +146,11 @@ Because the decision is just a column, everything SQL already does to a column w
 
 ```sql
 SELECT round(
-        100.0 * count(*) FILTER (
-            WHERE dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
-                'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
-            )) = 'Approved'
-        ) / count(*), 1) AS approval_pct
+    100.0 * count(*) FILTER (
+      WHERE dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+        'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
+      )) = 'Approved'
+    ) / count(*), 1) AS approval_pct
 FROM applicants a
 CROSS JOIN models m
 WHERE m.name = 'loan';
@@ -164,15 +164,15 @@ Or pull just the declines, with the reason the model gave, straight into a work 
 
 ```sql
 SELECT a.name,
-    dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
-        'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
-    )) AS reason
+  dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+    'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
+  )) AS reason
 FROM applicants a
 CROSS JOIN models m
 WHERE m.name = 'loan'
-  AND dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
-          'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
-      )) <> 'Approved'
+ AND dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
+     'Age', a.age, 'Income', a.income, 'Bankrupt', a.bankrupt
+   )) <> 'Approved'
 ORDER BY a.id;
 
 --       name      |          reason

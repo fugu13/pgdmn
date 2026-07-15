@@ -124,7 +124,7 @@ website/
 - **Deployment is automatic.** Pushing to `main` publishes `website/dist` to GitHub Pages at `www.pgdmn.com` via `.github/workflows/website.yml`. The site is served from a domain root because its links and stylesheet are absolute paths — a `github.io` subpath would break them.
 - **Anti-patterns — do not build:** modals, toasts, skeleton screens, infinite scroll, dark-mode toggles (respect `prefers-color-scheme`), custom cursors.
 - Styles in Sass (`style/main.scss`), flat colors, BEM-like modifier names.
-- **SQL formatting in site copy (Examples, Docs, articles):** when a `SELECT` list wraps, indent the continuation lines by a fixed four spaces from `SELECT` — do **not** align them to the first select-item column (the column just after `SELECT `). Keep clause keywords (`FROM`, `WHERE`, `GROUP BY`, `ORDER BY`) at column 0, and indent subquery/`LATERAL` bodies and multi-line function arguments in four-space steps from their opener. Every SQL result shown in a comment must be produced by the real engine — assert it in the extension test suite (`src/lib.rs`), not by hand.
+- **SQL formatting in site copy (Examples, Docs, articles):** indent in two-space steps. When a `SELECT` list wraps, indent the continuation lines by a fixed two spaces from `SELECT` — do **not** align them to the first select-item column (the column just after `SELECT `). Keep clause keywords (`FROM`, `WHERE`, `GROUP BY`, `ORDER BY`) at column 0, and indent subquery/`LATERAL` bodies and multi-line function arguments in two-space steps from their opener. Every SQL result shown in a comment must be produced by the real engine — assert it in the extension test suite (`src/lib.rs`), not by hand.
 
 ## Documentation
 
