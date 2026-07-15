@@ -1,0 +1,4 @@
+# Vendored third-party sources keep upstream formatting so the local
+# patch set stays minimal (see vendor/README.md). cargo fmt in the root
+# workspace would otherwise reformat every member crate.
+disable_all_formatting = true

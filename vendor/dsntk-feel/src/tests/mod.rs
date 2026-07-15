@@ -1,0 +1,47 @@
+mod bif;
+mod context;
+mod dto;
+mod function;
+mod names;
+mod qualified_names;
+mod scope;
+mod types;
+mod values;
+
+use crate::{FeelType, Name};
+use std::slice;
+use std::sync::LazyLock;
+
+const T_ANY: &FeelType = &FeelType::Any;
+const T_BOOLEAN: &FeelType = &FeelType::Boolean;
+const T_NUMBER: &FeelType = &FeelType::Number;
+const T_DATE: &FeelType = &FeelType::Date;
+const T_DATE_TIME: &FeelType = &FeelType::DateTime;
+const T_DAYS_AND_TIME_DURATION: &FeelType = &FeelType::DaysAndTimeDuration;
+const T_NULL: &FeelType = &FeelType::Null;
+const T_STRING: &FeelType = &FeelType::String;
+const T_TIME: &FeelType = &FeelType::Time;
+const T_YEARS_AND_MONTHS_DURATION: &FeelType = &FeelType::YearsAndMonthsDuration;
+
+static NAME_A: LazyLock<Name> = LazyLock::new(|| Name::from("a"));
+static NAME_B: LazyLock<Name> = LazyLock::new(|| Name::from("b"));
+static NAME_C: LazyLock<Name> = LazyLock::new(|| Name::from("c"));
+static NAME_D: LazyLock<Name> = LazyLock::new(|| Name::from("d"));
+static T_LIST_A: LazyLock<FeelType> = LazyLock::new(|| FeelType::list(T_NUMBER));
+static T_LIST_B: LazyLock<FeelType> = LazyLock::new(|| FeelType::list(T_BOOLEAN));
+static T_LIST_C: LazyLock<FeelType> = LazyLock::new(|| FeelType::list(T_STRING));
+static T_LIST_D: LazyLock<FeelType> = LazyLock::new(|| FeelType::list(T_ANY));
+static T_CONTEXT_A: LazyLock<FeelType> = LazyLock::new(|| FeelType::context(&[(&NAME_A, T_NUMBER)]));
+static T_CONTEXT_B: LazyLock<FeelType> = LazyLock::new(|| FeelType::context(&[(&NAME_B, T_BOOLEAN)]));
+static T_CONTEXT_C: LazyLock<FeelType> = LazyLock::new(|| FeelType::context(&[(&NAME_A, T_STRING)]));
+static T_CONTEXT_A_B: LazyLock<FeelType> = LazyLock::new(|| FeelType::context(&[(&NAME_A, T_NUMBER), (&NAME_B, T_BOOLEAN)]));
+static T_CONTEXT_A_B_C: LazyLock<FeelType> = LazyLock::new(|| FeelType::context(&[(&NAME_A, T_NUMBER), (&NAME_B, T_BOOLEAN), (&NAME_C, T_STRING)]));
+static T_FUNCTION_A: LazyLock<FeelType> = LazyLock::new(|| FeelType::function(&[T_NUMBER.clone(), T_NUMBER.clone()], T_NUMBER));
+static T_FUNCTION_B: LazyLock<FeelType> = LazyLock::new(|| FeelType::function(&[T_NUMBER.clone(), T_NUMBER.clone()], T_BOOLEAN));
+static T_FUNCTION_C: LazyLock<FeelType> = LazyLock::new(|| FeelType::function(slice::from_ref(T_NUMBER), T_STRING));
+static T_FUNCTION_D: LazyLock<FeelType> = LazyLock::new(|| FeelType::function(&[], T_ANY));
+static T_FUNCTION_E: LazyLock<FeelType> = LazyLock::new(|| FeelType::function(&[], T_STRING));
+static T_FUNCTION_F: LazyLock<FeelType> = LazyLock::new(|| FeelType::function(slice::from_ref(T_ANY), T_STRING));
+static T_FUNCTION_G: LazyLock<FeelType> = LazyLock::new(|| FeelType::function(slice::from_ref(T_STRING), T_STRING));
+static T_RANGE_A: LazyLock<FeelType> = LazyLock::new(|| FeelType::range(T_NUMBER));
+static T_RANGE_B: LazyLock<FeelType> = LazyLock::new(|| FeelType::range(T_DATE));

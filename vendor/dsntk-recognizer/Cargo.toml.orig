@@ -1,0 +1,20 @@
+[package]
+name = "dsntk-recognizer"
+version = { workspace = true }
+authors = { workspace = true }
+description = "ÐecisionToolkit | Decision table recognizer"
+categories = ["development-tools", "command-line-utilities", "finance", "parsing"]
+keywords = ["dmn", "decision", "toolkit", "recognizer"]
+documentation = "https://docs.rs/dsntk-recognizer"
+repository = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+dsntk-common = { workspace = true }
+dsntk-macros = { workspace = true }
+
+[dev-dependencies]
+dsntk-examples = { workspace = true }
+walkdir = { workspace = true }

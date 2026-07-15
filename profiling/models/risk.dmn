@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="risk_assessment"
+             name="RiskAssessment"
+             namespace="https://example.org/risk">
+    <inputData id="input_age" name="age">
+        <variable name="age" typeRef="number"/>
+    </inputData>
+    <inputData id="input_income" name="income">
+        <variable name="income" typeRef="number"/>
+    </inputData>
+    <inputData id="input_credit_score" name="credit_score">
+        <variable name="credit_score" typeRef="number"/>
+    </inputData>
+    <inputData id="input_employment" name="employment_status">
+        <variable name="employment_status" typeRef="string"/>
+    </inputData>
+    <inputData id="input_years" name="years_employed">
+        <variable name="years_employed" typeRef="number"/>
+    </inputData>
+    <decision id="RiskCategory" name="RiskCategory">
+        <variable name="RiskCategory" typeRef="string"/>
+        <informationRequirement><requiredInput href="#input_age"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_income"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_credit_score"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_employment"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_years"/></informationRequirement>
+        <decisionTable hitPolicy="FIRST">
+            <input><inputExpression typeRef="number"><text>age</text></inputExpression></input>
+            <input><inputExpression typeRef="number"><text>credit_score</text></inputExpression></input>
+            <input><inputExpression typeRef="number"><text>income</text></inputExpression></input>
+            <input><inputExpression typeRef="string"><text>employment_status</text></inputExpression></input>
+            <input><inputExpression typeRef="number"><text>years_employed</text></inputExpression></input>
+            <output name="RiskCategory" typeRef="string"/>
+            <rule>
+                <inputEntry><text>&lt; 18</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"ineligible"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>&gt;= 750</text></inputEntry>
+                <inputEntry><text>&gt;= 80000</text></inputEntry>
+                <inputEntry><text>"employed"</text></inputEntry>
+                <inputEntry><text>&gt;= 3</text></inputEntry>
+                <outputEntry><text>"low"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>[650..750)</text></inputEntry>
+                <inputEntry><text>&gt;= 50000</text></inputEntry>
+                <inputEntry><text>"employed","self-employed"</text></inputEntry>
+                <inputEntry><text>&gt;= 1</text></inputEntry>
+                <outputEntry><text>"medium"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>[650..750)</text></inputEntry>
+                <inputEntry><text>&lt; 50000</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"high"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>&lt; 650</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"very high"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>&gt;= 18</text></inputEntry>
+                <inputEntry><text>&gt;= 750</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"medium"</text></outputEntry>
+            </rule>
+        </decisionTable>
+    </decision>
+    <decision id="RiskScore" name="RiskScore">
+        <variable name="RiskScore" typeRef="number"/>
+        <informationRequirement><requiredDecision href="#RiskCategory"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_credit_score"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_income"/></informationRequirement>
+        <informationRequirement><requiredInput href="#input_years"/></informationRequirement>
+        <literalExpression>
+            <text>if RiskCategory = "ineligible" then 0
+            else if RiskCategory = "low" then credit_score * 0.5 + income / 1000 + years_employed * 10
+            else if RiskCategory = "medium" then credit_score * 0.3 + income / 2000 + years_employed * 5
+            else if RiskCategory = "high" then credit_score * 0.1 + income / 5000
+            else credit_score * 0.05</text>
+        </literalExpression>
+    </decision>
+</definitions>

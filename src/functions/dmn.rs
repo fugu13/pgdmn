@@ -18,7 +18,7 @@ pub fn dmn_load(xml: &str) -> DmnModel {
 
 /// Evaluate a named invocable, returning the raw FEEL value.
 fn eval_invocable(model: &DmnModel, invocable: &str, ctx: &FeelContext) -> Value {
-    let evaluator = get_or_build_evaluator(&model.xml).unwrap_or_else(|e| pgrx::error!("{}", e));
+    let evaluator = get_or_build_evaluator(model).unwrap_or_else(|e| pgrx::error!("{}", e));
     evaluator.evaluate_invocable(&model.namespace, &model.name, invocable, ctx)
 }
 

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="concat_decision"
+             name="ConcatDecision"
+             namespace="https://example.org/concat">
+    <decision id="FullName" name="FullName">
+        <variable name="FullName" typeRef="string"/>
+        <informationRequirement>
+            <requiredInput href="#input_first_name"/>
+        </informationRequirement>
+        <informationRequirement>
+            <requiredInput href="#input_last_name"/>
+        </informationRequirement>
+        <literalExpression>
+            <text>first_name + " " + last_name</text>
+        </literalExpression>
+    </decision>
+    <inputData id="input_first_name" name="first_name">
+        <variable name="first_name" typeRef="string"/>
+    </inputData>
+    <inputData id="input_last_name" name="last_name">
+        <variable name="last_name" typeRef="string"/>
+    </inputData>
+</definitions>

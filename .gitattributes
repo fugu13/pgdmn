@@ -1,0 +1,7 @@
+# Third-party vendored sources: excluded from GitHub language stats and
+# collapsed by default in diffs. NOT linguist-generated - patch-layer diffs
+# must stay reviewable (see vendor/README.md).
+vendor/** linguist-vendored
+Cargo.lock linguist-generated
+profiling/Cargo.lock linguist-generated
+website/Cargo.lock linguist-generated

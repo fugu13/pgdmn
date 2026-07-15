@@ -1,18 +1,190 @@
 # TODO
 
+## Public release readiness
+
+### PUBLIC-001: Strip RELEASEPLAN.md before flipping public (user decision)
+
+The panel flagged RELEASEPLAN.md's promotion-target names and upsell
+strategy as the one item that cannot be un-seen after publication (it is
+linked from the README). Move internal marketing content to private
+notes, and decide explicitly whether the git history containing it is
+acceptable or the repository should be published with fresh history.
+
+### PUBLIC-002: SECURITY.md and private vulnerability reporting
+
+Add SECURITY.md (report via GitHub private security advisories; trust
+model: DMN XML and FEEL expressions are untrusted SQL input evaluated
+in-process; no network stack linked — external evaluation compiled out;
+vendored-engine issues coordinated with upstream). Enable private
+vulnerability reporting when the repo goes public.
+
+### PUBLIC-003: Extension CI workflow
+
+.github/workflows currently covers only the website. Add a workflow for
+PRs touching src/, vendor/, Cargo.*, Makefile, Dockerfile: at minimum
+`make vendor-check` + `cargo check` + the vendored test gate, plus
+cargo-audit (advisories against vendored versions do not surface via
+Dependabot for path deps) and a guard against stray duplicate files
+(a "* 2.toml" incident occurred once).
+
+### PUBLIC-004: Durable vendor manifests
+
+Commit a CHECKSUMS manifest (per-crate sha256 of the vendored tarballs,
+written by vendor-upgrade). vendor/PATCHES.md exists (summaries +
+measured effects; update it as part of the one-commit-per-change
+discipline) — extend it with upstream-PR links as PUBLIC-006 executes,
+teach vendor-status to reconcile the git layer against it, and disable
+squash-merge for vendor PRs so patch-layer separability survives GitHub
+merges.
+
+### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction
+
+Document the vendor/ contribution rules where outsiders will look
+(never edit vendor/ in feature PRs; one commit per change; PGDMN:
+markers; no reformatting), route vendor/ changes via CODEOWNERS, and
+add .github/instructions/vendor.instructions.md so Copilot review stops
+proposing stylistic rewrites of vendored code.
+
+### PUBLIC-006: Open the upstream PRs and link them (executes PERF-006)
+
+BUG-003 first, then the DEPS-001 feature gate, DEPS-002, H4, H14, H9,
+and H3+H20 as a pair. Link each PR from TODO.md and vendor/PATCHES.md
+so the public repo visibly demonstrates the upstream-first posture.
+
+### PUBLIC-007: Commit a benchmark baseline for the vendor-inspect flow
+
+vendor-inspect step 4 needs a committed reference (the detailed
+measurement report is a private session artifact). Commit a per-scenario baseline table
+(median, machine, toolchain, date — e.g. profiling/baselines/) and
+point the prompt at it, so someone other than the original author can
+run the regression gate.
+
+### PUBLIC-008: Decide the lint-churn policy for vendored code
+
+`make lint`'s -D warnings covers vendored code (path deps escape
+cap-lints), so toolchain bumps force edits to pristine upstream files
+(rustc 1.95 already did). Either scope the hard gate to the pgdmn
+package (`cargo clippy -p pgdmn`) or record lint-only vendor commits as
+fold-into-next-pristine-swap churn in PATCHES.md. Also decide whether
+the personal content-preference rule in CLAUDE.md's Behaviors section
+should ship in a public repo, and add a DMN trademark acknowledgment
+(OMG) to the README if counsel thinks it worthwhile.
+
+## Performance
+
+### PERF-001: Zero-copy DmnModel datum layout
+
+`dmn_eval` still CBOR-decodes the whole DmnModel struct (including the
+full XML string) from the datum on every row; only the cache probe was
+made O(1) via the stored content hash. A manual varlena layout
+(`[hash][ns][name][xml]`) with borrowed `&str` views would make per-row
+cost O(1) in model size, materializing the XML only on cache miss.
+Breaks the on-disk format (acceptable pre-1.0, needs a migration note).
+
+### PERF-002: Cache compiled regexes in dsntk-feel-regex (matches BIF)
+
+`replace()`/`split()` now reuse compiled regexes via a thread-local
+cache in dsntk-feel-evaluator, but `matches()` compiles inside the
+dsntk-feel-regex crate on every call. Needs a small change in that
+crate to route through the same cache.
+
+### PERF-003: Arc payloads for Value::List / Value::String / FunctionDefinition
+
+FeelContext is Arc-backed copy-on-write, but list, string, and function
+payloads still deep-clone on every scope resolution. Requires a
+compiler-guided sweep across dsntk-model-evaluator (~43 construction and
+match sites), which was out of scope for the minimal patch set. Expected
+to matter for list-heavy and BKM-heavy models.
+
+### PERF-004: DecisionServiceEvaluator per-call read lock
+
+Two-phase construction forces an RwLock read per decision-service call;
+`Arc::new_cyclic` would remove it. Minor cost, larger refactor.
+
+### PERF-005: Shared or serialized evaluator cache across backends
+
+The evaluator cache is thread-local, so every new PostgreSQL backend
+re-parses and re-builds each model on first use (~ms per model). For
+connection-churn workloads without a pooler, consider a shared-memory
+cache or a serialized precompiled-evaluator representation.
+
+### PERF-007: Memoize literal-only unary-test values in decision tables
+
+The 0.3 opportunity hunt (N4) found that decision-table entries are
+overwhelmingly literals, yet build_in evaluates the right-hand side per
+call — one Box per comparison, two per range, a Vec per list — paid
+rules x inputs x SQL-rows. A build-time AST walk detecting
+scope-independent right-hand sides could evaluate once into a cached
+Value and match by reference. Measure-first on a wide table of
+range/list entries.
+
+### PERF-008: Cache range() bif construction
+
+range("[18..65)") re-parses its literal and rebuilds an evaluator tree
+on every call (hunt finding N6); pgdmn's expression cache only covers
+the outer expression, so feel_eval_numrange with a literal range() pays
+a full FEEL parse per row. Either extend the vendored regex-cache
+pattern to range(), or document that direct '[low..high)' syntax
+compiles once. Measure-first.
+
+### PERF-006: Upstream the vendored dsntk performance patch set
+
+The vendor/ changes are deliberately minimal and separable (one commit
+per fix, `PGDMN:` markers). Offer them upstream to dsntk; each accepted
+PR shrinks the maintained delta. The perf report's scope-vs-speed table
+is the negotiation sheet.
+
+Audited against upstream 0.3.0 (released 2026-04-29) by source-diffing
+the published crates against pristine 0.2.0: it contains none of this
+performance work and does not fix BUG-003 (the `?` input-entry bug —
+lead with that PR). It does fix the H21 latent defect (FeelNumber
+integer comparisons via FFI string round trips) that we left untouched.
+H20 and H3 must be offered as a pair (measured interaction).
+
+### CHORE-005: Evaluate re-vendoring on dsntk 0.3.0 (done)
+
+0.3.0 is mostly FEEL range/interval rework (`IntervalType` replaces
+bools in AST/Value variants), new built-ins, expanded `in` semantics,
+and Rust 2024 let-chain restyling. Port costs identified: the H13 AST
+walker must add the new variants (fails the build by design), H14/H19
+need manual rebases over heavily-restyled builders/bifs files, and the
+Docker toolchain must move from Rust 1.85 to ≥1.88 for let-chains
+(re-test the dev-profile LTO ICE while at it). Everything else rebases
+near-clean — decision_table.rs, model_definitions.rs, context.rs and
+the model-evaluator files are functionally unchanged upstream.
+
+Executed 2026-07-14: pristine 0.3.0 vendored (13 crates, recognizer
+joined the graph), full patch layer re-applied commit-by-commit with
+gates, H13 walker extended for IntervalType, H19 reworked around 0.3's
+allocation-free Name::as_str (lazy memoization retained after the eager
+variant measurably regressed), BUG-003 re-verified absent upstream and
+re-applied. Engine wins on 0.3 match the 0.2-era measurements.
+
+## Conversions
+
+### CONVERT-001: Integers above i64::MAX lose precision in feel_to_json
+
+`feel_to_json` converts a FEEL number by trying `parse::<i64>()` and falling
+back to `parse::<f64>()`. A JSON integer above `i64::MAX` (e.g. `2^63`)
+survives the trip into FEEL exactly (decimal128) but comes back as a lossy
+f64 (`9.223372036854776e18`). Either serialize such values as JSON strings,
+or use serde_json's arbitrary-precision feature. The property tests in
+`src/convert_props.rs` deliberately generate only within i64 until this is
+fixed.
+
 ## Testing
 
 ### TEST-001: Property-based tests for DMN round trips
 
 Write property-based tests (proptest) for DMN round trips: parse -> serialize -> parse should be identity. Commit the persisted `proptest-regressions/` directories.
 
-### TEST-003: Flaky timing assertion in cache test
-
-`test_cache_different_models_independent` asserts the warm (cached) evaluation is at least 2x faster than the cold one; under light load the cold path can complete in ~700µs and the assertion fails spuriously (observed 2026-07-08: cold=720µs, warm=603µs). Replace the wall-clock comparison with a deterministic signal — e.g. a cache-hit counter exposed for tests, or assert on repeated-call stability rather than a fixed speedup ratio.
-
 ### TEST-002: Automated accessibility testing for the website
 
 Integrate axe-core into the website's test suite via Playwright: launch the SSR server, run axe-core against each page, fail on any violation at the "critical" or "serious" level.
+
+### TEST-003: Flaky timing assertion in cache test (done)
+
+`test_cache_different_models_independent` asserted the warm (cached) evaluation is at least 2x faster than the cold one and failed spuriously under load (observed again 2026-07-14 after the evaluator got faster: cold=464µs, warm=367µs). Fixed by exposing a test-only `dmn_evaluator_builds()` counter (`src/cache.rs`, gated to test builds) and asserting build counts instead of wall-clock ratios.
 
 ## Documentation
 
@@ -171,13 +343,28 @@ Add a CI check that enforces this project's documentation conventions automatica
 
 ## Dependencies
 
-### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension
+### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension (done in vendor; upstream PR pending)
 
 dsntk-feel-evaluator 0.3.0 hard-depends on reqwest 0.13 with the rustls/aws-lc provider, used only by its `evaluator_java.rs` — a blocking HTTP client that calls a local Java RPC server (127.0.0.1:22023) when a model invokes an "external Java function". pgdmn never wants that inside a PostgreSQL backend, but feature unification is additive so it cannot be opted out downstream; the extension `.so` now statically links reqwest, rustls, and the AWS-LC C library, and the Docker image needs cmake to build aws-lc-sys. The fix is upstream (fits the minimal-upstreamable-patch working agreement): land a small PR on DecisionToolkit/dsntk putting `evaluator_java`/`evaluator_pmml` and the reqwest dependency behind an off-by-default cargo feature (e.g. `external-functions`) that returns an explained null when disabled; 0.2's `default-features = false` reqwest with a ring provider is the fallback shape. pgdmn then consumes dsntk-feel-evaluator with the feature off, removing the HTTP/TLS stack from the backend entirely and demoting the `src/guard.rs` boundary rejection from load-bearing to belt-and-suspenders (the guard is inherently partial for DMN models — see the module docs in `src/guard.rs`). Once merged and adopted, remove cmake from the Dockerfile (comment there points here). No local `[patch]`/fork in the interim.
 
-### DEPS-002: Upstream fix for non-finite FeelNumber Display panic
+Resolved in the vendored copy (the vendoring decision superseded the
+no-fork constraint): `vendor/dsntk-feel-evaluator` now has an
+off-by-default `external-functions` cargo feature gating the evaluators
+and the optional reqwest dependency; disabled builds return an explained
+null for external invocations. reqwest/rustls/aws-lc/hyper/quinn are
+unreachable in the extension graph (verified with cargo tree) and cmake
+is out of the Dockerfile. The feature gate is the shape to offer
+upstream; `src/guard.rs` remains as belt-and-suspenders and its FEEL
+literal-expression gap is now closed at the build level.
+
+### DEPS-002: Upstream fix for non-finite FeelNumber Display panic (done in vendor; upstream PR pending)
 
 dsntk-feel-number's `Display` unwraps on the assumption that `bid128_to_string` output contains `'E'`; ±Inf/NaN — reachable because `Mul`/`Add` results are not finiteness-guarded, unlike `pow`/`from_str` — panic instead of printing. pgdmn guards its direct number conversions (BUG-004), but a non-finite number inside a `Value::Range` endpoint still panics via the Display catch-all in `feel_to_json`, and every other dsntk consumer stays exposed. Propose upstream either guarding arithmetic like `pow` does (overflow → FEEL null) or making `Display` total (print `+Inf`/`-Inf`/`NaN`). Minimal upstreamable patch per the working agreement.
+
+Fixed in the vendored copy: `Display` is now total (non-finite values
+print the Intel library's textual form instead of panicking on a missing
+exponent). pgdmn's BUG-004 SQL-error guards stay in place — the SQL
+boundary still rejects non-finite results with a clear error.
 
 ## Chores
 

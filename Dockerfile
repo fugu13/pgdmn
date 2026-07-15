@@ -11,9 +11,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libclang-dev \
     clang \
     pkg-config \
-    # cmake builds aws-lc-sys, pulled in by dsntk-feel-evaluator 0.3's reqwest/rustls
-    # dependency; removable if upstream feature-gates it — see DEPS-001 in TODO.md
-    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # pgrx tests must run as a non-root user (initdb refuses root). Create that
@@ -37,8 +34,10 @@ RUN rustup component add clippy rustfmt
 # ~/.pgrx), so it sits above the COPY to stay cached across dependency bumps
 RUN cargo pgrx init --pg17=/usr/lib/postgresql/17/bin/pg_config
 
-# Copy manifests first for layer caching
+# Copy manifests first for layer caching; vendor/ holds the patched dsntk
+# sources referenced by [patch.crates-io], needed for dependency resolution
 COPY --chown=pgdmn:pgdmn Cargo.toml Cargo.lock pgdmn.control ./
+COPY --chown=pgdmn:pgdmn vendor ./vendor
 
 # Create stub lib.rs so cargo fetch works
 RUN mkdir -p src && echo '::pgrx::pg_module_magic!();' > src/lib.rs

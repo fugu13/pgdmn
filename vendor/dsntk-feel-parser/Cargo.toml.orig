@@ -1,0 +1,27 @@
+[package]
+name = "dsntk-feel-parser"
+version = { workspace = true }
+authors = { workspace = true }
+description = "ÐecisionToolkit | FEEL parser"
+categories = ["development-tools", "command-line-utilities", "finance", "parsing"]
+keywords = ["dmn", "decision", "toolkit", "parser"]
+documentation = "https://docs.rs/dsntk-feel-parser"
+repository = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+
+[features]
+parsing-tables = []
+
+[dependencies]
+antex = { workspace = true }
+dsntk-common = { workspace = true }
+dsntk-feel = { workspace = true }
+dsntk-macros = { workspace = true }
+
+[dev-dependencies]
+difference = { workspace = true }
+
+[build-dependencies]
+dsntk-feel-grammar = { workspace = true }
