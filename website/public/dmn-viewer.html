@@ -39,12 +39,23 @@
       href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-font/css/dmn.css"
     />
     <style>
+      html,
+      body {
+        height: 100%;
+      }
+      /* Header takes what it needs; the canvas fills the rest of the viewport
+         so a DRD graph has real vertical space to scale into. The page itself
+         never scrolls — any overflow is the canvas's own. */
       body {
         margin: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
         color: #1a1a2e;
       }
       header {
+        flex: none;
         display: flex;
         flex-wrap: wrap;
         align-items: baseline;
@@ -64,11 +75,13 @@
       header a {
         color: #336791;
       }
-      /* Let dmn-js size the canvas to its content: a decision table renders at
-         its natural height, so the page scrolls only if that is taller than the
-         window — no forced full-height canvas leaving empty space below. */
+      /* Fills the viewport below the header. A decision table renders at its
+         own content height near the top; a DRD is scaled to fill this space
+         (see the import handler). Overflow is the canvas's, not the page's. */
       #canvas {
-        min-height: 60vh;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
       }
       .msg {
         padding: 2rem;
@@ -113,12 +126,19 @@
             return viewer.importXML(xml);
           })
           .then(function () {
-            // If the open view is a diagram, fit it to the viewport.
-            var active = viewer.getActiveViewer();
-            if (active && typeof active.get === "function") {
-              try {
-                active.get("canvas").zoom("fit-viewport", "auto");
-              } catch (e) {}
+            // A decision table sizes to its own content; a DRD graph should
+            // fill the canvas, so scale it once the canvas has its final size.
+            var view =
+              typeof viewer.getActiveView === "function"
+                ? viewer.getActiveView()
+                : null;
+            if (view && view.type === "drd") {
+              var active = viewer.getActiveViewer();
+              requestAnimationFrame(function () {
+                try {
+                  active.get("canvas").zoom("fit-viewport", "auto");
+                } catch (e) {}
+              });
             }
           })
           .catch(function (err) {
