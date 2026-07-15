@@ -2024,10 +2024,10 @@ fn cached_regex(pattern: &str) -> Option<Regex> {
       return Some(regex.clone());
     }
     let regex = Regex::new(pattern).ok()?;
-    if cache.len() >= REGEX_CACHE_CAPACITY {
-      if let Some(oldest) = cache.iter().min_by_key(|(_, (last_used, _))| *last_used).map(|(key, _)| key.clone()) {
-        cache.remove(&oldest);
-      }
+    if cache.len() >= REGEX_CACHE_CAPACITY
+      && let Some(oldest) = cache.iter().min_by_key(|(_, (last_used, _))| *last_used).map(|(key, _)| key.clone())
+    {
+      cache.remove(&oldest);
     }
     cache.insert(pattern.to_string(), (*stamp, regex.clone()));
     Some(regex)

@@ -2023,13 +2023,11 @@ pub fn eval_ternary_equality(lhs: &Value, rhs: &Value) -> Option<bool> {
         if ls.keys().len() == rs.keys().len() {
           for (key1, value1) in ls.deref() {
             if let Some(value2) = rs.get_entry(key1) {
-              if let Some(equal) = eval_ternary_equality(value1, value2) {
-                if !equal {
-                  return Some(false); // values in entries are NOT EQUAL
-                }
-              } else {
-                // values in entries can not be compared
-                return None;
+              // PGDMN: `?` form of the same logic (clippy question_mark on 1.95);
+              // None still propagates when entries cannot be compared.
+              let equal = eval_ternary_equality(value1, value2)?;
+              if !equal {
+                return Some(false); // values in entries are NOT EQUAL
               }
             } else {
               // there is no such key in the right-side context

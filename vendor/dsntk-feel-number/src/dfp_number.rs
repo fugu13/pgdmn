@@ -55,7 +55,7 @@ fn bid128_to_str(x: BID128, buf: &mut [u8; 64]) -> &str {
 /// Appends `n` zero digits to the string.
 // PGDMN: H9
 fn push_zeros(s: &mut String, n: usize) {
-  s.extend(std::iter::repeat('0').take(n));
+  s.extend(std::iter::repeat_n('0', n));
 }
 
 /// FEEL number.

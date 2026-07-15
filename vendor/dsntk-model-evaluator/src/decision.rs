@@ -233,10 +233,10 @@ fn build_decision_evaluator(def_definitions: &DefDefinitions, def_decision: &Def
       // former `required_input_ctx.zip(&requirements_ctx)`), instead of building a
       // separate context and deep-cloning every requirement value into it.
       required_input_data_references.iter().for_each(|input_data_id| {
-        if let Some((name, value)) = input_data_evaluator.evaluate(input_data_id, &input_data, item_definition_evaluator) {
-          if !requirements_ctx.contains_entry(&name) {
-            requirements_ctx.set_entry(&name, value);
-          }
+        if let Some((name, value)) = input_data_evaluator.evaluate(input_data_id, &input_data, item_definition_evaluator)
+          && !requirements_ctx.contains_entry(&name)
+        {
+          requirements_ctx.set_entry(&name, value);
         }
       });
 

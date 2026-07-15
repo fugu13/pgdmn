@@ -70,8 +70,10 @@ pub fn try_feel_to_json(value: &Value) -> Result<serde_json::Value, String> {
         Value::Number(n) => feel_number_to_json(n)?,
         Value::String(s) => serde_json::Value::String(s.clone()),
         Value::List(items) => {
-            let arr: Vec<serde_json::Value> =
-                items.iter().map(try_feel_to_json).collect::<Result<_, _>>()?;
+            let arr: Vec<serde_json::Value> = items
+                .iter()
+                .map(try_feel_to_json)
+                .collect::<Result<_, _>>()?;
             serde_json::Value::Array(arr)
         }
         Value::Context(ctx) => {
@@ -103,10 +105,10 @@ fn feel_number_to_json(n: &FeelNumber) -> Result<serde_json::Value, String> {
     if !feel_number_is_finite(n) {
         return Err("FEEL number result is not finite and cannot be represented".to_string());
     }
-    if n.is_integer() {
-        if let Ok(i) = i64::try_from(n) {
-            return Ok(serde_json::Value::Number(serde_json::Number::from(i)));
-        }
+    if n.is_integer()
+        && let Ok(i) = i64::try_from(n)
+    {
+        return Ok(serde_json::Value::Number(serde_json::Number::from(i)));
     }
     let s = n.to_string();
     Ok(if let Ok(f) = s.parse::<f64>() {
