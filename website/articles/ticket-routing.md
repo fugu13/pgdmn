@@ -6,7 +6,9 @@ files: ticket-routing.dmn, tickets.csv
 example: routing
 ---
 
-A decision model is a value. Store it in a column, wrap it in a view, and triage stops being something your application does.
+Support triage rules tend to live in one person's head or scattered through application code, so changing how tickets are assigned means shipping a release — and nobody outside engineering can read the current policy, let alone propose a change to it.
+
+This example puts the routing rules in the database as a DMN model behind a view, so every ticket is classified by the policy in force and changing that policy is an update to one row rather than a deploy. It covers first-hit routing over two string inputs and the queries that then fall out of a view; escalation timers, round-robin assignment, and load balancing across agents are out of scope.
 
 ## The rules
 
@@ -28,7 +30,7 @@ Read it as a policy and it is legible to someone who does not write SQL: wake so
 
 ## Set up
 
-Load the model, [`ticket-routing.dmn`](/examples/ticket-routing.dmn), and the tickets from [`tickets.csv`](/examples/tickets.csv). Run this from the directory the two files are in.
+Load the model, [`ticket-routing.dmn`](/examples/ticket-routing.dmn), and the tickets from [`tickets.csv`](/examples/tickets.csv). Run this from the directory the two files are in; you will need pgdmn installed first (see [Install](/docs/#install)).
 
 ```sql
 \set routing `cat ticket-routing.dmn`

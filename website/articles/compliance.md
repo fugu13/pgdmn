@@ -6,7 +6,9 @@ files: compliance.dmn, customers.csv
 example: compliance
 ---
 
-Every row of customer data carries an obligation. Where it may live, how long you may keep it, whether it must be encrypted. Usually that obligation lives in a PDF, and the code that enforces it lives somewhere else, and the two agree for about a quarter.
+What you are obliged to do with a row of customer data — where it may live, how long you may keep it, whether it must be encrypted — is usually written in a document nobody has opened since the audit, while the code that actually enforces it lives somewhere else and drifts away from it over time.
+
+This example expresses those data-handling obligations as a DMN decision table and computes the obligation for every customer as a column of a view, so the enforced rule and the written rule are the same artifact. It covers region and data-class handling under a first-hit policy; it is a worked illustration, not a complete regulatory model, and the specific rules here are invented for the example.
 
 ## The rules
 
@@ -27,7 +29,7 @@ That ordering is the policy. Move the special-category rule below the EU rule an
 
 ## Set up
 
-Load the model, [`compliance.dmn`](/examples/compliance.dmn), and the customers from [`customers.csv`](/examples/customers.csv). Run this from the directory the two files are in.
+Load the model, [`compliance.dmn`](/examples/compliance.dmn), and the customers from [`customers.csv`](/examples/customers.csv). Run this from the directory the two files are in; you will need pgdmn installed first (see [Install](/docs/#install)).
 
 ```sql
 \set compliance `cat compliance.dmn`

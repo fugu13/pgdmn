@@ -6,7 +6,9 @@ files: order-pricing.dmn, order-pricing-promo.dmn, orders.csv
 example: pricing
 ---
 
-Ask for the total and the tax computes itself. Then keep two pricing policies in the same table and choose between them by name.
+Pricing rules change — a promotion starts, a tax treatment moves — and the change usually arrives as a code deploy, with the old and new prices awkward to reconcile and easy to apply inconsistently across the queries that happen to price an order.
+
+This example prices orders with a DMN model whose decisions chain one on another, and keeps two pricing policies side by side under the same output name so a single unchanged query can serve either. It covers swapping the live policy as a data change and reading money back to the penny you intend; discounting beyond a flat percentage, and rounding conventions per line versus per invoice, are only touched on, not built.
 
 ## A model is a graph, not a list
 
@@ -23,7 +25,7 @@ You never tell pgdmn about that dependency. You ask for `Total Price`, and it wo
 
 ## Set up
 
-Load both models — [`order-pricing.dmn`](/examples/order-pricing.dmn) and [`order-pricing-promo.dmn`](/examples/order-pricing-promo.dmn) — into the `models` table under different names, and load the orders from [`orders.csv`](/examples/orders.csv). Run this from the directory the three files are in.
+Load both models — [`order-pricing.dmn`](/examples/order-pricing.dmn) and [`order-pricing-promo.dmn`](/examples/order-pricing-promo.dmn) — into the `models` table under different names, and load the orders from [`orders.csv`](/examples/orders.csv). Run this from the directory the three files are in; you will need pgdmn installed first (see [Install](/docs/#install)).
 
 ```sql
 \set standard `cat order-pricing.dmn`

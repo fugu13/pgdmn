@@ -6,7 +6,9 @@ files: loan-eligibility.dmn, applicants.csv
 example: loan
 ---
 
-Four rules, eight applicants, and three of them show you why the order of the rules is part of the decision.
+A lender has to turn a handful of applicant facts — age, income, whether there has been a prior bankruptcy — into a single approve-or-decline, and the rules that do it are exactly the sort that read badly and break quietly when they live in application code. The policy also changes, and when it does the people who own it need to see what changed.
+
+This example encodes that eligibility policy as a DMN decision table and evaluates it across a table of applicants in SQL. It is deliberately small — one decision, a first-hit table over three inputs — to show how the rules read, how their order decides the outcome, and how the answer behaves like any other column. Model authoring tools and multi-version compatibility are out of scope; this is the shape of the thing, running.
 
 ## The rules
 
@@ -27,7 +29,7 @@ The hit policy is **first**, which means the rules are tried top to bottom and t
 
 ## Set up
 
-Load the model, [`loan-eligibility.dmn`](/examples/loan-eligibility.dmn), into a table, and load the applicants from [`applicants.csv`](/examples/applicants.csv) alongside it. The model is an ordinary value, so it lives in a column like anything else. Run this from the directory the two files are in.
+Load the model, [`loan-eligibility.dmn`](/examples/loan-eligibility.dmn), into a table, and load the applicants from [`applicants.csv`](/examples/applicants.csv) alongside it. The model is an ordinary value, so it lives in a column like anything else. Run this from the directory the two files are in; you will need pgdmn installed first (see [Install](/docs/#install)).
 
 ```sql
 -- The model, read from the downloaded file into a psql variable.

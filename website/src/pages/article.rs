@@ -3,6 +3,7 @@ use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
 use crate::articles;
+use crate::components::download::{Download, FileKind};
 use crate::pages::not_found::NotFoundPage;
 
 /// One article, rendered from its markdown file.
@@ -31,22 +32,13 @@ pub fn ArticlePage() -> impl IntoView {
             <time datetime=article.date.clone()>{article.date.clone()}</time>
         </p>
 
-        <p>
-            "Everything to run this is below. You need pgdmn installed (see "
-            <a href="/docs/#install">"Install"</a>
-            "); the files it uses are here."
-        </p>
-
-        <ul class="file-links">
+        <ul class="download-list">
             {article
                 .files
                 .iter()
                 .map(|file| {
-                    let href = format!("/examples/{file}");
                     view! {
-                        <li>
-                            <a href=href download><code>{file.clone()}</code></a>
-                        </li>
+                        <Download file=file.clone() kind=FileKind::from_filename(file)/>
                     }
                 })
                 .collect_view()}
