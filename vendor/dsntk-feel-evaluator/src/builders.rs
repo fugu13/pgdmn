@@ -625,9 +625,12 @@ impl<'b> EvaluatorBuilder<'b> {
   fn build_filter(&mut self, lhs: &'b AstNode, rhs: &'b AstNode) -> Evaluator {
     let lhe = self.build(lhs);
     let rhe = self.build(rhs);
+    // PGDMN: H20 — classify the filter expression at build time, so filters that
+    // can never be a numeric index skip the per-call numeric-index probe evaluation.
+    let may_yield_number = filter_may_yield_number(rhs);
     Box::new(move |scope: &FeelScope| {
       let filter_expression_evaluator = FilterExpressionEvaluator::new();
-      filter_expression_evaluator.evaluate(scope, lhe(scope), &rhe)
+      filter_expression_evaluator.evaluate_with_hint(scope, lhe(scope), &rhe, may_yield_number)
     })
   }
 
@@ -639,6 +642,9 @@ impl<'b> EvaluatorBuilder<'b> {
       Variable((Name, Name)),
     }
     let rhe = self.build(rhs);
+    // PGDMN: H13 — bind `partial` only when the body may reference it; binding it
+    // copies the accumulated results into the scope on every iteration (quadratic).
+    let bind_partial = ast_references_name(rhs, &"partial".into());
     let mut evaluators = vec![];
     let mut binding_variables = HashSet::new();
     if let AstNode::IterationContexts(items) = lhs {
@@ -678,6 +684,7 @@ impl<'b> EvaluatorBuilder<'b> {
     }
     Box::new(move |scope: &FeelScope| {
       let mut for_expression_evaluator = ForExpressionEvaluator::new();
+      for_expression_evaluator.set_bind_partial(bind_partial); // PGDMN: H13
       for iterator_type in &evaluators {
         match iterator_type {
           IteratorType::Interval((name, interval_start_evaluator, interval_end_evaluator)) => {
@@ -890,7 +897,8 @@ impl<'b> EvaluatorBuilder<'b> {
           if external {
             eval_external_function_with_positional_parameters(scope, &args, &params, &body, result_type)
           } else {
-            eval_function_with_positional_parameters(scope, &args, &params, &body, closure_ctx, result_type)
+            // PGDMN: H6 — pass arguments by value to avoid cloning during coercion
+            eval_function_with_positional_parameters(scope, args, &params, &body, closure_ctx, result_type)
           }
         }
         _ => value_null!("expected built-in function name or function definition, actual is {}", function),
@@ -944,7 +952,8 @@ impl<'b> EvaluatorBuilder<'b> {
           if external {
             eval_external_function_with_named_parameters(scope, &args, &params, &body, result_type)
           } else {
-            eval_function_with_named_parameters(scope, &args, &params, &body, closure_ctx, result_type)
+            // PGDMN: H6 — pass arguments by value to avoid cloning during coercion
+            eval_function_with_named_parameters(scope, args, &params, &body, closure_ctx, result_type)
           }
         }
         _ => value_null!("expected built-in function name or function definition, actual is {}", function),
@@ -1395,11 +1404,16 @@ impl<'b> EvaluatorBuilder<'b> {
   }
 
   fn build_name(&mut self, name: Name) -> Evaluator {
+    // PGDMN: H19 — resolve the built-in function fallback once at build time,
+    // so repeated calls do not allocate a String and match ~90 names again
+    // (Bif::from_str also builds an error value for every non-BIF name). The
+    // scope lookup stays first, so user definitions still shadow BIF names.
+    let bif = Bif::from_str(name.as_str()).ok();
     Box::new(move |scope: &FeelScope| {
       if let Some(value) = scope.get_value(&name) {
         value
-      } else if let Ok(bif) = Bif::from_str(&name.to_string()) {
-        Value::BuiltInFunction(bif)
+      } else if let Some(bif) = &bif {
+        Value::BuiltInFunction(bif.clone())
       } else {
         value_null!("context has no value for key '{}'", name)
       }
@@ -2621,9 +2635,10 @@ fn eval_in_unary_greater_or_equal(left: &Value, right: &Value) -> Value {
 }
 
 /// Evaluates function definition with positional parameters.
+// PGDMN: H6 — takes arguments by value, so coercion never clones conformant values.
 fn eval_function_with_positional_parameters(
   scope: &FeelScope,
-  args: &[Value],
+  args: Vec<Value>,
   params: &[(Name, FeelType)],
   body: &FunctionBody,
   closure_ctx: FeelContext,
@@ -2633,29 +2648,30 @@ fn eval_function_with_positional_parameters(
   if args.len() != params.len() {
     return value_null!("invalid number of arguments");
   }
-  for (argument_value, (parameter_name, parameter_type)) in args.iter().zip(params) {
-    params_ctx.set_entry(parameter_name, argument_value.coerced(parameter_type))
+  for (argument_value, (parameter_name, parameter_type)) in args.into_iter().zip(params) {
+    params_ctx.set_entry(parameter_name, argument_value.coerced_owned(parameter_type))
   }
   eval_function_definition(scope, params_ctx, body, closure_ctx, result_type)
 }
 
 /// Evaluates function definition with named parameters.
+// PGDMN: H6 — takes arguments by value, so coercion never clones conformant values.
 fn eval_function_with_named_parameters(
   scope: &FeelScope,
-  args: &Value,
+  args: Value,
   params: &[(Name, FeelType)],
   body: &FunctionBody,
   closure_ctx: FeelContext,
   result_type: FeelType,
 ) -> Value {
   let mut params_ctx = FeelContext::default();
-  if let Value::NamedParameters(argument_map) = args {
+  if let Value::NamedParameters(mut argument_map) = args {
     if argument_map.len() != params.len() {
       return value_null!("invalid number of arguments");
     }
     for (parameter_name, parameter_type) in params {
-      if let Some((argument, _)) = argument_map.get(parameter_name) {
-        params_ctx.set_entry(parameter_name, argument.coerced(parameter_type))
+      if let Some((argument, _)) = argument_map.remove(parameter_name) {
+        params_ctx.set_entry(parameter_name, argument.coerced_owned(parameter_type))
       } else {
         return value_null!("parameter with name {} not found in arguments", parameter_name);
       }
@@ -2687,7 +2703,8 @@ fn eval_function_definition(scope: &FeelScope, params_ctx: FeelContext, body: &F
   }
   scope.pop(); // params_ctx
   scope.pop(); // closure_ctx
-  result.coerced(&result_type)
+  // PGDMN: H6 — owned coercion, conformant results are returned without cloning
+  result.coerced_owned(&result_type)
 }
 
 /// Evaluates external function definition with positional parameters.
@@ -2723,7 +2740,113 @@ fn eval_external_function_definition(scope: &FeelScope, arguments: &[Value], bod
     Value::ExternalPmmlFunction(document, model_name) => evaluate_external_pmml_function(document, model_name, arguments),
     other => value_null!("expected JAVA or PMML mapping, actual value is {}", other),
   };
-  result.coerced(&result_type)
+  // PGDMN: H6 — owned coercion, conformant results are returned without cloning
+  result.coerced_owned(&result_type)
+}
+
+/// Returns `true` when the AST may reference the specified name.
+/// Conservative: qualified-name segments and path tails count as references.
+// PGDMN: H13 — detects whether a for-expression body references `partial`.
+// Also used by the decision-table evaluator to classify `?`-referencing
+// input entries (exported in lib.rs). Exhaustive match, so a new AST node
+// variant fails the build instead of being silently classified.
+pub fn ast_references_name(node: &AstNode, name: &Name) -> bool {
+  match node {
+    AstNode::Name(n) | AstNode::QualifiedNameSegment(n) => n == name,
+    AstNode::At(_)
+    | AstNode::Boolean(_)
+    | AstNode::ContextEntryKey(_)
+    | AstNode::ContextTypeEntryKey(_)
+    | AstNode::FeelType(_)
+    | AstNode::Irrelevant
+    | AstNode::Null
+    | AstNode::Numeric(_, _, _, _)
+    | AstNode::ParameterName(_)
+    | AstNode::String(_) => false,
+    AstNode::EvaluatedExpression(lhs)
+    | AstNode::FunctionBody(lhs, _)
+    | AstNode::IntervalEnd(lhs, _)
+    | AstNode::IntervalStart(lhs, _)
+    | AstNode::ListType(lhs)
+    | AstNode::Neg(lhs)
+    | AstNode::RangeType(lhs)
+    | AstNode::Satisfies(lhs)
+    | AstNode::UnaryEq(lhs)
+    | AstNode::UnaryGe(lhs)
+    | AstNode::UnaryGt(lhs)
+    | AstNode::UnaryLe(lhs)
+    | AstNode::UnaryLt(lhs)
+    | AstNode::UnaryNe(lhs) => ast_references_name(lhs, name),
+    AstNode::Add(lhs, rhs)
+    | AstNode::And(lhs, rhs)
+    | AstNode::ContextEntry(lhs, rhs)
+    | AstNode::ContextTypeEntry(lhs, rhs)
+    | AstNode::Div(lhs, rhs)
+    | AstNode::Eq(lhs, rhs)
+    | AstNode::Every(lhs, rhs)
+    | AstNode::Exp(lhs, rhs)
+    | AstNode::Filter(lhs, rhs)
+    | AstNode::For(lhs, rhs)
+    | AstNode::FormalParameter(lhs, rhs)
+    | AstNode::FunctionDefinition(lhs, rhs)
+    | AstNode::FunctionInvocation(lhs, rhs)
+    | AstNode::FunctionType(lhs, rhs)
+    | AstNode::Ge(lhs, rhs)
+    | AstNode::Gt(lhs, rhs)
+    | AstNode::In(lhs, rhs)
+    | AstNode::InstanceOf(lhs, rhs)
+    | AstNode::IterationContextSingle(lhs, rhs)
+    | AstNode::Le(lhs, rhs)
+    | AstNode::Lt(lhs, rhs)
+    | AstNode::Mul(lhs, rhs)
+    | AstNode::NamedParameter(lhs, rhs)
+    | AstNode::Nq(lhs, rhs)
+    | AstNode::Or(lhs, rhs)
+    | AstNode::Out(lhs, rhs)
+    | AstNode::Path(lhs, rhs)
+    | AstNode::QuantifiedContext(lhs, rhs)
+    | AstNode::Range(lhs, rhs)
+    | AstNode::Some(lhs, rhs)
+    | AstNode::Sub(lhs, rhs) => ast_references_name(lhs, name) || ast_references_name(rhs, name),
+    AstNode::Between(lhs, mhs, rhs) | AstNode::If(lhs, mhs, rhs) | AstNode::IterationContextInterval(lhs, mhs, rhs) => {
+      ast_references_name(lhs, name) || ast_references_name(mhs, name) || ast_references_name(rhs, name)
+    }
+    AstNode::CommaList(items)
+    | AstNode::Context(items)
+    | AstNode::ContextType(items)
+    | AstNode::ExpressionList(items)
+    | AstNode::FormalParameters(items)
+    | AstNode::IterationContexts(items)
+    | AstNode::List(items)
+    | AstNode::NamedParameters(items)
+    | AstNode::NegatedList(items)
+    | AstNode::ParameterTypes(items)
+    | AstNode::PositionalParameters(items)
+    | AstNode::QualifiedName(items)
+    | AstNode::QuantifiedContexts(items) => items.iter().any(|item| ast_references_name(item, name)),
+  }
+}
+
+/// Returns `true` when a filter expression may evaluate to a number (numeric index).
+/// Conservative: comparisons, logical operators and boolean literals always yield
+/// boolean or null, every other node is assumed to possibly yield a number.
+// PGDMN: H20 — build-time classification used to skip the numeric-index probe.
+fn filter_may_yield_number(node: &AstNode) -> bool {
+  !matches!(
+    node,
+    AstNode::And(_, _)
+      | AstNode::Between(_, _, _)
+      | AstNode::Boolean(_)
+      | AstNode::Eq(_, _)
+      | AstNode::Ge(_, _)
+      | AstNode::Gt(_, _)
+      | AstNode::In(_, _)
+      | AstNode::InstanceOf(_, _)
+      | AstNode::Le(_, _)
+      | AstNode::Lt(_, _)
+      | AstNode::Nq(_, _)
+      | AstNode::Or(_, _)
+  )
 }
 
 fn build_err_msg(err_msg: String) -> Evaluator {
