@@ -14,14 +14,14 @@ This example prices orders with a DMN model whose decisions chain one on another
 
 The standard model holds two decisions. `Tax Amount` multiplies the base price by the tax rate. `Total Price` adds that tax to the base price — so it depends on the other decision, not merely on the inputs.
 
+You never tell pgdmn about that dependency. You ask for `Total Price`, and it works backwards: to answer that, it needs `Tax Amount`; to answer that, it needs the two inputs you supplied. The order of evaluation falls out of the model.
+
 Table: The standard pricing model
 
 | Decision | Needs | Expression |
 | --- | --- | --- |
 | Tax Amount | Base Price, Tax Rate | `Base Price * Tax Rate` |
 | Total Price | Base Price, Tax Amount | `Base Price + Tax Amount` |
-
-You never tell pgdmn about that dependency. You ask for `Total Price`, and it works backwards: to answer that, it needs `Tax Amount`; to answer that, it needs the two inputs you supplied. The order of evaluation falls out of the model.
 
 Both models are standard DMN files — open them in dmn-js, or any DMN tool: [standard →](/dmn-viewer.html?model=order-pricing.dmn), [promotional →](/dmn-viewer.html?model=order-pricing-promo.dmn).
 

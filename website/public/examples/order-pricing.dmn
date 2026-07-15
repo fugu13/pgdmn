@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
              id="order_pricing"
              name="OrderPricing"
              namespace="https://pgdmn.com/examples/pricing">
@@ -11,10 +14,10 @@
     </inputData>
     <decision id="TaxAmount" name="Tax Amount">
         <variable name="Tax Amount" typeRef="number"/>
-        <informationRequirement>
+        <informationRequirement id="ir_TaxAmount_BasePrice">
             <requiredInput href="#BasePrice"/>
         </informationRequirement>
-        <informationRequirement>
+        <informationRequirement id="ir_TaxAmount_TaxRate">
             <requiredInput href="#TaxRate"/>
         </informationRequirement>
         <literalExpression>
@@ -23,14 +26,46 @@
     </decision>
     <decision id="TotalPrice" name="Total Price">
         <variable name="Total Price" typeRef="number"/>
-        <informationRequirement>
+        <informationRequirement id="ir_TotalPrice_BasePrice">
             <requiredInput href="#BasePrice"/>
         </informationRequirement>
-        <informationRequirement>
+        <informationRequirement id="ir_TotalPrice_TaxAmount">
             <requiredDecision href="#TaxAmount"/>
         </informationRequirement>
         <literalExpression>
             <text>Base Price + Tax Amount</text>
         </literalExpression>
     </decision>
+    <dmndi:DMNDI>
+        <dmndi:DMNDiagram id="DRD">
+            <dmndi:DMNShape id="shape_TotalPrice" dmnElementRef="TotalPrice">
+                <dc:Bounds x="200" y="80" width="180" height="80"/>
+            </dmndi:DMNShape>
+            <dmndi:DMNShape id="shape_TaxAmount" dmnElementRef="TaxAmount">
+                <dc:Bounds x="440" y="280" width="180" height="80"/>
+            </dmndi:DMNShape>
+            <dmndi:DMNShape id="shape_BasePrice" dmnElementRef="BasePrice">
+                <dc:Bounds x="120" y="480" width="180" height="70"/>
+            </dmndi:DMNShape>
+            <dmndi:DMNShape id="shape_TaxRate" dmnElementRef="TaxRate">
+                <dc:Bounds x="480" y="480" width="180" height="70"/>
+            </dmndi:DMNShape>
+            <dmndi:DMNEdge id="edge_TaxAmount_BasePrice" dmnElementRef="ir_TaxAmount_BasePrice">
+                <di:waypoint x="210" y="480"/>
+                <di:waypoint x="490" y="360"/>
+            </dmndi:DMNEdge>
+            <dmndi:DMNEdge id="edge_TaxAmount_TaxRate" dmnElementRef="ir_TaxAmount_TaxRate">
+                <di:waypoint x="570" y="480"/>
+                <di:waypoint x="570" y="360"/>
+            </dmndi:DMNEdge>
+            <dmndi:DMNEdge id="edge_TotalPrice_BasePrice" dmnElementRef="ir_TotalPrice_BasePrice">
+                <di:waypoint x="210" y="480"/>
+                <di:waypoint x="260" y="160"/>
+            </dmndi:DMNEdge>
+            <dmndi:DMNEdge id="edge_TotalPrice_TaxAmount" dmnElementRef="ir_TotalPrice_TaxAmount">
+                <di:waypoint x="530" y="280"/>
+                <di:waypoint x="350" y="160"/>
+            </dmndi:DMNEdge>
+        </dmndi:DMNDiagram>
+    </dmndi:DMNDI>
 </definitions>
