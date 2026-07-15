@@ -208,8 +208,7 @@ SELECT feel_eval('1 + 2');
                 of invocable names."
             </Fun>
             <Fun signature="dmn_xml(model dmnmodel) RETURNS text">
-                "The original XML source, byte for byte. What you loaded is what you get back
-                — which is what makes a stored model auditable."
+                "The original XML source, byte for byte."
             </Fun>
             <Fun signature="dmn_name(model dmnmodel) RETURNS text">"The model's name."</Fun>
             <Fun signature="dmn_namespace(model dmnmodel) RETURNS text">"The model's namespace."</Fun>
