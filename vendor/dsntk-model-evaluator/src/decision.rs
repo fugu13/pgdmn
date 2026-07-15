@@ -9,6 +9,7 @@ use dsntk_common::Result;
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
 use dsntk_feel::{FeelScope, Name, value_null};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -153,6 +154,10 @@ fn build_decision_evaluator(def_definitions: &DefDefinitions, def_decision: &Def
     }
   }
 
+  // PGDMN (H5): the input data context is modified during evaluation only when
+  // imported required decisions are present; this is known at build time.
+  let has_imported_decisions = required_decision_references.iter().any(|(import_name, _)| import_name.is_some());
+
   // build decision evaluator closure
   let decision_evaluator = Box::new(
     move |global_context: &FeelContext, input_data_ctx: &FeelContext, model_evaluator: &ModelEvaluator, output_data_ctx: &mut FeelContext| {
@@ -165,8 +170,13 @@ fn build_decision_evaluator(def_definitions: &DefDefinitions, def_decision: &Def
       // prepare context containing values from required knowledge, required decision services and required decisions
       let mut requirements_ctx: FeelContext = Default::default();
 
-      // make a locally mutable copy of the input data
-      let mut input_data = input_data_ctx.clone();
+      // PGDMN (H5): clone the input data only when imported required decisions
+      // may modify it below; otherwise borrow it for the whole evaluation
+      let mut input_data = if has_imported_decisions {
+        Cow::Owned(input_data_ctx.clone())
+      } else {
+        Cow::Borrowed(input_data_ctx)
+      };
 
       // evaluate required knowledge given as value from business knowledge models
       required_knowledge_references.iter().for_each(|(import_name, def_key)| {
@@ -193,12 +203,12 @@ fn build_decision_evaluator(def_definitions: &DefDefinitions, def_decision: &Def
       // evaluate required decisions given as values from decisions
       required_decision_references.iter().for_each(|(import_name, def_key)| {
         if let Some(import_name_parent) = import_name.clone() {
-          let mut import_input_data = input_data.clone();
+          let mut import_input_data = input_data.as_ref().clone();
           if import_input_data.is_context(&import_name_parent) {
             if let Some(Value::Context(ctx)) = import_input_data.remove_entry(&import_name_parent) {
               import_input_data.zip(&ctx);
             }
-            input_data.remove_entry(&import_name_parent);
+            input_data.to_mut().remove_entry(&import_name_parent);
           }
           if let Some(name) = decision_evaluator.evaluate(def_key, global_context, &import_input_data, model_evaluator, &mut requirements_ctx) {
             requirements_ctx.move_entry(name, import_name_parent);
@@ -211,19 +221,21 @@ fn build_decision_evaluator(def_definitions: &DefDefinitions, def_decision: &Def
       // values from required knowledge may be overridden by input data
       requirements_ctx.overwrite(&input_data);
 
-      // prepare context containing values from required input data
-      let mut required_input_ctx: FeelContext = Default::default();
-      let input_data = Value::Context(input_data);
+      // PGDMN (H5): bind required input data directly into the requirements context
+      // (names already provided by requirements take precedence, exactly like the
+      // former `required_input_ctx.zip(&requirements_ctx)`), instead of building a
+      // separate context and deep-cloning every requirement value into it.
       required_input_data_references.iter().for_each(|input_data_id| {
         if let Some((name, value)) = input_data_evaluator.evaluate(input_data_id, &input_data, item_definition_evaluator) {
-          required_input_ctx.set_entry(&name, value);
+          if !requirements_ctx.contains_entry(&name) {
+            requirements_ctx.set_entry(&name, value);
+          }
         }
       });
-      required_input_ctx.zip(&requirements_ctx);
 
       // prepare the evaluation scope
       let scope: FeelScope = global_context.clone().into();
-      scope.append(required_input_ctx.into());
+      scope.append(requirements_ctx.into());
 
       // evaluate the result
       let decision_result = evaluator(&scope);
