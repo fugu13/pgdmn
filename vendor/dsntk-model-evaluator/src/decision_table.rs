@@ -322,39 +322,48 @@ fn parse_decision_table(scope: &FeelScope, decision_table: &DecisionTable) -> Re
   })
 }
 
-fn evaluate_parsed_decision_table(scope: &FeelScope, parsed_decision_table: &ParsedDecisionTable) -> EvaluatedDecisionTable {
-  // evaluate only non-empty output values
-  let mut output_values = vec![];
-  for evaluator in parsed_decision_table.output_values_evaluators.iter().flatten() {
-    let value = evaluator(scope);
-    if let Value::ExpressionList(values) = value {
-      output_values.append(&mut values.to_owned());
-    }
-  }
-  // evaluate only non-empty default output values
-  let mut default_output_values = vec![];
-  for evaluator in parsed_decision_table.default_output_values_evaluators.iter().flatten() {
-    if let Value::ExpressionList(values) = evaluator(scope) {
-      default_output_values.append(&mut values.to_owned());
-    }
-  }
-  // evaluate all rules
+fn evaluate_parsed_decision_table(scope: &FeelScope, parsed_decision_table: &ParsedDecisionTable, hit_policy: HitPolicy) -> EvaluatedDecisionTable {
+  // PGDMN (H4): evaluate rules first, so that allowed output values and default output
+  // values are evaluated only when the hit policy actually consumes them.
   let mut evaluated_rules = vec![];
+  let mut match_count = 0_usize;
   for parsed_rule in &parsed_decision_table.rules {
-    let mut input_entry_values = vec![];
-    let mut matches = true;
-    for evaluator in &parsed_rule.input_entries_evaluators {
-      let input_value: Value = evaluator(scope);
-      if !input_value.is_true() {
-        matches = false;
+    // PGDMN (H4): stop evaluating input entries at the first non-matching one.
+    let matches = parsed_rule.input_entries_evaluators.iter().all(|evaluator| evaluator(scope).is_true());
+    // PGDMN (H4): output entries are consumed only for matching rules.
+    let output_entry_values = if matches {
+      match_count += 1;
+      parsed_rule.output_entries_evaluators.iter().map(|evaluator| evaluator(scope)).collect()
+    } else {
+      vec![]
+    };
+    evaluated_rules.push(EvaluatedRule { matches, output_entry_values });
+    // PGDMN (H4): FIRST needs only the first matching rule; UNIQUE needs only to know
+    // whether a second matching rule exists. Remaining rules cannot change the result.
+    match hit_policy {
+      HitPolicy::First if match_count > 0 => break,
+      HitPolicy::Unique if match_count > 1 => break,
+      _ => {}
+    }
+  }
+  // PGDMN (H4): allowed output values are consumed only by prioritized hit policies.
+  let mut output_values = vec![];
+  if matches!(hit_policy, HitPolicy::Priority | HitPolicy::OutputOrder) {
+    for evaluator in parsed_decision_table.output_values_evaluators.iter().flatten() {
+      let value = evaluator(scope);
+      if let Value::ExpressionList(values) = value {
+        output_values.append(&mut values.to_owned());
       }
-      input_entry_values.push(input_value);
     }
-    let mut output_entry_values = vec![];
-    for evaluator in &parsed_rule.output_entries_evaluators {
-      output_entry_values.push(evaluator(scope));
+  }
+  // PGDMN (H4): default output values are consumed only when no rule matches.
+  let mut default_output_values = vec![];
+  if match_count == 0 {
+    for evaluator in parsed_decision_table.default_output_values_evaluators.iter().flatten() {
+      if let Value::ExpressionList(values) = evaluator(scope) {
+        default_output_values.append(&mut values.to_owned());
+      }
     }
-    evaluated_rules.push(EvaluatedRule { matches, output_entry_values })
   }
   EvaluatedDecisionTable {
     component_names: parsed_decision_table.component_names.clone(),
@@ -368,7 +377,7 @@ pub fn build_decision_table_evaluator(scope: &FeelScope, decision_table: &Decisi
   let hit_policy = decision_table.hit_policy();
   let parsed_decision_table = parse_decision_table(scope, decision_table)?;
   Ok(Box::new(move |scope: &FeelScope| {
-    let evaluated_decision_table = evaluate_parsed_decision_table(scope, &parsed_decision_table);
+    let evaluated_decision_table = evaluate_parsed_decision_table(scope, &parsed_decision_table, hit_policy);
     match hit_policy {
       HitPolicy::Unique => evaluated_decision_table.evaluate_hit_policy_unique(),
       HitPolicy::Any => evaluated_decision_table.evaluate_hit_policy_any(),
