@@ -1,4 +1,5 @@
-FROM rust:1.85-bookworm
+# dsntk 0.3 uses let-chains (stable since Rust 1.88)
+FROM rust:1.95-bookworm
 
 # Install PostgreSQL 17 and build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libclang-dev \
     clang \
     pkg-config \
+    # cmake builds aws-lc-sys, pulled in by dsntk-feel-evaluator 0.3's reqwest/rustls
+    # dependency; removable if upstream feature-gates it — see DEPS-001 in TODO.md
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # pgrx tests must run as a non-root user (initdb refuses root). Create that
@@ -29,6 +33,10 @@ RUN cargo install cargo-pgrx --version "~0.16" --locked
 # Lint and format tooling for `make lint` / `make fmt`
 RUN rustup component add clippy rustfmt
 
+# pgrx init reads nothing from the project manifests (its state lives in
+# ~/.pgrx), so it sits above the COPY to stay cached across dependency bumps
+RUN cargo pgrx init --pg17=/usr/lib/postgresql/17/bin/pg_config
+
 # Copy manifests first for layer caching
 COPY --chown=pgdmn:pgdmn Cargo.toml Cargo.lock pgdmn.control ./
 
@@ -37,8 +45,6 @@ RUN mkdir -p src && echo '::pgrx::pg_module_magic!();' > src/lib.rs
 
 # Fetch dependencies into pgdmn's own registry cache
 RUN cargo fetch --locked
-
-RUN cargo pgrx init --pg17=/usr/lib/postgresql/17/bin/pg_config
 
 # Default: build and test (the repo is bind-mounted at /pgdmn by `make`)
 CMD ["cargo", "pgrx", "test", "pg17"]

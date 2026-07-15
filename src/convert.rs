@@ -58,7 +58,7 @@ pub fn feel_to_json(value: &Value) -> serde_json::Value {
         Value::Context(ctx) => {
             let mut map = serde_json::Map::new();
             for (name, val) in ctx.iter() {
-                map.insert(name.to_string(), feel_to_json(val));
+                map.insert(String::from(name), feel_to_json(val));
             }
             serde_json::Value::Object(map)
         }

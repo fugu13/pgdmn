@@ -97,6 +97,12 @@ Done 2026-07-13. The `Website` workflow (`.github/workflows/website.yml`) lints,
 
 Going live still needs three manual steps, recorded in RELEASEPLAN.md: a paid plan for Pages from a private repo, the Route 53 A/AAAA/CNAME records, and enforcing HTTPS once the certificate is issued.
 
+## Dependencies
+
+### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension
+
+dsntk-feel-evaluator 0.3.0 hard-depends on reqwest 0.13 with the rustls/aws-lc provider, used only by its `evaluator_java.rs` — a blocking HTTP client that calls a local Java RPC server (127.0.0.1:22023) when a model invokes an "external Java function". pgdmn never wants that inside a PostgreSQL backend, but feature unification is additive so it cannot be opted out downstream; the extension `.so` now statically links reqwest, rustls, and the AWS-LC C library, and the Docker image needs cmake to build aws-lc-sys. The fix is upstream (fits the minimal-upstreamable-patch working agreement): propose feature-gating the Java external-function support in dsntk-feel-evaluator, or restoring 0.2's `default-features = false` reqwest with a ring provider. Once merged and adopted, remove cmake from the Dockerfile (comment there points here).
+
 ## Chores
 
 ### CHORE-002: OpenGraph and social meta tags

@@ -8,7 +8,7 @@ PostgreSQL extension that brings DMN (Decision Model and Notation) support to Po
 |---|---|
 | Language | Rust 2024 edition (extension and website) |
 | Extension framework | pgrx 0.16 |
-| DMN/FEEL engine | dsntk 0.2 |
+| DMN/FEEL engine | dsntk 0.3 |
 | Target | PostgreSQL 17 |
 | Website | Leptos 0.8, prerendered to static HTML (`website/`) |
 
@@ -65,7 +65,7 @@ website/
 - **Error model:** SQL-facing errors are raised with `pgrx::error!` (unwinds into a PostgreSQL ERROR — the idiomatic pgrx mechanism). Internal fallible functions return `Result<_, String>` and callers convert at the SQL boundary with `unwrap_or_else(|e| pgrx::error!(...))`. This is an accepted deviation from the thiserror convention: errors here terminate at the SQL boundary as messages, so enum error types add no value. Revisit if errors ever need programmatic matching.
 - **Website is prerendered to static HTML, with no hydration** (WEB-001). Leptos renders every route once at build time; `dist/` is served as plain files by GitHub Pages, with no server process and no JavaScript shipped. The site had no client-side interactivity, so the wasm bundle it used to ship (343 KB) bought nothing while forcing a `wasm-bindgen` crate/CLI version match and a server-capable host. Consequences that bind new work: **no route may depend on request state**, and anything dynamic (e.g. the FEAT-004 blog) must render at build time. Reintroducing hydration means reintroducing both couplings — do not do it for a page that merely *looks* interactive.
 - **Website uses Leptos** — an accepted deviation from the no-client-framework frontend rule, decided before this convention existed. It is now used purely as a server-side template engine. New pages follow the existing Leptos patterns.
-- **No LTO in dev profile** (causes ICE on Rust 1.85/aarch64).
+- **No LTO in dev profile** (caused an ICE on Rust 1.85/aarch64; not re-tested since the Docker toolchain moved to 1.95).
 
 ### Undecided
 
