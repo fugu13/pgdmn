@@ -42,8 +42,10 @@ clean: ## Remove build artifacts
 # patch layer (one commit per change, PGDMN: markers). See vendor/README.md
 # and docs/performance.md. scripts/vendor.sh implements the mechanics.
 
-# Most recent commit that swapped in a pristine upstream tree.
-VENDOR_PRISTINE ?= $(shell git log --format='%H' --grep='pristine' -i -1 -- vendor)
+# Most recent commit that swapped in a pristine upstream tree, identified by
+# its subject line ("Vendor pristine dsntk X" from vendor-upgrade, or the
+# original migration merge). Body text mentioning "pristine" must not match.
+VENDOR_PRISTINE ?= $(shell git log --format='%H;%s' -- vendor | awk -F';' '$$2 ~ /^Vendor pristine|vendor becomes pristine/ {print $$1; exit}')
 # Upstream tests that need an external service, wall clocks, or a timezone.
 VENDOR_SKIPS = --skip external_functions --skip bif_now --skip dmn_3_0076 --skip dmn_3_0103::_0017
 VENDOR_TEST_PKGS = -p dsntk-common -p dsntk-feel -p dsntk-feel-number -p dsntk-feel-parser -p dsntk-feel-evaluator -p dsntk-model -p dsntk-model-evaluator
