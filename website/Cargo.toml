@@ -28,5 +28,5 @@ leptos_meta = { version = "0.8", features = ["ssr"] }
 leptos_axum = "0.8"
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-tower-http = { version = "0.6", features = ["fs", "set-status"] }
+tower-http = { version = "0.7", features = ["fs", "set-status"] }
 grass = "0.13"
