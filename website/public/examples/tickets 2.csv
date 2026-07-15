@@ -1,9 +1,0 @@
-id,subject,priority,customer_tier
-1,Cannot log in after SSO change,critical,startup
-2,Billing discrepancy on invoice 4471,high,enterprise
-3,Feature request: dark mode,low,startup
-4,API latency spike in eu-west,high,startup
-5,Password reset not arriving,normal,enterprise
-6,Typo in the docs,low,free
-7,Data export failing silently,critical,enterprise
-8,Onboarding question,normal,free

@@ -1,6 +1,0 @@
-id,customer,base_price,tax_rate
-1,Northwind Traders,100.00,0.10
-2,Globex,2499.99,0.0825
-3,Initech,45.50,0.20
-4,Umbrella Corp,1000.00,0.00
-5,Acme Supply,19.99,0.075

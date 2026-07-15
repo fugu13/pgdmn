@@ -1,9 +1,0 @@
-# The website builds on the host, not in Docker, so this is what keeps a
-# developer's toolchain and CI's on the same version. Without it, rustfmt and
-# clippy drift apart and the build passes locally while failing in CI.
-#
-# The extension is unaffected: its toolchain lives in the Dockerfile, and its
-# builds never run from this directory.
-[toolchain]
-channel = "1.97.0"
-components = ["clippy", "rustfmt"]
