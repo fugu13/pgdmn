@@ -103,7 +103,8 @@
 
         var viewer = new DmnJS({ container: "#canvas" });
 
-        fetch(url)
+        // Always fetch the current model, never a stale cached copy.
+        fetch(url, { cache: "no-store" })
           .then(function (response) {
             if (!response.ok) throw new Error("HTTP " + response.status);
             return response.text();
