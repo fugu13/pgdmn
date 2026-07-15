@@ -38,6 +38,25 @@ re-parses and re-builds each model on first use (~ms per model). For
 connection-churn workloads without a pooler, consider a shared-memory
 cache or a serialized precompiled-evaluator representation.
 
+### PERF-007: Memoize literal-only unary-test values in decision tables
+
+The 0.3 opportunity hunt (N4) found that decision-table entries are
+overwhelmingly literals, yet build_in evaluates the right-hand side per
+call — one Box per comparison, two per range, a Vec per list — paid
+rules x inputs x SQL-rows. A build-time AST walk detecting
+scope-independent right-hand sides could evaluate once into a cached
+Value and match by reference. Measure-first on a wide table of
+range/list entries.
+
+### PERF-008: Cache range() bif construction
+
+range("[18..65)") re-parses its literal and rebuilds an evaluator tree
+on every call (hunt finding N6); pgdmn's expression cache only covers
+the outer expression, so feel_eval_numrange with a literal range() pays
+a full FEEL parse per row. Either extend the vendored regex-cache
+pattern to range(), or document that direct '[low..high)' syntax
+compiles once. Measure-first.
+
 ### PERF-006: Upstream the vendored dsntk performance patch set
 
 The vendor/ changes are deliberately minimal and separable (one commit
@@ -52,7 +71,7 @@ lead with that PR). It does fix the H21 latent defect (FeelNumber
 integer comparisons via FFI string round trips) that we left untouched.
 H20 and H3 must be offered as a pair (measured interaction).
 
-### CHORE-005: Evaluate re-vendoring on dsntk 0.3.0
+### CHORE-005: Evaluate re-vendoring on dsntk 0.3.0 (done)
 
 0.3.0 is mostly FEEL range/interval rework (`IntervalType` replaces
 bools in AST/Value variants), new built-ins, expanded `in` semantics,
@@ -63,6 +82,13 @@ Docker toolchain must move from Rust 1.85 to ≥1.88 for let-chains
 (re-test the dev-profile LTO ICE while at it). Everything else rebases
 near-clean — decision_table.rs, model_definitions.rs, context.rs and
 the model-evaluator files are functionally unchanged upstream.
+
+Executed 2026-07-14: pristine 0.3.0 vendored (13 crates, recognizer
+joined the graph), full patch layer re-applied commit-by-commit with
+gates, H13 walker extended for IntervalType, H19 reworked around 0.3's
+allocation-free Name::as_str (lazy memoization retained after the eager
+variant measurably regressed), BUG-003 re-verified absent upstream and
+re-applied. Engine wins on 0.3 match the 0.2-era measurements.
 
 ## Conversions
 

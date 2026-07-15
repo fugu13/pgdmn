@@ -32,6 +32,11 @@ Two host-native exceptions (always with `cargo +stable-aarch64-apple-darwin` —
 | `make fmt` | Auto-format |
 | `make verify` | fmt + lint — run after every code change (lint's clippy subsumes check) |
 | `make bench` | DMN eval benchmark |
+| `make vendor-status` / `vendor-diff` | Vendored dsntk version, pristine base, carried patch layer |
+| `make vendor-test` | Vendored engine suites in Docker (env-dependent upstream tests skipped) |
+| `make vendor-bench` | Host-native engine benchmarks (canary methodology in docs/performance.md) |
+| `make vendor-upgrade VERSION=x.y.z` | Stage a new pristine upstream tree (drops the patch layer) |
+| `make vendor-inspect` | Claude session: audit upstream delta, re-layer patches, gate, measure |
 | `make website-build` | Prerender the site to `website/dist` (the deployable artifact) |
 | `make website-serve` | Serve `website/dist` the way a static host would |
 | `make website-dev` | Prerender, then serve; re-run to pick up changes |
@@ -75,7 +80,7 @@ website/
 - **Website is prerendered to static HTML, with no hydration** (WEB-001). Leptos renders every route once at build time; `dist/` is served as plain files by GitHub Pages, with no server process and no JavaScript shipped. The site had no client-side interactivity, so the wasm bundle it used to ship (343 KB) bought nothing while forcing a `wasm-bindgen` crate/CLI version match and a server-capable host. Consequences that bind new work: **no route may depend on request state**, and anything dynamic (e.g. the FEAT-004 blog) must render at build time. Reintroducing hydration means reintroducing both couplings — do not do it for a page that merely *looks* interactive.
 - **Website uses Leptos** — an accepted deviation from the no-client-framework frontend rule, decided before this convention existed. It is now used purely as a server-side template engine. New pages follow the existing Leptos patterns.
 - **No LTO in dev profile** (caused an ICE on Rust 1.85/aarch64; not re-tested since the Docker toolchain moved to 1.95).
-- **External (Java/PMML) function definitions are rejected at the SQL boundary** (`src/guard.rs`). dsntk 0.3's evaluator resolves them with a blocking, untimed HTTP POST from the backend, which would falsify the `immutable, parallel_safe` declaration on every pgdmn function. Coverage limits and the upstream endgame (DEPS-001) are documented in the module docs of `src/guard.rs`.
+- **External (Java/PMML) function definitions are rejected at the SQL boundary** (`src/guard.rs`). dsntk 0.3's evaluator resolves them with a blocking, untimed HTTP POST from the backend, which would falsify the `immutable, parallel_safe` declaration on every pgdmn function. The vendored evaluator additionally compiles without the external-function machinery entirely (off-by-default `external-functions` feature, DEPS-001), so the guard is defense in depth; details in `src/guard.rs` module docs and TODO.md.
 
 ### Undecided
 

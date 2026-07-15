@@ -93,5 +93,33 @@ context, and the BUG-003 spec-alignment fix.
 
 PERF-001 (zero-copy model datum), PERF-002 (regex cache for matches()),
 PERF-003 (Arc payloads for lists/strings/functions), PERF-004 (decision-service
-lock), PERF-005 (cross-backend cache), PERF-006 (upstreaming the patch set) —
+lock), PERF-005 (cross-backend cache), PERF-006 (upstreaming the patch set),
+PERF-007 (literal unary-test memoization), PERF-008 (range() bif caching) —
 see TODO.md for details.
+
+## dsntk 0.3 and the vendoring lifecycle
+
+The vendored engine is dsntk 0.3.0. A source-level audit of the 0.2→0.3
+upstream delta found the pristine engines performance-equivalent for pgdmn
+scenarios (within the measurement noise floor); the whole patch layer was
+re-applied commit by commit under the vendored test gates, and every headline
+effect reproduced on 0.3. Two upstream 0.3 details mattered: the new
+allocation-free name accessor simplified the builtin-memoization patch (its
+eager variant measurably regressed uncached evaluation and was caught by the
+harness — memoization stays lazy), and the interval-type rework extended the
+exhaustive AST walker, which fails the build on new variants by design.
+
+Dependency slicing: the vendored evaluator's external Java/PMML function
+machinery — and with it the HTTP/TLS stack (reqwest, rustls, aws-lc, hyper)
+that 0.3 embeds unconditionally — sits behind an off-by-default cargo feature
+(DEPS-001). Disabled builds answer external invocations with an explained
+null; the boundary guard in the extension remains as defense in depth. The
+non-finite number Display panic (BUG-004's root cause) is fixed in-engine
+(DEPS-002).
+
+Vendoring operations are Makefile-driven: vendor-status, vendor-diff,
+vendor-test, and vendor-bench expose the layering model (pristine upstream
+base plus a minimal patch layer, one commit per change); vendor-upgrade
+stages a new pristine version; vendor-inspect launches a Claude session that
+audits the upstream delta, re-layers the patch set under the gates, and
+re-measures with the canary methodology.
