@@ -890,7 +890,8 @@ impl<'b> EvaluatorBuilder<'b> {
           if external {
             eval_external_function_with_positional_parameters(scope, &args, &params, &body, result_type)
           } else {
-            eval_function_with_positional_parameters(scope, &args, &params, &body, closure_ctx, result_type)
+            // PGDMN: H6 — pass arguments by value to avoid cloning during coercion
+            eval_function_with_positional_parameters(scope, args, &params, &body, closure_ctx, result_type)
           }
         }
         _ => value_null!("expected built-in function name or function definition, actual is {}", function),
@@ -944,7 +945,8 @@ impl<'b> EvaluatorBuilder<'b> {
           if external {
             eval_external_function_with_named_parameters(scope, &args, &params, &body, result_type)
           } else {
-            eval_function_with_named_parameters(scope, &args, &params, &body, closure_ctx, result_type)
+            // PGDMN: H6 — pass arguments by value to avoid cloning during coercion
+            eval_function_with_named_parameters(scope, args, &params, &body, closure_ctx, result_type)
           }
         }
         _ => value_null!("expected built-in function name or function definition, actual is {}", function),
@@ -2621,9 +2623,10 @@ fn eval_in_unary_greater_or_equal(left: &Value, right: &Value) -> Value {
 }
 
 /// Evaluates function definition with positional parameters.
+// PGDMN: H6 — takes arguments by value, so coercion never clones conformant values.
 fn eval_function_with_positional_parameters(
   scope: &FeelScope,
-  args: &[Value],
+  args: Vec<Value>,
   params: &[(Name, FeelType)],
   body: &FunctionBody,
   closure_ctx: FeelContext,
@@ -2633,29 +2636,30 @@ fn eval_function_with_positional_parameters(
   if args.len() != params.len() {
     return value_null!("invalid number of arguments");
   }
-  for (argument_value, (parameter_name, parameter_type)) in args.iter().zip(params) {
-    params_ctx.set_entry(parameter_name, argument_value.coerced(parameter_type))
+  for (argument_value, (parameter_name, parameter_type)) in args.into_iter().zip(params) {
+    params_ctx.set_entry(parameter_name, argument_value.coerced_owned(parameter_type))
   }
   eval_function_definition(scope, params_ctx, body, closure_ctx, result_type)
 }
 
 /// Evaluates function definition with named parameters.
+// PGDMN: H6 — takes arguments by value, so coercion never clones conformant values.
 fn eval_function_with_named_parameters(
   scope: &FeelScope,
-  args: &Value,
+  args: Value,
   params: &[(Name, FeelType)],
   body: &FunctionBody,
   closure_ctx: FeelContext,
   result_type: FeelType,
 ) -> Value {
   let mut params_ctx = FeelContext::default();
-  if let Value::NamedParameters(argument_map) = args {
+  if let Value::NamedParameters(mut argument_map) = args {
     if argument_map.len() != params.len() {
       return value_null!("invalid number of arguments");
     }
     for (parameter_name, parameter_type) in params {
-      if let Some((argument, _)) = argument_map.get(parameter_name) {
-        params_ctx.set_entry(parameter_name, argument.coerced(parameter_type))
+      if let Some((argument, _)) = argument_map.remove(parameter_name) {
+        params_ctx.set_entry(parameter_name, argument.coerced_owned(parameter_type))
       } else {
         return value_null!("parameter with name {} not found in arguments", parameter_name);
       }
@@ -2687,7 +2691,8 @@ fn eval_function_definition(scope: &FeelScope, params_ctx: FeelContext, body: &F
   }
   scope.pop(); // params_ctx
   scope.pop(); // closure_ctx
-  result.coerced(&result_type)
+  // PGDMN: H6 — owned coercion, conformant results are returned without cloning
+  result.coerced_owned(&result_type)
 }
 
 /// Evaluates external function definition with positional parameters.
@@ -2723,7 +2728,8 @@ fn eval_external_function_definition(scope: &FeelScope, arguments: &[Value], bod
     Value::ExternalPmmlFunction(document, model_name) => evaluate_external_pmml_function(document, model_name, arguments),
     other => value_null!("expected JAVA or PMML mapping, actual value is {}", other),
   };
-  result.coerced(&result_type)
+  // PGDMN: H6 — owned coercion, conformant results are returned without cloning
+  result.coerced_owned(&result_type)
 }
 
 fn build_err_msg(err_msg: String) -> Evaluator {
