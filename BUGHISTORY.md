@@ -2,6 +2,22 @@
 
 Resolved bugs, recorded so they can be recognised if they reappear. Every entry has: symptom, root cause, fix, files, and a reoccurrence checklist. After any code change, verify no recorded bugs have been reintroduced — pay particular attention to each entry's **Reoccurrence check** section.
 
+## BUG-003: decision-table input entries referencing `?` never match
+
+**Symptom:** A DMN decision-table rule whose input entry references the tested input value as `?` (e.g. `? >= 18`, valid DMN unary-test syntax) never matches; evaluation silently falls through to later rules or the default, misclassifying rows without any error.
+
+**Root cause:** Two layered gaps in the vendored dsntk engine. (1) The FEEL parser only recognises names that are in scope at parse time, and nothing registered `?` before input entries were parsed, so `?`-entries failed to parse. (2) Even with `?` parseable, every entry was compiled into the implicit membership form `? in (entry)`; a `?`-referencing entry evaluates to a boolean, and testing the input value for membership *in a boolean* is always false. Per the DMN spec, an entry referencing `?` is itself the test.
+
+**Fix:** In `vendor/dsntk-model-evaluator/src/decision_table.rs`, the table parse pushes a scope context with `?` registered (popped on all paths), and entry compilation classifies each parsed unary-test item with `ast_references_name` (exported from `dsntk-feel-evaluator`): `?`-referencing items are evaluated directly, `?`-free items keep the membership form, and comma-list items OR-combine. String literals containing `?` are unaffected because the check is AST-based, not textual.
+
+**Files:** `vendor/dsntk-model-evaluator/src/decision_table.rs`, `vendor/dsntk-feel-evaluator/src/builders.rs`, `vendor/dsntk-feel-evaluator/src/lib.rs`, `src/lib.rs` (test)
+
+**Reoccurrence check:**
+- [ ] `test_dmn_decision_table_question_mark_binding` passes (ages 16/18/20 against `? >= 18`)
+- [ ] `parse_decision_table` is still wrapped in the pushed/popped `?` scope context (including error paths)
+- [ ] Entry compilation still routes through `input_entry_test_node`, not a bare `? in (...)` wrap
+- [ ] If dsntk is re-vendored/upgraded: verify upstream includes an equivalent fix before dropping ours
+
 ## BUG-001: Docker image crate cache diverges from Cargo.lock
 
 **Symptom:** `make lint` / `make check` fails inside the container with `failed to open /usr/local/cargo/registry/cache/.../<crate>.crate ... Permission denied (os error 13)` immediately after any `Cargo.toml` change.
@@ -46,7 +62,7 @@ Resolved bugs, recorded so they can be recognised if they reappear. Every entry 
 - [ ] Every path that stringifies a `FeelNumber` checks `feel_number_is_finite` first
 - [ ] `test_feel_eval_numeric_rejects_decimal_overflow` and `test_feel_eval_rejects_decimal_overflow` pass
 
-## BUG-003: website build breaks when the wasm-bindgen crate outruns the host CLI
+## BUG-005: website build breaks when the wasm-bindgen crate outruns the host CLI
 
 **Symptom:** `make website-build` fails with `wasm-bindgen failed` and a message telling you to either downgrade the crate (`cargo update -p wasm-bindgen --precise <old>`) or reinstall the binary. Triggered by an ordinary `cargo update` of `website/Cargo.lock`, with no source change at all.
 

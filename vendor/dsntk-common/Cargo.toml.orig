@@ -1,0 +1,20 @@
+[package]
+name = "dsntk-common"
+version = { workspace = true }
+authors = { workspace = true }
+description = "ÐecisionToolkit | Common definitions"
+categories = ["development-tools", "command-line-utilities", "finance", "parsing"]
+keywords = ["dmn", "decision", "toolkit", "commons"]
+documentation = "https://docs.rs/dsntk-common"
+repository = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+serde = { workspace = true }
+uuid = { workspace = true }
+uriparse = { workspace = true }
+url = { workspace = true }
+urlencoding = { workspace = true }
+dsntk-macros = { workspace = true }

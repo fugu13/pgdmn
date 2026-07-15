@@ -8,92 +8,18 @@ use dsntk_feel_temporal::{
 };
 use pgrx::heap_tuple::PgHeapTuple;
 use pgrx::pg_sys;
-/// Convert a serde_json::Value to a dsntk FEEL Value.
-pub fn json_to_feel(json: &serde_json::Value) -> Value {
-    match json {
-        serde_json::Value::Null => Value::Null(None),
-        serde_json::Value::Bool(b) => Value::Boolean(*b),
-        serde_json::Value::Number(n) => {
-            let s = n.to_string();
-            match s.parse::<FeelNumber>() {
-                Ok(num) => Value::Number(num),
-                Err(_) => Value::Null(Some(format!("cannot convert number: {s}"))),
-            }
-        }
-        serde_json::Value::String(s) => Value::String(s.clone()),
-        serde_json::Value::Array(arr) => {
-            let values = arr.iter().map(json_to_feel).collect();
-            Value::List(values)
-        }
-        serde_json::Value::Object(map) => {
-            let mut ctx = FeelContext::new();
-            for (key, val) in map {
-                ctx.set_entry(&Name::from(key.as_str()), json_to_feel(val));
-            }
-            Value::Context(ctx)
-        }
-    }
-}
 
-/// Whether a FEEL number is finite. dsntk arithmetic can overflow decimal128
-/// to ±Inf/NaN, whose Display panics inside dsntk (BUG-004) — callers must
-/// check before stringifying. NaN compares false to everything, so it fails
-/// the range check too.
-pub fn feel_number_is_finite(n: &FeelNumber) -> bool {
-    let infinite = FeelNumber::infinite();
-    -infinite < *n && *n < infinite
-}
+// The pgrx-free JSON <-> FEEL conversions live in convert_core.rs (shared
+// with the profiling harness); re-exported here so callers keep one import
+// path for the whole conversion layer. feel_to_json is the pgrx boundary
+// around the fallible core conversion: a non-finite number (BUG-004) becomes
+// a SQL error.
+pub use crate::convert_core::{feel_number_is_finite, json_to_context};
 
-/// Convert a dsntk FEEL Value to serde_json::Value.
+/// Convert a dsntk FEEL Value to serde_json::Value, raising a SQL error when
+/// the value contains a non-finite number (BUG-004).
 pub fn feel_to_json(value: &Value) -> serde_json::Value {
-    match value {
-        Value::Null(_) => serde_json::Value::Null,
-        Value::Boolean(b) => serde_json::Value::Bool(*b),
-        Value::Number(n) => {
-            if !feel_number_is_finite(n) {
-                pgrx::error!("FEEL number result is not finite and cannot be represented");
-            }
-            let s = n.to_string();
-            if let Ok(i) = s.parse::<i64>() {
-                serde_json::Value::Number(serde_json::Number::from(i))
-            } else if let Ok(f) = s.parse::<f64>() {
-                serde_json::json!(f)
-            } else {
-                serde_json::Value::String(s)
-            }
-        }
-        Value::String(s) => serde_json::Value::String(s.clone()),
-        Value::List(items) => {
-            let arr: Vec<serde_json::Value> = items.iter().map(feel_to_json).collect();
-            serde_json::Value::Array(arr)
-        }
-        Value::Context(ctx) => {
-            let mut map = serde_json::Map::new();
-            for (name, val) in ctx.iter() {
-                map.insert(String::from(name), feel_to_json(val));
-            }
-            serde_json::Value::Object(map)
-        }
-        Value::Date(d) => serde_json::Value::String(d.to_string()),
-        Value::Time(t) => serde_json::Value::String(t.to_string()),
-        Value::DateTime(dt) => serde_json::Value::String(dt.to_string()),
-        Value::DaysAndTimeDuration(d) => serde_json::Value::String(d.to_string()),
-        Value::YearsAndMonthsDuration(d) => serde_json::Value::String(d.to_string()),
-        _ => serde_json::Value::String(value.to_string()),
-    }
-}
-
-/// Convert a JSON value (expected object) to a FeelContext.
-pub fn json_to_context(json: &serde_json::Value) -> FeelContext {
-    if let serde_json::Value::Object(map) = json {
-        let mut ctx = FeelContext::new();
-        for (key, val) in map {
-            ctx.set_entry(&Name::from(key.as_str()), json_to_feel(val));
-        }
-        ctx
-    } else {
-        FeelContext::new()
-    }
+    crate::convert_core::try_feel_to_json(value).unwrap_or_else(|e| pgrx::error!("{}", e))
 }
 
 /// Convert a single PG datum from a PgHeapTuple to a FEEL Value, dispatching on the type OID.
@@ -227,10 +153,9 @@ fn pg_datum_to_feel<A: pgrx::WhoAllocated>(
 pub fn tuple_to_context<A: pgrx::WhoAllocated>(tuple: &PgHeapTuple<'_, A>) -> FeelContext {
     let mut ctx = FeelContext::new();
     for (attno, attr) in tuple.attributes() {
-        let name_str = attr.name();
-        let feel_name = Name::from(name_str);
+        let feel_name = Name::from(attr.name());
         let value = pg_datum_to_feel(tuple, attno, attr.atttypid);
-        ctx.set_entry(&feel_name, value);
+        ctx.insert(feel_name, value);
     }
     ctx
 }

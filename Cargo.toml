@@ -1,3 +1,26 @@
+# Vendored dsntk crates are explicit workspace members so their own test
+# suites can run in-tree (`cargo test -p dsntk-feel` etc.) — the safety net
+# for in-tree engine optimizations. Cargo commands in the root still default
+# to the pgdmn package; profiling/ is a separate host-native workspace.
+[workspace]
+resolver = "3"
+members = [
+    "vendor/dsntk-common",
+    "vendor/dsntk-examples",
+    "vendor/dsntk-feel",
+    "vendor/dsntk-feel-evaluator",
+    "vendor/dsntk-feel-grammar",
+    "vendor/dsntk-feel-number",
+    "vendor/dsntk-feel-parser",
+    "vendor/dsntk-feel-regex",
+    "vendor/dsntk-feel-temporal",
+    "vendor/dsntk-macros",
+    "vendor/dsntk-model",
+    "vendor/dsntk-model-evaluator",
+    "vendor/dsntk-recognizer",
+]
+exclude = ["profiling", "website"]
+
 [package]
 name = "pgdmn"
 version = "0.1.0"
@@ -51,9 +74,103 @@ rapidhash = "1"
 
 [dev-dependencies]
 pgrx-tests = "0.16"
+proptest = "1"
+
+# dsntk is vendored (see vendor/README.md) so the DMN/FEEL engine can be
+# profiled, optimized, and dependency-sliced in-tree. Sources are the published
+# crates.io 0.3.0 tarballs, checksum-verified at vendoring time.
+[patch.crates-io]
+dsntk-common = { path = "vendor/dsntk-common" }
+dsntk-examples = { path = "vendor/dsntk-examples" }
+dsntk-feel = { path = "vendor/dsntk-feel" }
+dsntk-feel-evaluator = { path = "vendor/dsntk-feel-evaluator" }
+dsntk-feel-grammar = { path = "vendor/dsntk-feel-grammar" }
+dsntk-feel-number = { path = "vendor/dsntk-feel-number" }
+dsntk-feel-parser = { path = "vendor/dsntk-feel-parser" }
+dsntk-feel-regex = { path = "vendor/dsntk-feel-regex" }
+dsntk-feel-temporal = { path = "vendor/dsntk-feel-temporal" }
+dsntk-macros = { path = "vendor/dsntk-macros" }
+dsntk-model = { path = "vendor/dsntk-model" }
+dsntk-model-evaluator = { path = "vendor/dsntk-model-evaluator" }
+dsntk-recognizer = { path = "vendor/dsntk-recognizer" }
 
 [profile.dev]
 panic = "unwind"
+
+# Benchmarks run through `cargo pgrx test` (dev profile). Every package on the
+# measured per-row path — the pgdmn shim, the dsntk engine, serde_json, the
+# Intel decimal FFI library — is built optimized so benchmark numbers reflect
+# release-grade codegen; the rest of the graph stays at dev for build speed.
+# (debug-assertions=false also disables overflow checks on these packages.)
+[profile.dev.package.pgdmn]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-common]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-feel]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-feel-evaluator]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-feel-grammar]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-feel-number]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-feel-parser]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-feel-regex]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-feel-temporal]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-model]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dsntk-model-evaluator]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.dfp-number-sys]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.serde]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.serde_json]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.serde_cbor]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.chrono]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.chrono-tz]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.regex]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.regex-automata]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.aho-corasick]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.memchr]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.rapidhash]
+opt-level = 3
+debug-assertions = false
+[profile.dev.package.pgrx]
+opt-level = 3
+debug-assertions = false
 
 [profile.release]
 panic = "unwind"

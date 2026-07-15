@@ -2,6 +2,9 @@
 
 mod cache;
 mod convert;
+mod convert_core;
+#[cfg(test)]
+mod convert_props;
 mod functions;
 mod guard;
 mod types;
@@ -106,10 +109,203 @@ mod tests {
         assert_eq!(result.unwrap().0, serde_json::json!(2));
     }
 
+    // --- FEEL evaluator cache correctness ---
+    // The prepared-evaluator cache key must capture the context *shape*, because
+    // FEEL name tokenization depends on which names are in scope: the same
+    // expression text parses to different ASTs under different key sets. Each
+    // test below would produce a wrong ANSWER (not an error) if a cached
+    // evaluator were reused across shapes.
+
+    fn feel_eval_jsonb(expression: &str, context: &str) -> serde_json::Value {
+        let query = format!("SELECT feel_eval('{expression}', '{context}'::jsonb)");
+        Spi::get_one::<pgrx::JsonB>(&query)
+            .expect("SPI failed")
+            .expect("feel_eval returned NULL")
+            .0
+    }
+
+    #[pg_test]
+    fn test_feel_eval_shape_hyphen_name_vs_subtraction() {
+        // Prime the cache with the subtraction shape first.
+        assert_eq!(
+            feel_eval_jsonb("a - b", r#"{"a": 100, "b": 1}"#),
+            serde_json::json!(99)
+        );
+        // Under a shape whose key set contains "a-b", the lexer tokenizes
+        // 'a - b' as that single name: the answer is 42. A shape-blind cache
+        // would reuse the subtraction AST and return 99.
+        assert_eq!(
+            feel_eval_jsonb("a - b", r#"{"a-b": 42, "a": 100, "b": 1}"#),
+            serde_json::json!(42)
+        );
+        // And back: the original shape still yields the subtraction result.
+        assert_eq!(
+            feel_eval_jsonb("a - b", r#"{"a": 100, "b": 1}"#),
+            serde_json::json!(99)
+        );
+    }
+
+    #[pg_test]
+    fn test_feel_eval_shape_nested_vs_flat_key() {
+        // Nested shape: 'order.total' is a path expression.
+        assert_eq!(
+            feel_eval_jsonb("order.total * 2", r#"{"order": {"total": 21}}"#),
+            serde_json::json!(42)
+        );
+        // Flat shape: "order.total" is a single key, resolved as one name.
+        // Wrong reuse of the path AST would return null instead of 10.
+        assert_eq!(
+            feel_eval_jsonb("order.total * 2", r#"{"order.total": 5}"#),
+            serde_json::json!(10)
+        );
+        // The nested shape still parses as a path afterwards.
+        assert_eq!(
+            feel_eval_jsonb("order.total * 2", r#"{"order": {"total": 21}}"#),
+            serde_json::json!(42)
+        );
+    }
+
+    #[pg_test]
+    fn test_feel_eval_shape_multiword_name() {
+        // 'monthly salary' is a single multi-word FEEL name when in scope.
+        assert_eq!(
+            feel_eval_jsonb("monthly salary * 12", r#"{"monthly salary": 5000}"#),
+            serde_json::json!(60000)
+        );
+        // A wider shape containing the same multi-word key parses the same way.
+        assert_eq!(
+            feel_eval_jsonb(
+                "monthly salary * 12",
+                r#"{"monthly salary": 7000, "bonus": 1}"#
+            ),
+            serde_json::json!(84000)
+        );
+    }
+
+    #[pg_test]
+    #[should_panic(expected = "FEEL parse error")]
+    fn test_feel_eval_shape_multiword_split_is_error() {
+        // Prime the cache with the multi-word shape (must succeed).
+        assert_eq!(
+            feel_eval_jsonb("monthly salary * 12", r#"{"monthly salary": 5000}"#),
+            serde_json::json!(60000)
+        );
+        // With the multi-word key absent, the same text is a syntax error. A
+        // shape-blind cache would evaluate the cached AST and return null
+        // instead of raising.
+        feel_eval_jsonb("monthly salary * 12", r#"{"monthly": 3, "salary": 7}"#);
+    }
+
+    #[pg_test]
+    fn test_feel_eval_values_change_shape_constant() {
+        // Same expression and shape, varying leaf values: one cache entry must
+        // serve all rows and produce varying, correct results.
+        assert_eq!(
+            feel_eval_jsonb("x * y", r#"{"x": 2, "y": 3}"#),
+            serde_json::json!(6)
+        );
+        assert_eq!(
+            feel_eval_jsonb("x * y", r#"{"x": 5, "y": 7}"#),
+            serde_json::json!(35)
+        );
+        assert_eq!(
+            feel_eval_jsonb("x * y", r#"{"x": 6, "y": 0.5}"#),
+            serde_json::json!(3)
+        );
+    }
+
+    #[pg_test]
+    fn test_feel_eval_shape_list_of_contexts_vs_scalars() {
+        // A list of contexts contributes its element key structure to the scope
+        // ('items . price' becomes a known name path).
+        assert_eq!(
+            feel_eval_jsonb(
+                "sum(items.price)",
+                r#"{"items": [{"price": 2}, {"price": 3}]}"#
+            ),
+            serde_json::json!(5)
+        );
+        // A list of scalars has no 'price' projection: the result is null.
+        assert_eq!(
+            feel_eval_jsonb("sum(items.price)", r#"{"items": [10, 20]}"#),
+            serde_json::Value::Null
+        );
+        // The list-of-contexts shape still works afterwards.
+        assert_eq!(
+            feel_eval_jsonb(
+                "sum(items.price)",
+                r#"{"items": [{"price": 2}, {"price": 3}]}"#
+            ),
+            serde_json::json!(5)
+        );
+    }
+
+    // --- Number conversion fast paths ---
+
+    #[pg_test]
+    fn test_feel_eval_large_integer_exact() {
+        // 2^53 + 1 is not representable in f64; the integer paths must stay
+        // exact in both directions (JSON -> FEEL and FEEL -> JSON).
+        assert_eq!(
+            feel_eval_jsonb("x + 1", r#"{"x": 9007199254740992}"#),
+            serde_json::json!(9_007_199_254_740_993_i64)
+        );
+        let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('9007199254740993')")
+            .expect("SPI failed");
+        assert_eq!(
+            result.unwrap().0,
+            serde_json::json!(9_007_199_254_740_993_i64)
+        );
+    }
+
+    #[pg_test]
+    fn test_feel_eval_non_integer_float_output() {
+        let result =
+            Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('1.5 + 1')").expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!(2.5));
+    }
+
+    #[pg_test]
+    fn test_feel_eval_integer_beyond_i64_as_float() {
+        // Integers wider than i64 fall back to the f64 output path.
+        let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('9223372036854775807 + 1')")
+            .expect("SPI failed");
+        let f = result.unwrap().0.as_f64().expect("expected f64 result");
+        assert!((f - 2f64.powi(63)).abs() < 1.0, "unexpected value: {f}");
+    }
+
     // dsntk 0.3 behavior pins: these lock in SQL-visible upstream behavior that
     // changed in the 0.2 -> 0.3 bump, so the next dsntk upgrade cannot shift it
     // silently. If one of these fails after a dependency bump, treat it as a
     // behavior change to document, not a pgdmn regression.
+
+    #[pg_test]
+    fn test_feel_unary_equal_not_equal_tests() {
+        // 0.3 behavior pin: unary '=' / '!=' tests evaluate (0.2 returned
+        // null for these forms). Decision-table entries using them now match.
+        let eq = Spi::get_one::<bool>("SELECT feel_eval_bool('5 in (= 5)')").expect("SPI failed");
+        assert_eq!(eq, Some(true));
+        let ne = Spi::get_one::<bool>("SELECT feel_eval_bool('5 in (!= 5)')").expect("SPI failed");
+        assert_eq!(ne, Some(false));
+        let ne_list =
+            Spi::get_one::<bool>("SELECT feel_eval_bool('5 in (!= 3, != 4)')").expect("SPI failed");
+        assert_eq!(ne_list, Some(true));
+    }
+
+    #[pg_test]
+    fn test_parser_scope_derivation_contract() {
+        // Pins the parser's scope-shape derivation (ParsingContext flattening)
+        // that the FEEL evaluator cache key mirrors: a multi-word key inside a
+        // nested context is only resolvable as a path if the parser flattens
+        // nested keys as "parent . child". If an upstream dsntk change alters
+        // that derivation, this fails loudly instead of silently skewing the
+        // cache key (see cache.rs::context_shape_digest).
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"SELECT feel_eval('order.line total * 2', '{"order": {"line total": 5}}'::jsonb)"#,
+        )
+        .expect("SPI failed");
+        assert_eq!(result.unwrap().0, serde_json::json!(10));
+    }
 
     #[pg_test]
     fn test_feel_in_operator_accepts_unary_test_list() {
@@ -541,6 +737,57 @@ mod tests {
         assert_eq!(result.unwrap().0, serde_json::json!("Denied: low income"));
     }
 
+    // A decision table whose input entries use the special `?` variable,
+    // which the DMN spec binds to the tested input value.
+    const QMARK_TABLE_DMN: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="qmark_table"
+             name="QmarkTable"
+             namespace="https://example.org/qmark">
+    <inputData id="Age" name="Age">
+        <variable name="Age" typeRef="number"/>
+    </inputData>
+    <decision id="Adult" name="Adult">
+        <variable name="Adult" typeRef="string"/>
+        <informationRequirement>
+            <requiredInput href="#Age"/>
+        </informationRequirement>
+        <decisionTable hitPolicy="FIRST">
+            <input>
+                <inputExpression typeRef="number"><text>Age</text></inputExpression>
+            </input>
+            <output name="Adult" typeRef="string"/>
+            <rule>
+                <inputEntry><text>? >= 18</text></inputEntry>
+                <outputEntry><text>"adult"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"minor"</text></outputEntry>
+            </rule>
+        </decisionTable>
+    </decision>
+</definitions>"##;
+
+    #[pg_test]
+    fn test_dmn_decision_table_question_mark_binding() {
+        // `?` in an input entry must see the column's input value (DMN spec);
+        // guards the input-expression hoisting in the vendored decision-table
+        // evaluator (H10) against binding regressions.
+        let escaped = QMARK_TABLE_DMN.replace('\'', "''");
+        for (age, expected) in [(20, "adult"), (16, "minor"), (18, "adult")] {
+            let query = format!(
+                "SELECT dmn_eval(dmn_load('{escaped}'), 'Adult', '{{\"Age\": {age}}}'::jsonb)"
+            );
+            let result = Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+            assert_eq!(
+                result.unwrap().0,
+                serde_json::json!(expected),
+                "Age {age} misclassified"
+            );
+        }
+    }
+
     // --- Multi-decision (dependent decisions) tests ---
 
     #[pg_test]
@@ -778,6 +1025,16 @@ mod tests {
         </literalExpression>
     </decision>
 </definitions>"##;
+
+    /// Warm (LIMIT 1) then time a per-row benchmark query. Warmup keeps
+    /// parse/cache-miss cost out of the timed run.
+    fn timed_query(label: &str, sql: &str) -> std::time::Duration {
+        Spi::run(&format!("{sql} LIMIT 1"))
+            .unwrap_or_else(|e| panic!("{label} warmup failed: {e}"));
+        let start = std::time::Instant::now();
+        Spi::run(sql).unwrap_or_else(|e| panic!("{label} query failed: {e}"));
+        start.elapsed()
+    }
 
     #[pg_test]
     // Benchmark: long inline scenario setup; float division only for human-readable reporting
@@ -1021,6 +1278,37 @@ mod tests {
         .expect("DMN record risk query failed");
         let dmn_record_risk_dur = dmn_record_risk_start.elapsed();
 
+        // --- Benchmark 3: FEEL expression evaluation per row ---
+        let feel_concat_dur = timed_query(
+            "FEEL concat",
+            "SELECT feel_eval('first_name + \" \" + last_name', \
+             jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+             FROM bench_names",
+        );
+        let feel_numeric_dur = timed_query(
+            "FEEL numeric",
+            "SELECT feel_eval_numeric(\
+             'credit_score * 0.3 + income / 2000 + years_employed * 5', \
+             jsonb_build_object('income', income, 'credit_score', credit_score, \
+             'years_employed', years_employed)) FROM bench_names",
+        );
+
+        // --- Benchmark 4: large model (85KB lending DMN) per-row overhead ---
+        let escaped_lending = EXAMPLE_LENDING.replace('\'', "''");
+        let dmn_lending_dur = timed_query(
+            "DMN lending",
+            &format!(
+                "SELECT dmn_eval(dmn_load('{escaped_lending}'), 'Strategy', jsonb_build_object(\
+                 'ApplicantData', jsonb_build_object('Age', 51, 'MaritalStatus', 'M', \
+                 'EmploymentStatus', 'EMPLOYED', 'ExistingCustomer', false, \
+                 'Monthly', jsonb_build_object('Income', income / 10, 'Expenses', 3000, 'Repayments', 0)), \
+                 'RequestedProduct', jsonb_build_object('ProductType', 'STANDARD LOAN', \
+                 'Amount', income, 'Rate', 0.06, 'Term', 36), \
+                 'BureauData', jsonb_build_object('CreditScore', credit_score, 'Bankrupt', false))) \
+                 FROM bench_names"
+            ),
+        );
+
         let rc = row_count as f64;
 
         // Report results
@@ -1040,6 +1328,13 @@ mod tests {
              PG via jsonb:    {:.1} us/row ({:?})\n\
              PG plain SQL:    {:.1} us/row ({:?})\n\
              record/jsonb:    {:.2}x | DMN jsonb/plain: {:.1}x | DMN record/plain: {:.1}x\n\
+             \n\
+             --- FEEL per-row (evaluator cache path) ---\n\
+             feel_eval concat:    {:.1} us/row ({:?})\n\
+             feel_eval_numeric:   {:.1} us/row ({:?})\n\
+             \n\
+             --- Large model, 85KB lending DMN (per-row model overhead) ---\n\
+             DMN lending jsonb:   {:.1} us/row ({:?})\n\
              \n\
              Complex/Simple DMN: {:.1}x",
             dmn_concat_dur.as_micros() as f64 / rc,
@@ -1064,6 +1359,12 @@ mod tests {
             dmn_record_risk_dur.as_secs_f64() / dmn_risk_dur.as_secs_f64(),
             dmn_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
             dmn_record_risk_dur.as_secs_f64() / pg_plain_risk_dur.as_secs_f64(),
+            feel_concat_dur.as_micros() as f64 / rc,
+            feel_concat_dur,
+            feel_numeric_dur.as_micros() as f64 / rc,
+            feel_numeric_dur,
+            dmn_lending_dur.as_micros() as f64 / rc,
+            dmn_lending_dur,
             dmn_risk_dur.as_secs_f64() / dmn_concat_dur.as_secs_f64(),
         );
         if let Err(e) = std::fs::write("/pgdmn/benchmark_results.txt", &report) {
@@ -1583,17 +1884,26 @@ mod tests {
         let query_a = format!("SELECT dmn_eval(dmn_load('{escaped_a}'), 'Greeting')");
         let query_b = format!("SELECT dmn_eval(dmn_load('{escaped_b}'), 'Greeting')");
 
-        // Load model A (cold)
-        let cold_a_start = std::time::Instant::now();
+        // Deterministic cache observability (TEST-003): count evaluator
+        // builds instead of comparing wall-clock timings.
+        let builds = || {
+            Spi::get_one::<i64>("SELECT dmn_evaluator_builds()")
+                .expect("SPI failed")
+                .expect("builds count returned NULL")
+        };
+        let builds_start = builds();
+
+        // Load model A (cold — one build)
         let result_a = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL");
-        let cold_a = cold_a_start.elapsed();
+        assert_eq!(builds(), builds_start + 1, "model A should build once");
 
         // Load model B (cold — different XML, not cached)
         let result_b = Spi::get_one::<pgrx::JsonB>(&query_b)
             .expect("SPI failed")
             .expect("model B returned NULL");
+        assert_eq!(builds(), builds_start + 2, "model B should build once");
 
         // Models produce different output — a false cache hit would fail here
         assert_eq!(result_a.0, serde_json::json!("Hello, World!"));
@@ -1603,21 +1913,43 @@ mod tests {
             "Models A and B returned the same result; cache keying may not distinguish them"
         );
 
-        // Model A again (warm — should be cached)
-        let warm_a_start = std::time::Instant::now();
+        // Model A again (warm — served from cache, no new build)
         let result_a_warm = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL on warm run");
-        let warm_a = warm_a_start.elapsed();
+        assert_eq!(builds(), builds_start + 2, "warm model A must not rebuild");
 
         // Cached result matches original
         assert_eq!(result_a.0, result_a_warm.0);
+    }
 
-        // Warm A should be significantly faster than cold A
-        assert!(
-            warm_a < cold_a / 2,
-            "Model A was not faster on second call: cold={cold_a:?}, warm={warm_a:?}"
-        );
+    #[pg_test]
+    fn test_cache_same_name_different_xml() {
+        // Two models with identical namespace AND name but different decision
+        // logic: the evaluator cache is keyed by XML content hash, so anything
+        // keyed on less than full content would collide here.
+        let model_b = SIMPLE_DMN.replace("Hello, World!", "Goodbye, World!");
+        let escaped_a = SIMPLE_DMN.replace('\'', "''");
+        let escaped_b = model_b.replace('\'', "''");
+
+        let query_a = format!("SELECT dmn_eval(dmn_load('{escaped_a}'), 'Greeting')");
+        let query_b = format!("SELECT dmn_eval(dmn_load('{escaped_b}'), 'Greeting')");
+
+        let result_a = Spi::get_one::<pgrx::JsonB>(&query_a)
+            .expect("SPI failed")
+            .expect("model A returned NULL");
+        assert_eq!(result_a.0, serde_json::json!("Hello, World!"));
+
+        let result_b = Spi::get_one::<pgrx::JsonB>(&query_b)
+            .expect("SPI failed")
+            .expect("model B returned NULL");
+        assert_eq!(result_b.0, serde_json::json!("Goodbye, World!"));
+
+        // Model A again: the cache must still hold A's evaluator, not B's.
+        let result_a_again = Spi::get_one::<pgrx::JsonB>(&query_a)
+            .expect("SPI failed")
+            .expect("model A returned NULL on second run");
+        assert_eq!(result_a_again.0, serde_json::json!("Hello, World!"));
     }
 }
 

@@ -2,21 +2,24 @@ use pgrx::prelude::*;
 
 use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
-use dsntk_feel::{FeelNumber, FeelScope, IntervalType};
-use dsntk_feel_evaluator::evaluate;
-use dsntk_feel_parser::parse_expression;
+use dsntk_feel::{FeelNumber, IntervalType};
 use pgrx::datum::{Range, RangeBound};
 
+use crate::cache::prepared_feel_evaluator;
 use crate::convert::{feel_to_json, json_to_context, tuple_to_context};
 
 /// Evaluate a FEEL expression with a pre-built FeelContext.
+///
+/// Parsing and evaluator construction are amortized across calls: the prepared
+/// evaluator is cached per (expression, context shape) — see cache.rs — so a
+/// cache hit costs one shape digest, one map probe, and the evaluation itself.
 fn eval_feel_ctx(expression: &str, ctx: FeelContext) -> Value {
-    let scope = FeelScope::default();
-    scope.push(ctx);
-    let node = parse_expression(&scope, expression, false)
-        .unwrap_or_else(|e| pgrx::error!("FEEL parse error: {}", e));
-    crate::guard::reject_external_functions(&node).unwrap_or_else(|e| pgrx::error!("{}", e));
-    evaluate(&scope, &node)
+    // The external-function AST guard runs inside the cache at parse time
+    // (cache.rs::get_or_prepare_feel_evaluator): a cached evaluator was
+    // guarded when its expression was first parsed.
+    let (evaluator, scope) =
+        prepared_feel_evaluator(expression, ctx).unwrap_or_else(|e| pgrx::error!("{}", e));
+    evaluator(&scope)
 }
 
 /// Raise the SQL error for a FEEL null result in a typed variant.
