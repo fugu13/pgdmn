@@ -85,7 +85,7 @@ The startup with the login outage gets woken up for, and the enterprise customer
 
 ## Who is on the hook tonight?
 
-Because the routing is a column in a view, the questions you actually ask are ordinary SQL. Group by queue and the pager list falls out:
+Because the routing is a column in a view, anyone comfortable with SQL can quickly answer questions about ticket routing. Group by queue and the pager list falls out:
 
 ```sql
 SELECT queue, count(*), string_agg(subject, '; ' ORDER BY id) AS work
