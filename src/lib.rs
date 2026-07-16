@@ -2525,6 +2525,79 @@ mod tests {
         assert_eq!(priced(PROMO_DMN, "100.00", "0.10", "Tax Amount"), "9.00");
     }
 
+    #[pg_test]
+    fn test_example_pricing_policies_takes_effect_switch() {
+        // The pricing example stores two dated versions of one `retail` policy in
+        // a `pricing_policies` table and lets the query pick whichever is in
+        // effect on a given day — the latest whose takes_effect has arrived.
+        // Through June that is the standard model; from 1 July it is the
+        // promotional one, with nothing updated in between. This is the switch
+        // the article and examples page turn on, so verify it against the real
+        // engine rather than trusting the prose.
+        let standard = PRICING_DMN.replace('\'', "''");
+        let promo = PROMO_DMN.replace('\'', "''");
+
+        Spi::run(&format!(
+            "CREATE TEMP TABLE pricing_policies (
+               name         text NOT NULL,
+               takes_effect date NOT NULL,
+               model        dmnmodel NOT NULL,
+               PRIMARY KEY (name, takes_effect));
+             INSERT INTO pricing_policies VALUES
+               ('retail', DATE '2026-01-01', dmn_load('{standard}')),
+               ('retail', DATE '2026-07-01', dmn_load('{promo}'));"
+        ))
+        .expect("failed to set up pricing_policies");
+
+        // Single order (100.00 @ 0.10) under the version in effect on the day —
+        // the article's "Set up" query and its result.
+        let price_as_of = |as_of: &str| -> String {
+            Spi::get_one::<pgrx::AnyNumeric>(&format!(
+                "SELECT round(dmn_eval_numeric(model, 'Total Price', \
+                   '{{\"Base Price\": 100.00, \"Tax Rate\": 0.10}}'::jsonb), 2) \
+                 FROM pricing_policies \
+                 WHERE name = 'retail' AND takes_effect <= DATE '{as_of}' \
+                 ORDER BY takes_effect DESC LIMIT 1"
+            ))
+            .expect("SPI failed")
+            .expect("no policy in effect")
+            .to_string()
+        };
+        assert_eq!(price_as_of("2026-06-30"), "110.00", "standard through June");
+        assert_eq!(price_as_of("2026-07-01"), "99.00", "promo from 1 July");
+
+        // The whole book (orders.csv) under the in-effect version: the standard
+        // book through June, the promotional book from July — the same totals
+        // the article's cost query and the examples page's table print.
+        let book_as_of = |as_of: &str| -> String {
+            Spi::get_one::<pgrx::AnyNumeric>(&format!(
+                "WITH orders(base_price, tax_rate) AS (VALUES \
+                   (100.00, 0.10), (2499.99, 0.0825), (45.50, 0.20), \
+                   (1000.00, 0.00), (19.99, 0.075)) \
+                 SELECT round(sum(dmn_eval_numeric(pol.model, 'Total Price', \
+                   jsonb_build_object('Base Price', base_price, 'Tax Rate', tax_rate))), 2) \
+                 FROM orders \
+                 CROSS JOIN LATERAL ( \
+                   SELECT model FROM pricing_policies \
+                   WHERE name = 'retail' AND takes_effect <= DATE '{as_of}' \
+                   ORDER BY takes_effect DESC LIMIT 1) pol"
+            ))
+            .expect("SPI failed")
+            .expect("no policy in effect")
+            .to_string()
+        };
+        assert_eq!(
+            book_as_of("2026-06-30"),
+            "3892.33",
+            "standard book through June"
+        );
+        assert_eq!(
+            book_as_of("2026-07-01"),
+            "3503.10",
+            "promo book from 1 July"
+        );
+    }
+
     /// The aggregate figures printed in the "Going further" sections of the
     /// articles — approval rate, book values, promotion cost — computed by the
     /// real engine over the published datasets, exactly as the articles' SQL

@@ -1,7 +1,7 @@
 ---
 title: Change pricing policies on the fly
 date: 2026-07-12
-summary: The rules are a row in a table. Put two pricing models side by side, price the same orders under both, and switching everybody to the promotion becomes an UPDATE rather than a deploy.
+summary: Store each pricing policy as a dated row, and let one query price every order under whichever version is in effect on the day — so starting a promotion is an INSERT with a future date, not a deploy.
 files: order-pricing.dmn, order-pricing-promo.dmn, orders.csv
 example: pricing
 ---
@@ -27,16 +27,21 @@ Both models are standard DMN files — open them in dmn-js, or any DMN tool: [st
 
 ## Set up
 
-Load both models — [`order-pricing.dmn`](/examples/order-pricing.dmn) and [`order-pricing-promo.dmn`](/examples/order-pricing-promo.dmn) — into the `models` table under different names, and load the orders from [`orders.csv`](/examples/orders.csv). Run this from the directory the three files are in; you will need pgdmn installed first (see [Install](/docs/#install)).
+Load both models — [`order-pricing.dmn`](/examples/order-pricing.dmn) and [`order-pricing-promo.dmn`](/examples/order-pricing-promo.dmn) — into a `pricing_policies` table as two dated versions of one `retail` policy: the standard model, in effect since the start of the year, and the promotional one, set to take effect on 1 July. Then load the orders from [`orders.csv`](/examples/orders.csv). Run this from the directory the three files are in; you will need pgdmn installed first (see [Install](/docs/#install)).
 
 ```sql
 \set standard `cat order-pricing.dmn`
 \set promo    `cat order-pricing-promo.dmn`
 
-CREATE TABLE models (name text PRIMARY KEY, model dmnmodel NOT NULL);
-INSERT INTO models VALUES
-  ('pricing-standard', dmn_load(:'standard')),
-  ('pricing-promo',    dmn_load(:'promo'));
+CREATE TABLE pricing_policies (
+  name         text NOT NULL,
+  takes_effect date NOT NULL,
+  model        dmnmodel NOT NULL,
+  PRIMARY KEY (name, takes_effect)
+);
+INSERT INTO pricing_policies VALUES
+  ('retail', DATE '2026-01-01', dmn_load(:'standard')),
+  ('retail', DATE '2026-07-01', dmn_load(:'promo'));
 
 CREATE TABLE orders (
   id         int PRIMARY KEY,
@@ -47,18 +52,23 @@ CREATE TABLE orders (
 \copy orders FROM 'orders.csv' WITH (FORMAT csv, HEADER true)
 ```
 
-A single order prices in one call. `dmn_eval_numeric` hands back a `numeric`, so it drops straight into `round` with no cast:
+A single order prices in one call, under whichever version of the policy is in effect on the day you ask about — the latest one whose start date has arrived. `dmn_eval_numeric` hands back a `numeric`, so it drops straight into `round` with no cast:
 
 ```sql
 SELECT round(dmn_eval_numeric(model, 'Total Price', '{
     "Base Price": 100.00, "Tax Rate": 0.10
   }'::jsonb), 2) AS total
-FROM models WHERE name = 'pricing-standard';
+FROM pricing_policies
+WHERE name = 'retail' AND takes_effect <= DATE '2026-06-30'
+ORDER BY takes_effect DESC
+LIMIT 1;
 
 --  total
 -- --------
 --  110.00
 ```
+
+Asked as of 30 June, that is the standard model — the promotional row is dated 1 July, so its start date has not arrived yet.
 
 ## The promotion is a different model, not a different query
 
@@ -74,12 +84,12 @@ Table: The promotional pricing model
 
 Here is the part that matters: **both models answer to the name `Total Price`**. The caller asks the same question of both. The shape of the graph behind that question is entirely the model's business — one has an extra decision in the middle, and no query has to know.
 
-So both live in the `models` table under different names, and choosing a policy is choosing a row. One query prices the whole book under both, and the only thing that differs between the two columns is which model row it reached for:
+So both live in the `pricing_policies` table as two dated versions of the same `retail` policy, and choosing a version is choosing a row by its date. One query prices the whole book under each, and the only thing that differs between the two columns is which version it reached for — the one in effect through June, and the one that takes over in July:
 
 ```sql
 SELECT o.customer, o.base_price,
-  round(dmn_eval_numeric(s.model, 'Total Price', p.input), 2) AS standard,
-  round(dmn_eval_numeric(t.model, 'Total Price', p.input), 2) AS promo
+  round(dmn_eval_numeric(thru_jun.model, 'Total Price', p.input), 2) AS thru_jun,
+  round(dmn_eval_numeric(from_jul.model, 'Total Price', p.input), 2) AS from_jul
 FROM orders o
 CROSS JOIN LATERAL (
   SELECT jsonb_build_object(
@@ -87,14 +97,16 @@ CROSS JOIN LATERAL (
     'Tax Rate',   o.tax_rate
   ) AS input
 ) p
-JOIN models s ON s.name = 'pricing-standard'
-JOIN models t ON t.name = 'pricing-promo'
+JOIN pricing_policies thru_jun
+  ON thru_jun.name = 'retail' AND thru_jun.takes_effect = DATE '2026-01-01'
+JOIN pricing_policies from_jul
+  ON from_jul.name = 'retail' AND from_jul.takes_effect = DATE '2026-07-01'
 ORDER BY o.id;
 ```
 
-Table: The same orders, under both policies
+Table: The same orders, before and after the switch
 
-| Customer | Base price | Standard | Promo |
+| Customer | Base price | Through June | From July |
 | --- | --- | --- | --- |
 | Northwind Traders | 100.00 | 110.00 | 99.00 |
 | Globex | 2499.99 | 2706.24 | 2435.62 |
@@ -104,7 +116,7 @@ Table: The same orders, under both policies
 
 Umbrella pays no tax either way — their rate is zero — so the promotion is the whole of their saving. Globex saves 270.62, which is not ten percent of anything they were quoted: the discount comes off before the tax, so the tax shrinks too. That interaction is *in the model*, where somebody can argue with it, rather than distributed across whichever queries happened to price an order.
 
-Running the promotion for everyone is an `UPDATE` of one row. No migration, no deploy, no coordinated release.
+Rolling the promotion out to everyone is not an `UPDATE` at all — it is the row you already inserted, dated 1 July. When that day arrives, the everyday query starts returning the July column on its own. No migration, no deploy, no coordinated release.
 
 ## Globex, and what a penny is
 
@@ -119,28 +131,39 @@ It matters more than it looks. Round each line and sum, and you get one number; 
 What does the promotion cost the business? The saving is just the difference between the two columns, summed — a single query, no application code:
 
 ```sql
-SELECT round(sum(dmn_eval_numeric(s.model, 'Total Price', p.input)), 2) AS standard_book,
-  round(sum(dmn_eval_numeric(t.model, 'Total Price', p.input)), 2) AS promo_book,
-  round(sum(dmn_eval_numeric(s.model, 'Total Price', p.input)
-    - dmn_eval_numeric(t.model, 'Total Price', p.input)), 2) AS given_away
+SELECT round(sum(dmn_eval_numeric(thru_jun.model, 'Total Price', p.input)), 2) AS thru_jun_book,
+  round(sum(dmn_eval_numeric(from_jul.model, 'Total Price', p.input)), 2) AS from_jul_book,
+  round(sum(dmn_eval_numeric(thru_jun.model, 'Total Price', p.input)
+    - dmn_eval_numeric(from_jul.model, 'Total Price', p.input)), 2) AS given_away
 FROM orders o
 CROSS JOIN LATERAL (
   SELECT jsonb_build_object('Base Price', o.base_price, 'Tax Rate', o.tax_rate) AS input
 ) p
-JOIN models s ON s.name = 'pricing-standard'
-JOIN models t ON t.name = 'pricing-promo';
+JOIN pricing_policies thru_jun
+  ON thru_jun.name = 'retail' AND thru_jun.takes_effect = DATE '2026-01-01'
+JOIN pricing_policies from_jul
+  ON from_jul.name = 'retail' AND from_jul.takes_effect = DATE '2026-07-01';
 
---  standard_book | promo_book | given_away
--- ---------------+------------+------------
---        3892.33 |    3503.10 |     389.23
+--  thru_jun_book | from_jul_book | given_away
+-- ---------------+---------------+------------
+--        3892.33 |       3503.10 |     389.23
 ```
 
-Making the promotion the live policy is one statement — and because the old model is still a value in the table, last quarter's prices remain reproducible exactly:
+The everyday query never names a version. It asks for the policy in effect on the day and lets the dates decide — so on 1 July it begins pricing at the promotional rate, with nothing deployed and nothing updated in between:
 
 ```sql
--- Point the everyday name at the promotional model.
-UPDATE models
-SET model = (SELECT model FROM models WHERE name = 'pricing-promo')
-WHERE name = 'pricing-standard';
+SELECT o.customer,
+  round(dmn_eval_numeric(pol.model, 'Total Price', jsonb_build_object(
+    'Base Price', o.base_price, 'Tax Rate', o.tax_rate)), 2) AS total
+FROM orders o
+CROSS JOIN LATERAL (
+  SELECT model FROM pricing_policies
+  WHERE name = 'retail' AND takes_effect <= CURRENT_DATE
+  ORDER BY takes_effect DESC
+  LIMIT 1
+) pol
+ORDER BY o.id;
 ```
+
+Run it in June and every row is the standard price; run it on 1 July and every row is the promotional one — the same query, a different answer, because the calendar moved. It runs backwards just as well: to see what an order would have cost on any past day, ask as of that date. The older version is still right there, dated, so last quarter's prices stay reproducible exactly.
 

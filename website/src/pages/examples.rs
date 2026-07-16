@@ -31,7 +31,7 @@ pub fn ExamplesPage() -> impl IntoView {
                 </li>
                 <li>
                     <a href="#pricing">"Order pricing"</a>
-                    <span>"Swap pricing models on the fly with the same queries"</span>
+                    <span>"Version pricing policies by date; one query switches itself"</span>
                 </li>
                 <li>
                     <a href="#compliance">"Compliance checks"</a>
@@ -91,8 +91,9 @@ ORDER BY a.id;
 
         <h2 id="pricing">"Order pricing"</h2>
         <p>
-            "Dynamic pricing rules can change with no code deploy. Swap the DMN model for another
-            with the same inputs while the SQL stays the same."
+            "Store each pricing policy as a dated row. One query prices every order under whichever
+            version is in effect on the day, and switches to a new one by itself when its start
+            date arrives — no code deploy."
         </p>
 
         <ul class="download-list">
@@ -102,31 +103,29 @@ ORDER BY a.id;
         </ul>
 
         <SqlBlock
-            label="Order pricing: two policies, swapped by name"
-            code="-- Two policies live in `models` under different names. The promo
--- model takes 10% off before tax; the standard one does not.
--- Both answer to the same name, 'Total Price'.
--- Identical queries get the right result for the current model.
+            label="Order pricing: policy versions switch by date"
+            code="-- Two versions of the 'retail' policy live in `pricing_policies`, each
+-- with the date it takes effect. One query prices every order under the
+-- version in effect on a given day, and switches by itself when the
+-- promo's start date arrives. No deploy, no UPDATE. As of 1 July:
 SELECT o.customer, o.base_price,
-  round(dmn_eval_numeric(s.model, 'Total Price', p.input), 2) AS standard,
-  round(dmn_eval_numeric(t.model, 'Total Price', p.input), 2) AS promo
+  round(dmn_eval_numeric(pol.model, 'Total Price', jsonb_build_object(
+    'Base Price', o.base_price, 'Tax Rate', o.tax_rate)), 2) AS total
 FROM orders o
 CROSS JOIN LATERAL (
-  SELECT jsonb_build_object(
-    'Base Price', o.base_price,
-    'Tax Rate',   o.tax_rate
-  ) AS input
-) p
-JOIN models s ON s.name = 'pricing-standard'
-JOIN models t ON t.name = 'pricing-promo'
+  SELECT model FROM pricing_policies
+  WHERE name = 'retail' AND takes_effect <= DATE '2026-07-01'
+  ORDER BY takes_effect DESC
+  LIMIT 1
+) pol
 ORDER BY o.id;
---      customer      | base_price | standard |  promo
--- -------------------+------------+----------+---------
---  Northwind Traders |     100.00 |   110.00 |   99.00
---  Globex            |    2499.99 |  2706.24 | 2435.62
---  Initech           |      45.50 |    54.60 |   49.14
---  Umbrella Corp     |    1000.00 |  1000.00 |  900.00
---  Acme Supply       |      19.99 |    21.49 |   19.34"
+--      customer      | base_price |  total
+-- -------------------+------------+---------
+--  Northwind Traders |     100.00 |   99.00
+--  Globex            |    2499.99 | 2435.62
+--  Initech           |      45.50 |   49.14
+--  Umbrella Corp     |    1000.00 |  900.00
+--  Acme Supply       |      19.99 |   19.34"
         />
 
         <Walkthrough slug="order-pricing" scenario="Order pricing"/>
