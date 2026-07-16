@@ -34,7 +34,7 @@ fn null_error(detail: Option<&String>) -> String {
 /// Unwrap a FEEL result into `NUMERIC`.
 ///
 /// These six conversions are what the typed `feel_eval_*` and `dmn_eval_*`
-/// functions are made of — same rules, same errors, whether the value came from
+/// functions are made of—same rules, same errors, whether the value came from
 /// an expression or a decision.
 pub fn feel_to_numeric(value: &Value) -> Result<pgrx::AnyNumeric, String> {
     match value {

@@ -91,9 +91,9 @@ SELECT dmn_record_eval(
 
 ### Typed variants
 
-`dmn_eval` returns JSONB, so a decision that produces the string `Approved` comes back as `"Approved"` — quoted. Unwrapping that by hand means `dmn_eval(...) #>> '{}'`, and a numeric decision means `(dmn_eval(...) #>> '{}')::numeric`.
+`dmn_eval` returns JSONB, so a decision that produces the string `Approved` comes back as `"Approved"`—quoted. Unwrapping that by hand means `dmn_eval(...) #>> '{}'`, and a numeric decision means `(dmn_eval(...) #>> '{}')::numeric`.
 
-The typed variants take the same arguments and return a native PostgreSQL type instead. Each raises an error if the decision returns something else — asking for a number and getting a string is a mistake worth hearing about.
+The typed variants take the same arguments and return a native PostgreSQL type instead. Each raises an error if the decision returns something else—asking for a number and getting a string is a mistake worth hearing about.
 
 #### dmn_eval_text(model, invocable, input?) -> text
 
@@ -329,7 +329,7 @@ SELECT feel_eval_numrange('[low..high)', '{"low": 18, "high": 65}'::jsonb) @> 42
 - FEEL `external` function definitions (Java/PMML) are not supported: the
   machinery that would evaluate them (a blocking HTTP client) is compiled out
   of the extension entirely, so any external invocation yields an explained
-  null — and definitions detectable at load time are rejected with a clear
+  null—and definitions detectable at load time are rejected with a clear
   error before evaluation.
 
 ## Vendored dsntk engine
@@ -358,11 +358,11 @@ make verify       # fmt + lint + check
 
 pgdmn runs inside your database, so a few properties are worth stating plainly:
 
-- **`dmn_load` parses caller-supplied XML, and does not resolve external entities** — DMN XML is not an XXE vector. A test asserts this so it stays true.
-- **FEEL is a decision language, not a general-purpose one** — expressions and decisions have no filesystem, network, or shell access.
+- **`dmn_load` parses caller-supplied XML, and does not resolve external entities**—DMN XML is not an XXE vector. A test asserts this so it stays true.
+- **FEEL is a decision language, not a general-purpose one**—expressions and decisions have no filesystem, network, or shell access.
 - **All evaluation functions are `IMMUTABLE` and `PARALLEL SAFE`** and touch no external state.
 
-A DMN model and a FEEL expression are code: treat one from an untrusted source as you would any SQL you did not write. To report a vulnerability, see [SECURITY.md](SECURITY.md) — please do not open a public issue.
+A DMN model and a FEEL expression are code: treat one from an untrusted source as you would any SQL you did not write. To report a vulnerability, see [SECURITY.md](SECURITY.md)—please do not open a public issue.
 
 ## License
 
@@ -387,11 +387,11 @@ There is no `docs/` directory: explanation aimed at users lives on the website, 
 
 ### Third-party content
 
-- `vendor/` — the dsntk engine, copyright Dariusz Depta / Engos Software,
+- `vendor/`—the dsntk engine, copyright Dariusz Depta / Engos Software,
   licensed MIT OR Apache-2.0 at your option; the upstream license texts and
   NOTICE are included in that directory. The sources carry local
   modifications, each marked with a `PGDMN:` comment.
-- `examples/` — DMN example models from the DMN TCK (DMN TCK Contributors)
+- `examples/`—DMN example models from the DMN TCK (DMN TCK Contributors)
   and Camunda Services GmbH, licensed Apache-2.0 (see file headers).
 
 pgdmn's own license applies to everything else in the repository.

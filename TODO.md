@@ -14,7 +14,7 @@ acceptable or the repository should be published with fresh history.
 
 Add SECURITY.md (report via GitHub private security advisories; trust
 model: DMN XML and FEEL expressions are untrusted SQL input evaluated
-in-process; no network stack linked — external evaluation compiled out;
+in-process; no network stack linked—external evaluation compiled out;
 vendored-engine issues coordinated with upstream). Enable private
 vulnerability reporting when the repo goes public.
 
@@ -32,7 +32,7 @@ Dependabot for path deps) and a guard against stray duplicate files
 Commit a CHECKSUMS manifest (per-crate sha256 of the vendored tarballs,
 written by vendor-upgrade). vendor/PATCHES.md exists (summaries +
 measured effects; update it as part of the one-commit-per-change
-discipline) — extend it with upstream-PR links as PUBLIC-006 executes,
+discipline)—extend it with upstream-PR links as PUBLIC-006 executes,
 teach vendor-status to reconcile the git layer against it, and disable
 squash-merge for vendor PRs so patch-layer separability survives GitHub
 merges.
@@ -55,7 +55,7 @@ so the public repo visibly demonstrates the upstream-first posture.
 
 vendor-inspect step 4 needs a committed reference (the detailed
 measurement report is a private session artifact). Commit a per-scenario baseline table
-(median, machine, toolchain, date — e.g. profiling/baselines/) and
+(median, machine, toolchain, date—e.g. profiling/baselines/) and
 point the prompt at it, so someone other than the original author can
 run the regression gate.
 
@@ -112,7 +112,7 @@ cache or a serialized precompiled-evaluator representation.
 
 The 0.3 opportunity hunt (N4) found that decision-table entries are
 overwhelmingly literals, yet build_in evaluates the right-hand side per
-call — one Box per comparison, two per range, a Vec per list — paid
+call—one Box per comparison, two per range, a Vec per list—paid
 rules x inputs x SQL-rows. A build-time AST walk detecting
 scope-independent right-hand sides could evaluate once into a cached
 Value and match by reference. Measure-first on a wide table of
@@ -150,7 +150,7 @@ walker must add the new variants (fails the build by design), H14/H19
 need manual rebases over heavily-restyled builders/bifs files, and the
 Docker toolchain must move from Rust 1.85 to ≥1.88 for let-chains
 (re-test the dev-profile LTO ICE while at it). Everything else rebases
-near-clean — decision_table.rs, model_definitions.rs, context.rs and
+near-clean—decision_table.rs, model_definitions.rs, context.rs and
 the model-evaluator files are functionally unchanged upstream.
 
 Executed 2026-07-14: pristine 0.3.0 vendored (13 crates, recognizer
@@ -190,7 +190,7 @@ Integrate axe-core into the website's test suite via Playwright: launch the SSR 
 
 ### DOCS-001: Feature docs for major features (dropped)
 
-Dropped 2026-07-14 with the `docs/` directory. Explanation aimed at users belongs where users are — the website's Docs page and the walkthroughs in `website/posts/` — rather than in a parallel set of files inside the repo that only contributors would ever open. Conventions live in CLAUDE.md; findings and future work live here.
+Dropped 2026-07-14 with the `docs/` directory. Explanation aimed at users belongs where users are—the website's Docs page and the walkthroughs in `website/posts/`—rather than in a parallel set of files inside the repo that only contributors would ever open. Conventions live in CLAUDE.md; findings and future work live here.
 
 ### DOCS-002: UI behavioral descriptions for the website (dropped)
 
@@ -216,7 +216,7 @@ Compares the input and output definitions of a named invocable across a new mode
 
 - **BACKWARD (inputs):** The new invocable accepts all inputs the old one could. Adding optional inputs (with defaults) is allowed; removing or narrowing required inputs is not.
 - **FORWARD (inputs):** The old invocable could accept all inputs the new one can. Adding required inputs breaks forward compatibility; removing optional inputs is allowed.
-- **FULL (inputs):** Both backward and forward — only optional-with-default fields may be added or removed.
+- **FULL (inputs):** Both backward and forward—only optional-with-default fields may be added or removed.
 - **BACKWARD (outputs):** Consumers of the old outputs can still consume the new outputs. Removing output fields or widening types breaks backward output compatibility.
 - **FORWARD (outputs):** Consumers of the new outputs could consume the old outputs. Adding output fields or narrowing types breaks forward output compatibility.
 - **FULL (outputs):** Both directions for outputs.
@@ -225,13 +225,13 @@ Compares the input and output definitions of a named invocable across a new mode
 
 **Array input enables transitive checks:** By passing all historical model versions as the array, the caller gets a report covering compatibility against every prior version, not just the immediately previous one.
 
-**Decided (2026-07-14):** the type-compatibility relation is dsntk's own `FeelType::is_conformant` — the same relation `dmn_eval` applies at coercion time — not a pgdmn-invented widening lattice.
+**Decided (2026-07-14):** the type-compatibility relation is dsntk's own `FeelType::is_conformant`—the same relation `dmn_eval` applies at coercion time—not a pgdmn-invented widening lattice.
 
 Direction mapping: inputs are BACKWARD compatible iff the old input type conforms to the new one (everything the old invocable accepted is still accepted), FORWARD iff the new conforms to the old. Outputs are BACKWARD compatible iff the new output type conforms to the old one (new outputs remain readable by existing consumers), FORWARD mirrored. Exact equality reports `unchanged`; conformance in the required direction reports a compatible `type-changed`; neither reports incompatible.
 
-The mapping must be locked in with property tests (reflexivity, Any-as-top, Null-conforms-to-everything, context width subtyping in both directions). `is_conformant` is lenient about Null — a field becoming nullable never reads as a narrowing — which the report semantics must document.
+The mapping must be locked in with property tests (reflexivity, Any-as-top, Null-conforms-to-everything, context width subtyping in both directions). `is_conformant` is lenient about Null—a field becoming nullable never reads as a narrowing—which the report semantics must document.
 
-Scoping note: no typed-introspection columns get added to `dmn_invocables`/`dmn_info` ahead of this work — dsntk 0.3 added no model-introspection capability, and the typeRef resolver should be built once, here.
+Scoping note: no typed-introspection columns get added to `dmn_invocables`/`dmn_info` ahead of this work—dsntk 0.3 added no model-introspection capability, and the typeRef resolver should be built once, here.
 
 **Open design questions:**
 
@@ -242,11 +242,11 @@ Scoping note: no typed-introspection columns get added to `dmn_invocables`/`dmn_
 
 The site navigation needs a responsive hamburger menu for narrow viewports.
 
-The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which WEB-001 removed. Either implement it without script — a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert — or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
+The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which WEB-001 removed. Either implement it without script—a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert—or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
 
 ### PERF-009: Tell people to let the planner parallelize
 
-Evaluating a decision is pure, per-row, self-contained work — the ideal parallel workload — and parallelism is worth more than every other change to the query put together. The functions are already `IMMUTABLE` and `PARALLEL SAFE`, so this needs no code change; it needs a reader who knows to check that their plan actually has a Gather in it.
+Evaluating a decision is pure, per-row, self-contained work—the ideal parallel workload—and parallelism is worth more than every other change to the query put together. The functions are already `IMMUTABLE` and `PARALLEL SAFE`, so this needs no code change; it needs a reader who knows to check that their plan actually has a Gather in it.
 
 Measured with `make bench-shapes` (2026-07-14), same model and rows under different SQL, against a naive per-row baseline of 18 µs/row simple and 68 µs/row complex:
 
@@ -254,9 +254,9 @@ Measured with `make bench-shapes` (2026-07-14), same model and rows under differ
 |---|---|
 | **Permit parallelism** | **3.8×** |
 | Deduplicate inputs, `MATERIALIZED` | 1.35–1.5× |
-| Deduplicate inputs, plain CTE | 1.00× — no effect |
+| Deduplicate inputs, plain CTE | 1.00×—no effect |
 | Parallel *and* deduplicated | 1.3× |
-| Model from a table column vs. an inline literal | 1.0× — no penalty |
+| Model from a table column vs. an inline literal | 1.0×—no penalty |
 
 Two findings worth writing down for users, on the Docs page and in the README.
 
@@ -266,24 +266,24 @@ Two findings worth writing down for users, on the Docs page and in the README.
 
 ### WEB-003: Respect prefers-color-scheme
 
-The site defines its palette once, in light colours, and never consults `prefers-color-scheme`. A visitor whose system is set to dark gets a bright white page regardless. CLAUDE.md already forbids a dark-mode *toggle* on the grounds that the system preference is the right signal — but the site does not currently honour that signal either way.
+The site defines its palette once, in light colours, and never consults `prefers-color-scheme`. A visitor whose system is set to dark gets a bright white page regardless. CLAUDE.md already forbids a dark-mode *toggle* on the grounds that the system preference is the right signal—but the site does not currently honour that signal either way.
 
 Add a `prefers-color-scheme: dark` block redefining the custom properties in `style/main.scss`. Verify the dark palette holds 4.5:1 contrast for text and 3:1 for interface elements and focus indicators, which the highlighted table rows and the muted secondary text are the most likely to fail.
 ### RANGE-002: Accept PG range types as inputs in the record-eval path
 
-Extend `pg_datum_to_feel` with arms for `NUMRANGEOID`, `INT4RANGEOID`, `INT8RANGEOID`, `DATERANGEOID`, `TSRANGEOID`: read via pgrx `Range<T>`, convert bounds with the existing scalar arms, and build `Value::Range` with `IntervalType::Closed`/`Opened`/`OpenedUndef` (infinite bound → `OpenedUndef`). No SQL signature changes — `feel_record_eval` and `dmn_record_eval` start accepting range-typed columns, the only inbound channel for binding a FEEL range variable (JSON cannot carry one). Decide the policy for PG `empty` ranges (error is more consistent with the mixed-interval precedent in convert.rs) and defer `TSTZRANGEOID` with the timezone question. Round-trip property tests (PG range → FEEL → `feel_eval_numrange` → PG range) pair with the existing numrange output path. Discrete-range canonicalization (`int4range '[1,4]'` arrives as `[1,5)`) is same-set but changes `.end`/`.end included` property values — document it.
+Extend `pg_datum_to_feel` with arms for `NUMRANGEOID`, `INT4RANGEOID`, `INT8RANGEOID`, `DATERANGEOID`, `TSRANGEOID`: read via pgrx `Range<T>`, convert bounds with the existing scalar arms, and build `Value::Range` with `IntervalType::Closed`/`Opened`/`OpenedUndef` (infinite bound → `OpenedUndef`). No SQL signature changes—`feel_record_eval` and `dmn_record_eval` start accepting range-typed columns, the only inbound channel for binding a FEEL range variable (JSON cannot carry one). Decide the policy for PG `empty` ranges (error is more consistent with the mixed-interval precedent in convert.rs) and defer `TSTZRANGEOID` with the timezone question. Round-trip property tests (PG range → FEEL → `feel_eval_numrange` → PG range) pair with the existing numrange output path. Discrete-range canonicalization (`int4range '[1,4]'` arrives as `[1,5)`) is same-set but changes `.end`/`.end included` property values—document it.
 
 ### RANGE-003: feel_eval_daterange and feel_eval_tsrange typed variants
 
-Stage 2 of the numrange work: map FEEL date and date-time ranges onto `daterange`/`tsrange` via pgrx `Range<Date>`/`Range<Timestamp>`, mirroring `feel_eval_numrange`. Note PG canonicalizes discrete `daterange` (`[a..b]` becomes `[a..b+1)`) — same set, different rendering; document alongside the implementation.
+Stage 2 of the numrange work: map FEEL date and date-time ranges onto `daterange`/`tsrange` via pgrx `Range<Date>`/`Range<Timestamp>`, mirroring `feel_eval_numrange`. Note PG canonicalizes discrete `daterange` (`[a..b]` becomes `[a..b+1)`)—same set, different rendering; document alongside the implementation.
 
-### UNARY-001: feel_unary_test — evaluate decision-table-style unary tests against a value
+### UNARY-001: feel_unary_test—evaluate decision-table-style unary tests against a value
 
 `feel_unary_test(tests text, value jsonb, context jsonb DEFAULT NULL) → boolean`: parse `tests` with `parse_unary_tests` (the exact grammar of a decision-table input entry, including `-`, `not(...)`, ranges, and comma lists), bind `value` as the FEEL `?` placeholder, build the `In` node exactly as dsntk's own decision-table evaluator does, and evaluate. Enables rules-stored-in-tables matching (`WHERE feel_unary_test(r.quantity_test, to_jsonb(42))`). Needs a `/spec` first: the null-result policy (error like `feel_eval_bool` vs. decision-table-style false) and the temporal-typing story (a JSONB string stays a FEEL string, so `< today()` needs context-passed dates or later typed overloads) are behavior decisions.
 
 ### NULLS-001: Surface explained FEEL nulls the JSONB paths discard
 
-dsntk 0.3 attaches explanations to many nulls (`null(position must not be zero)`) that `feel_eval`/`dmn_eval` currently flatten to bare JSON null (convert.rs maps `Null(_)` dropping the message). Candidate shapes: `feel_eval_detail`/`dmn_eval_detail` returning `(result jsonb, null_reason text)`, or emitting the explanation as a DEBUG-level notice inside the existing functions (zero new API). The explanation text is upstream-owned prose that rewords between releases — whatever ships must document that it is diagnostic, not a stable contract. Decide the shape before implementing.
+dsntk 0.3 attaches explanations to many nulls (`null(position must not be zero)`) that `feel_eval`/`dmn_eval` currently flatten to bare JSON null (convert.rs maps `Null(_)` dropping the message). Candidate shapes: `feel_eval_detail`/`dmn_eval_detail` returning `(result jsonb, null_reason text)`, or emitting the explanation as a DEBUG-level notice inside the existing functions (zero new API). The explanation text is upstream-owned prose that rewords between releases—whatever ships must document that it is diagnostic, not a stable contract. Decide the shape before implementing.
 
 ### WEB-002: Automated link checking for the website
 
@@ -293,17 +293,17 @@ This would have caught the trailing-slash problem WEB-001 fixed by hand (linking
 
 ### WEB-001: Prerender the website to static HTML (done)
 
-The website shipped a wasm hydration bundle (343 KB of wasm plus 19.5 KB of JS) to hydrate pages with no client-side interactivity at all — no signals, no server functions, no client state. The bundle bought nothing while forcing a `wasm-bindgen` crate/CLI version match on the build host and a server-capable host in production.
+The website shipped a wasm hydration bundle (343 KB of wasm plus 19.5 KB of JS) to hydrate pages with no client-side interactivity at all—no signals, no server functions, no client state. The bundle bought nothing while forcing a `wasm-bindgen` crate/CLI version match on the build host and a server-capable host in production.
 
 Done 2026-07-13. Dropped the `hydrate` feature, `wasm-bindgen`, `console_error_panic_hook`, the `cdylib` crate type, the `wasm-release` profile, and `cargo-leptos` itself. Every route is now `SsrMode::Static` and rendered to `website/dist` by a `prerender` binary, which also compiles Sass in-process via `grass` and emits `404.html` and `.nojekyll`. The decision is recorded in CLAUDE.md.
 
 ### FEAT-003: Syntax highlighting in code blocks (done)
 
-Done 2026-07-14. SQL is highlighted at build time by syntect (`website/src/highlight.rs`), emitting CSS classes rather than inline colours — the palette lives in `style/main.scss`, in dark tones chosen to stay legible without colour. The client-side option was closed by WEB-001's no-JavaScript rule. Markdown code fences in blog posts are highlighted through the same path. DMN (XML) highlighting is not implemented: no XML is shown on the site.
+Done 2026-07-14. SQL is highlighted at build time by syntect (`website/src/highlight.rs`), emitting CSS classes rather than inline colours—the palette lives in `style/main.scss`, in dark tones chosen to stay legible without colour. The client-side option was closed by WEB-001's no-JavaScript rule. Markdown code fences in blog posts are highlighted through the same path. DMN (XML) highlighting is not implemented: no XML is shown on the site.
 
 ### FEAT-004: Markdown-based blog infrastructure (done)
 
-Done 2026-07-14. Posts are markdown files in `website/posts/`, embedded at compile time (`include_dir`) and rendered by `pulldown-cmark` during the prerender. A single `/blog/:slug` route enumerates its slugs from the files themselves via Leptos's `StaticRoute::prerender_params`, so adding a post is adding a file — no Rust change, no route to register. Front matter carries title, date, summary, and the example the post walks through. A malformed post fails the build, naming the file.
+Done 2026-07-14. Posts are markdown files in `website/posts/`, embedded at compile time (`include_dir`) and rendered by `pulldown-cmark` during the prerender. A single `/blog/:slug` route enumerates its slugs from the files themselves via Leptos's `StaticRoute::prerender_params`, so adding a post is adding a file—no Rust change, no route to register. Front matter carries title, date, summary, and the example the post walks through. A malformed post fails the build, naming the file.
 
 The one convention the blog adds: a paragraph reading `Table: …` immediately above a markdown table becomes that table's caption, which is what lets the renderer give tables a caption, `scope`-d column headers, and a keyboard-reachable scroll wrapper that bare markdown would not have.
 
@@ -317,7 +317,7 @@ Going live still needs three manual steps, recorded in RELEASEPLAN.md: a paid pl
 
 ### PERF-010: Fingerprint models instead of hashing the XML per call (done)
 
-Done 2026-07-15, delivered by the dsntk 0.3 vendoring merge rather than by dedicated work here. `cache.rs` now keys the evaluator cache on the model's 128-bit XML content hash, computed once when the model is loaded and stored on `DmnModel`, so `dmn_eval` no longer rehashes or memcmp's the whole XML per call to find its evaluator. The residual datum-side cost — the full XML is still CBOR-decoded from the datum on every row — is tracked separately as PERF-001 (zero-copy DmnModel datum layout). The finding that motivated deferring this stands: FEEL evaluation itself is the bottleneck (`dmn_record_eval` is only 5–9% faster than `dmn_eval`), so the serialization hops were never where the time went.
+Done 2026-07-15, delivered by the dsntk 0.3 vendoring merge rather than by dedicated work here. `cache.rs` now keys the evaluator cache on the model's 128-bit XML content hash, computed once when the model is loaded and stored on `DmnModel`, so `dmn_eval` no longer rehashes or memcmp's the whole XML per call to find its evaluator. The residual datum-side cost—the full XML is still CBOR-decoded from the datum on every row—is tracked separately as PERF-001 (zero-copy DmnModel datum layout). The finding that motivated deferring this stands: FEEL evaluation itself is the bottleneck (`dmn_record_eval` is only 5–9% faster than `dmn_eval`), so the serialization hops were never where the time went.
 
 ## CI
 
@@ -341,7 +341,7 @@ Add a CI check that enforces this project's documentation conventions automatica
 
 ### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension (done in vendor; upstream PR pending)
 
-dsntk-feel-evaluator 0.3.0 hard-depends on reqwest 0.13 with the rustls/aws-lc provider, used only by its `evaluator_java.rs` — a blocking HTTP client that calls a local Java RPC server (127.0.0.1:22023) when a model invokes an "external Java function". pgdmn never wants that inside a PostgreSQL backend, but feature unification is additive so it cannot be opted out downstream; the extension `.so` now statically links reqwest, rustls, and the AWS-LC C library, and the Docker image needs cmake to build aws-lc-sys. The fix is upstream (fits the minimal-upstreamable-patch working agreement): land a small PR on DecisionToolkit/dsntk putting `evaluator_java`/`evaluator_pmml` and the reqwest dependency behind an off-by-default cargo feature (e.g. `external-functions`) that returns an explained null when disabled; 0.2's `default-features = false` reqwest with a ring provider is the fallback shape. pgdmn then consumes dsntk-feel-evaluator with the feature off, removing the HTTP/TLS stack from the backend entirely and demoting the `src/guard.rs` boundary rejection from load-bearing to belt-and-suspenders (the guard is inherently partial for DMN models — see the module docs in `src/guard.rs`). Once merged and adopted, remove cmake from the Dockerfile (comment there points here). No local `[patch]`/fork in the interim.
+dsntk-feel-evaluator 0.3.0 hard-depends on reqwest 0.13 with the rustls/aws-lc provider, used only by its `evaluator_java.rs`—a blocking HTTP client that calls a local Java RPC server (127.0.0.1:22023) when a model invokes an "external Java function". pgdmn never wants that inside a PostgreSQL backend, but feature unification is additive so it cannot be opted out downstream; the extension `.so` now statically links reqwest, rustls, and the AWS-LC C library, and the Docker image needs cmake to build aws-lc-sys. The fix is upstream (fits the minimal-upstreamable-patch working agreement): land a small PR on DecisionToolkit/dsntk putting `evaluator_java`/`evaluator_pmml` and the reqwest dependency behind an off-by-default cargo feature (e.g. `external-functions`) that returns an explained null when disabled; 0.2's `default-features = false` reqwest with a ring provider is the fallback shape. pgdmn then consumes dsntk-feel-evaluator with the feature off, removing the HTTP/TLS stack from the backend entirely and demoting the `src/guard.rs` boundary rejection from load-bearing to belt-and-suspenders (the guard is inherently partial for DMN models—see the module docs in `src/guard.rs`). Once merged and adopted, remove cmake from the Dockerfile (comment there points here). No local `[patch]`/fork in the interim.
 
 Resolved in the vendored copy (the vendoring decision superseded the
 no-fork constraint): `vendor/dsntk-feel-evaluator` now has an
@@ -355,11 +355,11 @@ literal-expression gap is now closed at the build level.
 
 ### DEPS-002: Upstream fix for non-finite FeelNumber Display panic (done in vendor; upstream PR pending)
 
-dsntk-feel-number's `Display` unwraps on the assumption that `bid128_to_string` output contains `'E'`; ±Inf/NaN — reachable because `Mul`/`Add` results are not finiteness-guarded, unlike `pow`/`from_str` — panic instead of printing. pgdmn guards its direct number conversions (BUG-004), but a non-finite number inside a `Value::Range` endpoint still panics via the Display catch-all in `feel_to_json`, and every other dsntk consumer stays exposed. Propose upstream either guarding arithmetic like `pow` does (overflow → FEEL null) or making `Display` total (print `+Inf`/`-Inf`/`NaN`). Minimal upstreamable patch per the working agreement.
+dsntk-feel-number's `Display` unwraps on the assumption that `bid128_to_string` output contains `'E'`; ±Inf/NaN—reachable because `Mul`/`Add` results are not finiteness-guarded, unlike `pow`/`from_str`—panic instead of printing. pgdmn guards its direct number conversions (BUG-004), but a non-finite number inside a `Value::Range` endpoint still panics via the Display catch-all in `feel_to_json`, and every other dsntk consumer stays exposed. Propose upstream either guarding arithmetic like `pow` does (overflow → FEEL null) or making `Display` total (print `+Inf`/`-Inf`/`NaN`). Minimal upstreamable patch per the working agreement.
 
 Fixed in the vendored copy: `Display` is now total (non-finite values
 print the Intel library's textual form instead of panicking on a missing
-exponent). pgdmn's BUG-004 SQL-error guards stay in place — the SQL
+exponent). pgdmn's BUG-004 SQL-error guards stay in place—the SQL
 boundary still rejects non-finite results with a clear error.
 
 ## Chores
@@ -370,7 +370,7 @@ Add og:title, og:description, og:image, and Twitter card meta tags to the websit
 
 ### CHORE-004: Build the Docker image as the non-root user from the start (done)
 
-The base image installed the toolchain, fetched crates, and (formerly) initialized pgrx as root, while tests must run as the non-root `pgdmn` user — the mismatch caused BUG-001 and BUG-002 and was patched with a `chmod`, a `chown`, and a second `cargo pgrx init` in a separate `test` stage. The Dockerfile now creates `pgdmn` first and runs `cargo install cargo-pgrx`, `rustup component add`, `cargo fetch --locked`, and `cargo pgrx init` as that user (with `CARGO_HOME` under its home), making ownership correct by construction in a single stage.
+The base image installed the toolchain, fetched crates, and (formerly) initialized pgrx as root, while tests must run as the non-root `pgdmn` user—the mismatch caused BUG-001 and BUG-002 and was patched with a `chmod`, a `chown`, and a second `cargo pgrx init` in a separate `test` stage. The Dockerfile now creates `pgdmn` first and runs `cargo install cargo-pgrx`, `rustup component add`, `cargo fetch --locked`, and `cargo pgrx init` as that user (with `CARGO_HOME` under its home), making ownership correct by construction in a single stage.
 
 ### FEAT-001: `dmn_create_input_type` helper
 

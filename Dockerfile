@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # pgrx tests must run as a non-root user (initdb refuses root). Create that
 # user and hand it the PG install dirs and its own CARGO_HOME up front, so
 # every later step (toolchain components, crate fetch, pgrx init) is owned
-# by pgdmn by construction — see BUG-001 and BUG-002 in BUGHISTORY.md.
+# by pgdmn by construction—see BUG-001 and BUG-002 in BUGHISTORY.md.
 RUN useradd -ms /bin/bash pgdmn \
     && chown -R pgdmn /usr/share/postgresql/17/extension /usr/lib/postgresql/17/lib
 ENV CARGO_HOME=/home/pgdmn/.cargo \

@@ -1,5 +1,5 @@
 # Vendored dsntk crates are explicit workspace members so their own test
-# suites can run in-tree (`cargo test -p dsntk-feel` etc.) — the safety net
+# suites can run in-tree (`cargo test -p dsntk-feel` etc.)—the safety net
 # for in-tree engine optimizations. Cargo commands in the root still default
 # to the pgdmn package; profiling/ is a separate host-native workspace.
 [workspace]
@@ -104,8 +104,8 @@ dsntk-recognizer = { path = "vendor/dsntk-recognizer" }
 panic = "unwind"
 
 # Benchmarks run through `cargo pgrx test` (dev profile). Every package on the
-# measured per-row path — the pgdmn shim, the dsntk engine, serde_json, the
-# Intel decimal FFI library — is built optimized so benchmark numbers reflect
+# measured per-row path—the pgdmn shim, the dsntk engine, serde_json, the
+# Intel decimal FFI library—is built optimized so benchmark numbers reflect
 # release-grade codegen; the rest of the graph stays at dev for build speed.
 # (debug-assertions=false also disables overflow checks on these packages.)
 [profile.dev.package.pgdmn]

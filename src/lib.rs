@@ -289,7 +289,7 @@ mod tests {
             "0.10 + 0.20 rendered with an unexpected tail: {text}"
         );
 
-        // FEEL's own equality agrees — what a decision table would rely on.
+        // FEEL's own equality agrees—what a decision table would rely on.
         let feel_equal = Spi::get_one::<bool>("SELECT feel_eval_bool('0.10 + 0.20 = 0.3')")
             .expect("SPI failed")
             .expect("null");
@@ -435,7 +435,7 @@ mod tests {
     #[pg_test(error = "FEEL number result is not finite and cannot be converted to NUMERIC")]
     fn test_feel_eval_numeric_rejects_decimal_overflow() {
         // decimal128 overflow rounds to +Inf, whose Display panics inside
-        // dsntk — the boundary must reject before stringifying (BUG-004)
+        // dsntk—the boundary must reject before stringifying (BUG-004)
         Spi::get_one::<pgrx::AnyNumeric>(
             "SELECT feel_eval_numeric(repeat('9', 3100) || ' * ' || repeat('9', 3100))",
         )
@@ -696,7 +696,7 @@ mod tests {
     /// entities: a `SYSTEM` entity pointing at a file is the classic XXE vector,
     /// and this runs inside the database. Write a secret to a temp file, ask a
     /// model to embed it via an external entity, and assert the secret does not
-    /// come back — whether because the parser rejects the DOCTYPE or because it
+    /// come back—whether because the parser rejects the DOCTYPE or because it
     /// leaves the entity unresolved.
     #[pg_test]
     fn test_dmn_load_does_not_resolve_external_entities() {
@@ -1463,7 +1463,7 @@ mod tests {
 
     /// Does the *shape* of the SQL change what a DMN evaluation costs?
     ///
-    /// Same model, same rows, same answers — only the query differs. Gated
+    /// Same model, same rows, same answers—only the query differs. Gated
     /// behind `PGDMN_BENCH_SHAPES=1` (`make bench-shapes`) because it is a
     /// measurement, not an assertion.
     #[pg_test]
@@ -1554,7 +1554,7 @@ mod tests {
 
         // (B2) The same dedup, but MATERIALIZED. Without this the planner inlines
         // the CTE and pulls `dmn_eval` up above the join, evaluating it once per
-        // *output* row again — which silently undoes the deduplication.
+        // *output* row again—which silently undoes the deduplication.
         let dedup_mat_concat = time(
             "dedup materialized concat",
             &format!(
@@ -1594,7 +1594,7 @@ mod tests {
             ),
         );
         // (E) Both at once. A MATERIALIZED CTE is scanned serially, which throws
-        // parallelism away — so materialise into a real table instead, which the
+        // parallelism away—so materialise into a real table instead, which the
         // planner *can* fill in parallel, then join that.
         let both_start = std::time::Instant::now();
         Spi::run(&format!(
@@ -2347,19 +2347,19 @@ mod tests {
         };
         let builds_start = builds();
 
-        // Load model A (cold — one build)
+        // Load model A (cold—one build)
         let result_a = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL");
         assert_eq!(builds(), builds_start + 1, "model A should build once");
 
-        // Load model B (cold — different XML, not cached)
+        // Load model B (cold—different XML, not cached)
         let result_b = Spi::get_one::<pgrx::JsonB>(&query_b)
             .expect("SPI failed")
             .expect("model B returned NULL");
         assert_eq!(builds(), builds_start + 2, "model B should build once");
 
-        // Models produce different output — a false cache hit would fail here
+        // Models produce different output—a false cache hit would fail here
         assert_eq!(result_a.0, serde_json::json!("Hello, World!"));
         assert_eq!(result_b.0, serde_json::json!("Goodbye, World!"));
         assert_ne!(
@@ -2367,7 +2367,7 @@ mod tests {
             "Models A and B returned the same result; cache keying may not distinguish them"
         );
 
-        // Model A again (warm — served from cache, no new build)
+        // Model A again (warm—served from cache, no new build)
         let result_a_warm = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL on warm run");
@@ -2451,7 +2451,7 @@ mod tests {
 
     #[pg_test]
     fn test_example_loan_boolean_input() {
-        // Dara earns 120000 and would sail through on the numbers — but the
+        // Dara earns 120000 and would sail through on the numbers—but the
         // boolean says otherwise, and its rule is listed above the income rules.
         assert_eq!(
             eligibility(45, 120_000, true),
@@ -2467,7 +2467,7 @@ mod tests {
     #[pg_test]
     fn test_example_loan_first_hit_policy_wins() {
         // Hana is 17 with a large income. The underage rule is listed first, and
-        // the table is FIRST, so it wins — this is the row that makes the hit
+        // the table is FIRST, so it wins—this is the row that makes the hit
         // policy visible on the website.
         assert_eq!(
             eligibility(17, 95000, false),
@@ -2476,7 +2476,7 @@ mod tests {
     }
 
     /// Evaluate a pricing decision exactly the way the website's SQL does —
-    /// unwrap the JSONB, cast to numeric, round to pennies — and return what
+    /// unwrap the JSONB, cast to numeric, round to pennies—and return what
     /// psql would print.
     ///
     /// Asserting on the rounded numeric rather than the raw FEEL number is
@@ -2533,7 +2533,7 @@ mod tests {
     #[pg_test]
     fn test_example_promo_model_prices_the_same_orders_differently() {
         // The promotional model takes 10% off first, then taxes the net price.
-        // Same orders, same query, same invocable name — a different model row.
+        // Same orders, same query, same invocable name—a different model row.
         let rows = [
             ("100.00", "0.10", "99.00"),      // Northwind Traders
             ("2499.99", "0.0825", "2435.62"), // Globex
@@ -2560,7 +2560,7 @@ mod tests {
     fn test_example_pricing_policies_takes_effect_switch() {
         // The pricing example stores two dated versions of one `retail` policy in
         // a `pricing_policies` table and lets the query pick whichever is in
-        // effect on a given day — the latest whose takes_effect has arrived.
+        // effect on a given day—the latest whose takes_effect has arrived.
         // Through June that is the standard model; from 1 July it is the
         // promotional one, with nothing updated in between. This is the switch
         // the article and examples page turn on, so verify it against the real
@@ -2598,7 +2598,7 @@ mod tests {
         assert_eq!(price_as_of("2026-07-01"), "99.00", "promo from 1 July");
 
         // The whole book (orders.csv) under the in-effect version: the standard
-        // book through June, the promotional book from July — the same totals
+        // book through June, the promotional book from July—the same totals
         // the article's cost query and the examples page's table print.
         let book_as_of = |as_of: &str| -> String {
             Spi::get_one::<pgrx::AnyNumeric>(&format!(
@@ -2630,7 +2630,7 @@ mod tests {
     }
 
     /// The aggregate figures printed in the "Going further" sections of the
-    /// articles — approval rate, book values, promotion cost — computed by the
+    /// articles—approval rate, book values, promotion cost—computed by the
     /// real engine over the published datasets, exactly as the articles' SQL
     /// does. Hand-computed aggregates are the easy place for a wrong number to
     /// slip onto the site; this is what keeps them honest.

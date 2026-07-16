@@ -14,7 +14,7 @@ use crate::convert::{
 /// Evaluate a FEEL expression with a pre-built FeelContext.
 ///
 /// Parsing and evaluator construction are amortized across calls: the prepared
-/// evaluator is cached per (expression, context shape) — see cache.rs — so a
+/// evaluator is cached per (expression, context shape)—see cache.rs—so a
 /// cache hit costs one shape digest, one map probe, and the evaluation itself.
 fn eval_feel_ctx(expression: &str, ctx: FeelContext) -> Value {
     // The external-function AST guard runs inside the cache at parse time
