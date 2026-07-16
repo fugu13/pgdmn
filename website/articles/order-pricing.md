@@ -1,18 +1,18 @@
 ---
-title: Two pricing policies, one query
+title: Change pricing policies on the fly
 date: 2026-07-12
 summary: The rules are a row in a table. Put two pricing models side by side, price the same orders under both, and switching everybody to the promotion becomes an UPDATE rather than a deploy.
 files: order-pricing.dmn, order-pricing-promo.dmn, orders.csv
 example: pricing
 ---
 
-Pricing rules change — a promotion starts, a tax treatment moves — and the change usually arrives as a code deploy, with the old and new prices awkward to reconcile and easy to apply inconsistently across the queries that happen to price an order.
+Pricing rules change all the time. If those rules are in code, that means frequent deployments and tricky price tracking. You could build a dedicated pricing policy system, but that's assuming a large maintenance burden.
 
-This example prices orders with a DMN model whose decisions chain one on another, and keeps two pricing policies side by side under the same output name so a single unchanged query can serve either. It covers swapping the live policy as a data change and reading money back to the penny you intend; discounting beyond a flat percentage, and rounding conventions per line versus per invoice, are only touched on, not built.
+Taking base item attributes and turning them into final prices fits DMN perfectly. This example prices orders with a DMN model where decisions chain one on another. Both pricing policies take the same inputs and return the same outputs, so they can be changed on the fly, such as having one start applying on a certain date.
 
 ## A model is a graph, not a list
 
-The standard model holds two decisions. `Tax Amount` multiplies the base price by the tax rate. `Total Price` adds that tax to the base price — so it depends on the other decision, not merely on the inputs.
+The standard pricing model holds two decisions. `Tax Amount` multiplies the base price by the tax rate. `Total Price` adds that tax to the base price — so it depends on the other decision, not merely on the inputs.
 
 You never tell pgdmn about that dependency. You ask for `Total Price`, and it works backwards: to answer that, it needs `Tax Amount`; to answer that, it needs the two inputs you supplied. The order of evaluation falls out of the model.
 
@@ -23,7 +23,7 @@ Table: The standard pricing model
 | Tax Amount | Base Price, Tax Rate | `Base Price * Tax Rate` |
 | Total Price | Base Price, Tax Amount | `Base Price + Tax Amount` |
 
-Both models are standard DMN files — open them in dmn-js, or any DMN tool: [standard →](/dmn-viewer.html?model=order-pricing.dmn), [promotional →](/dmn-viewer.html?model=order-pricing-promo.dmn).
+Both models are standard DMN files — open them in dmn-js, or any DMN tool: [standard →](/dmn-viewer.html?model=order-pricing.dmn), [promotional →](/dmn-viewer.html?model=order-pricing-promo.dmn). These models are visualized as graphs, not tables, here. Many DMN models are best shown as one, the other, or a mix of both, in order to provide maximum clarity to business stakeholders.
 
 ## Set up
 
