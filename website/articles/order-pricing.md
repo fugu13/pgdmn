@@ -120,11 +120,9 @@ Rolling the promotion out to everyone is not an `UPDATE` at all — it is the ro
 
 ## Globex, and what a penny is
 
-Globex's standard tax is not 206.25. It is **206.249175**, and their total is 2706.239175. FEEL arithmetic is decimal and keeps every digit; the engine will not quietly round money on your behalf.
+Globex's standard tax is not 206.25. It is **206.249175**, and their total is 2706.239175. FEEL arithmetic is exact decimal arithmetic to the 34th decimal place. You'll never see binary arithmetic problems like 0.10 + 0.20 = 0.30000000000000004, because in FEEL 0.10 + 0.20 always equals 0.3.
 
-That is the right default. Rounding is a business rule — half-up, banker's, per line or per invoice — and a decision engine guessing at it is a decision engine introducing a bug. So the rounding lives in the query, in `round(…, 2)`, where you can see it and argue about it.
-
-It matters more than it looks. Round each line and sum, and you get one number; sum and then round, and you can get another. Which one you want is a decision. Make it deliberately, somewhere a reviewer can find it.
+The query rounds the result to 2 decimal places in this example, but that decision is left up to the calling SQL.
 
 ## Going further
 
