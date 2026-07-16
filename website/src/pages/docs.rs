@@ -50,7 +50,7 @@ fn Shell(#[prop(into)] label: String, #[prop(into)] code: String) -> impl IntoVi
 #[component]
 pub fn DocsPage() -> impl IntoView {
     view! {
-        <Title text="Documentation—pgdmn"/>
+        <Title text="Documentation · pgdmn"/>
         <h1 id="documentation">"Documentation"</h1>
         <p class="lede">
             "Install instructions, and every function pgdmn installs, with its arguments."

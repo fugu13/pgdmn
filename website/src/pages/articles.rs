@@ -9,7 +9,7 @@ pub fn ArticlesPage() -> impl IntoView {
     let articles = articles::all();
 
     view! {
-        <Title text="Articles—pgdmn"/>
+        <Title text="Articles · pgdmn"/>
         <h1>"Articles"</h1>
 
         <ul class="post-list">

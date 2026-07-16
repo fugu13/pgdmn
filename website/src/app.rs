@@ -58,7 +58,7 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href="/style.css"/>
-        <Title text="pgdmn—DMN for PostgreSQL"/>
+        <Title text="pgdmn · DMN for PostgreSQL"/>
         <Router>
             <SkipLink/>
             <Header/>

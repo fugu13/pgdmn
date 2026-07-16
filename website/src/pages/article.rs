@@ -25,7 +25,7 @@ pub fn ArticlePage() -> impl IntoView {
         .map(|anchor| format!("/examples/#{anchor}"));
 
     view! {
-        <Title text=format!("{}—pgdmn", article.title)/>
+        <Title text=format!("{} · pgdmn", article.title)/>
         <p class="post-kind">"Walkthrough"</p>
         <h1>{article.title.clone()}</h1>
         <p class="post-date">

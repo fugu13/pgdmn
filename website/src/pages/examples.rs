@@ -20,7 +20,7 @@ fn Walkthrough(#[prop(into)] slug: String, #[prop(into)] scenario: String) -> im
 #[component]
 pub fn ExamplesPage() -> impl IntoView {
     view! {
-        <Title text="Examples—pgdmn"/>
+        <Title text="Examples · pgdmn"/>
         <h1>"Examples"</h1>
 
         <nav class="quicklinks" aria-label="The examples on this page">
