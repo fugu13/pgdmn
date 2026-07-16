@@ -4,7 +4,7 @@ use leptos_meta::Title;
 #[component]
 pub fn WhyPage() -> impl IntoView {
     view! {
-        <Title text="Why pgdmn — pgdmn"/>
+        <Title text="Why pgdmn—pgdmn"/>
         <h1>"Why run decisions in your database?"</h1>
 
         <h2>"No network hop"</h2>

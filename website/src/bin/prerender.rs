@@ -21,7 +21,7 @@ const PUBLIC: &str = "public";
 const STYLESHEET: &str = "style/main.scss";
 /// The canonical host. GitHub Pages reads this from the published output and
 /// redirects the apex (pgdmn.com) here. Pages are linked with absolute paths,
-/// so the site must be served from a domain root — not a `github.io` subpath.
+/// so the site must be served from a domain root—not a `github.io` subpath.
 const DOMAIN: &str = "www.pgdmn.com";
 /// The one page that keeps its scripts: an interactive DMN viewer, copied
 /// verbatim from `public/`. See `strip_scripts`.
@@ -141,7 +141,7 @@ fn clean_urls(directory: &Path) -> Result<(), BoxError> {
 
 /// The site ships no JavaScript. Leptos still emits inline hydration
 /// bookkeeping (`__RESOLVED_RESOURCES` and friends) even for static routes,
-/// which is inert with nothing to hydrate — so remove it and let "no scripts"
+/// which is inert with nothing to hydrate—so remove it and let "no scripts"
 /// be a property of the output rather than an aspiration.
 ///
 /// A page that genuinely needs a script would have to reverse WEB-001 first.

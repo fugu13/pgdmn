@@ -2,7 +2,7 @@
 //!
 //! The site ships no JavaScript, so nothing can highlight in the browser. Output
 //! is CSS classes rather than inline colours, which keeps the palette in the
-//! stylesheet — one place to change, and one place to check for contrast.
+//! stylesheet—one place to change, and one place to check for contrast.
 
 use std::sync::OnceLock;
 
@@ -42,7 +42,7 @@ pub fn sql(code: &str) -> String {
 }
 
 /// syntect's default SQL grammar does not know a few Postgres-specific keywords
-/// and leaves them unhighlighted — `CREATE EXTENSION` most visibly. Each such
+/// and leaves them unhighlighted—`CREATE EXTENSION` most visibly. Each such
 /// phrase survives highlighting as contiguous plain text (the phrases the
 /// grammar *does* know come back split across spans), so wrapping the literal is
 /// safe and targeted.
@@ -76,8 +76,8 @@ const SIG_TYPES: &[&str] = &[
 
 /// Highlight a function signature: every type and keyword, nothing else.
 ///
-/// syntect's SQL grammar only knows a subset of Postgres types — it will not
-/// colour `dmnmodel`, `record`, or `setof` — so a signature gets a dedicated
+/// syntect's SQL grammar only knows a subset of Postgres types—it will not
+/// colour `dmnmodel`, `record`, or `setof`—so a signature gets a dedicated
 /// pass over a fixed vocabulary. The output is plain word spans, which wrap
 /// cleanly at the spaces between arguments on a narrow screen (a single syntect
 /// wrapper element did not).
@@ -133,7 +133,7 @@ mod tests {
         let html = sql("SELECT dmn_eval(model, 'Eligibility');\n");
 
         // Strip the markup back off. Quotes come back as entities, because the
-        // highlighter escapes what it emits — so compare against that.
+        // highlighter escapes what it emits—so compare against that.
         let mut stripped = String::new();
         let mut in_tag = false;
         for ch in html.chars() {

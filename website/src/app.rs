@@ -26,7 +26,7 @@ fn prerendered() -> SsrMode {
 }
 
 /// One route serves every article, and the slugs it prerenders come from the
-/// markdown files themselves — so adding an article is adding a file, and
+/// markdown files themselves—so adding an article is adding a file, and
 /// nothing here has to change.
 fn article_routes() -> SsrMode {
     SsrMode::Static(StaticRoute::new().prerender_params(|| async {
@@ -58,7 +58,7 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href="/style.css"/>
-        <Title text="pgdmn — DMN for PostgreSQL"/>
+        <Title text="pgdmn—DMN for PostgreSQL"/>
         <Router>
             <SkipLink/>
             <Header/>

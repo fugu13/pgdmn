@@ -1,22 +1,22 @@
 ---
 title: Put the rules in the schema
 date: 2026-07-11
-summary: A decision model is a value. Store it in a column, wrap it in a view, and changing how every ticket is triaged becomes an UPDATE of one row — with the old rules still there to audit.
+summary: A decision model is a value. Store it in a column, wrap it in a view, and changing how every ticket is triaged becomes an UPDATE of one row—with the old rules still there to audit.
 files: ticket-routing.dmn, tickets.csv
 example: routing
 ---
 
-Support triage rules tend to live in one person's head or scattered through application code, so changing how tickets are assigned means shipping a release — and nobody outside engineering can read the current policy, let alone propose a change to it.
+Support triage rules tend to live in one person's head or scattered through application code, so changing how tickets are assigned means shipping a release—and nobody outside engineering can read the current policy, let alone propose a change to it.
 
 This example puts the routing rules in the database as a DMN model behind a view, so every ticket is classified by the policy in force and changing that policy is an update to one row rather than a deploy. It covers first-hit routing over two string inputs and the queries that then fall out of a view; escalation timers, round-robin assignment, and load balancing across agents are out of scope.
 
 ## The rules
 
-Two string inputs — how urgent, and who is asking — and a queue to land in. Same *first* hit policy, with a catch-all at the bottom so nothing falls through the floor.
+Two string inputs—how urgent, and who is asking—and a queue to land in. Same *first* hit policy, with a catch-all at the bottom so nothing falls through the floor.
 
-This is the model itself, drawn the way a DMN tool draws it: the hit policy in the corner, one numbered row per rule, inputs on the left and the output on the right. It is not a picture *of* the rules — it is the rules, and it is what runs.
+This is the model itself, drawn the way a DMN tool draws it: the hit policy in the corner, one numbered row per rule, inputs on the left and the output on the right. It is not a picture *of* the rules—it is the rules, and it is what runs.
 
-Table: Queue — hit policy: F (first)
+Table: Queue—hit policy: F (first)
 
 | F | Priority | Customer Tier | Queue |
 | --- | --- | --- | --- |
@@ -26,7 +26,7 @@ Table: Queue — hit policy: F (first)
 | 4 | — | `"enterprise"` | tier-2 |
 | 5 | — | — | tier-1 |
 
-This is a standard DMN file — [open it in dmn-js →](/dmn-viewer.html?model=ticket-routing.dmn), or in any DMN tool.
+This is a standard DMN file—[open it in dmn-js →](/dmn-viewer.html?model=ticket-routing.dmn), or in any DMN tool.
 
 Read it as a policy and it is legible to someone who does not write SQL: wake somebody for anything critical; wake somebody for an enterprise customer with an urgent problem; everything else queues by severity, and enterprise jumps the line. That is a conversation you can have with the person who owns the support budget.
 
@@ -51,7 +51,7 @@ CREATE TABLE tickets (
 
 ## The view is the point
 
-Rather than run the decision by hand each time, make it part of the schema. A view routes every ticket, and everything downstream — dashboards, alerting, the on-call rota — reads the view rather than knowing the rules.
+Rather than run the decision by hand each time, make it part of the schema. A view routes every ticket, and everything downstream—dashboards, alerting, the on-call rota—reads the view rather than knowing the rules.
 
 ```sql
 CREATE VIEW routed_tickets AS
@@ -81,7 +81,7 @@ Table: Every ticket, routed
 | Data export failing silently | critical | enterprise | pager |
 | Onboarding question | normal | free | tier-1 |
 
-The startup with the login outage gets woken up for, and the enterprise customer with a billing question does too — but the enterprise password reset does not. The rules say so, in five lines, and you can hand those five lines to someone and ask whether they agree.
+The startup with the login outage gets woken up for, and the enterprise customer with a billing question does too—but the enterprise password reset does not. The rules say so, in five lines, and you can hand those five lines to someone and ask whether they agree.
 
 ## Who is on the hook tonight?
 

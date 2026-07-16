@@ -1,7 +1,7 @@
 //! Previews the prerendered site the way a static host serves it: files off
 //! disk, unknown paths answered with the prerendered 404 page.
 //!
-//! This is a local convenience only — production serves `dist/` directly, with
+//! This is a local convenience only—production serves `dist/` directly, with
 //! no process of ours involved. Run `make website-build` first.
 
 use axum::Router;

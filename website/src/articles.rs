@@ -1,7 +1,7 @@
 //! Blog articles: markdown files in `articles/`, embedded at compile time and
 //! rendered to HTML during the prerender.
 //!
-//! Nothing here runs at request time, because there are no requests — the site
+//! Nothing here runs at request time, because there are no requests—the site
 //! is static. Adding a post means adding a `.md` file; no Rust changes, and no
 //! route to register.
 
@@ -194,7 +194,7 @@ fn highlight_sql_blocks<'a>(events: impl Iterator<Item = Event<'a>>) -> Vec<Even
 
 /// Markdown tables come out bare. Give them back what the hand-written pages
 /// had: a caption, column headers that announce as headers, and a wrapper that
-/// scrolls sideways on a narrow screen — focusable, because a region you can
+/// scrolls sideways on a narrow screen—focusable, because a region you can
 /// scroll is a region a keyboard user has to be able to reach.
 ///
 /// The caption comes from a paragraph reading `Table: …` immediately above the
@@ -219,7 +219,7 @@ fn tables_accessible(html: &str) -> String {
         let table = &from_table[OPEN.len()..end];
 
         // A decision table (its caption names a hit policy) gets a class so the
-        // output column — the last one — can be tinted like a DMN tool does.
+        // output column—the last one—can be tinted like a DMN tool does.
         let is_decision = caption.is_some_and(|c| c.contains("hit policy"));
         let table_open = if is_decision {
             "<table class=\"decision-table\">"
@@ -236,7 +236,7 @@ fn tables_accessible(html: &str) -> String {
                      tabindex=\"0\">{table_open}<caption id=\"{id}\">{caption}</caption>"
                 );
             }
-            // No caption, so no accessible name — and an unnamed `region` is
+            // No caption, so no accessible name—and an unnamed `region` is
             // worse than none. Still focusable, so it can still be scrolled.
             None => {
                 let _ = write!(

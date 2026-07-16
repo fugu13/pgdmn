@@ -8,7 +8,7 @@ pub fn HomePage() -> impl IntoView {
         <div class="hero">
             <h1>"pgdmn"</h1>
             <p class="tagline">
-                "Run DMN decision tables inside PostgreSQL. No network hop, no external engine — just SQL."
+                "Run DMN decision tables inside PostgreSQL. No network hop, no external engine—just SQL."
             </p>
         </div>
 
@@ -38,7 +38,7 @@ SELECT dmn_eval_text(
         </p>
         <p>
             "See it run against realistic data on the "<a href="/examples/">"Examples"</a>
-            " page — downloadable models, sample datasets, and complete SQL examples."
+            " page—downloadable models, sample datasets, and complete SQL examples."
         </p>
     }
 }

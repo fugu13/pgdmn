@@ -1,18 +1,18 @@
 ---
 title: The obligation is a column
 date: 2026-07-10
-summary: Data-handling rules as a decision table, evaluated per row. What must we encrypt, what may not leave the EU — answered by a query rather than by a policy document nobody has read since the audit.
+summary: Data-handling rules as a decision table, evaluated per row. What must we encrypt, what may not leave the EU—answered by a query rather than by a policy document nobody has read since the audit.
 files: compliance.dmn, customers.csv
 example: compliance
 ---
 
-What you are obliged to do with a row of customer data — where it may live, how long you may keep it, whether it must be encrypted — is usually written in a document nobody has opened since the audit, while the code that actually enforces it lives somewhere else and drifts away from it over time.
+What you are obliged to do with a row of customer data—where it may live, how long you may keep it, whether it must be encrypted—is usually written in a document nobody has opened since the audit, while the code that actually enforces it lives somewhere else and drifts away from it over time.
 
 This example expresses those data-handling obligations as a DMN decision table and computes the obligation for every customer as a column of a view, so the enforced rule and the written rule are the same artifact. It covers region and data-class handling under a first-hit policy; it is a worked illustration, not a complete regulatory model, and the specific rules here are invented for the example.
 
 ## The rules
 
-Table: Handling — hit policy: F (first)
+Table: Handling—hit policy: F (first)
 
 | F | Region | Data Class | Handling |
 | --- | --- | --- | --- |
@@ -21,13 +21,13 @@ Table: Handling — hit policy: F (first)
 | 3 | — | `"personal"` | retain 24 months |
 | 4 | — | — | standard handling |
 
-This is a standard DMN file — [open it in dmn-js →](/dmn-viewer.html?model=compliance.dmn), or in any DMN tool.
+This is a standard DMN file—[open it in dmn-js →](/dmn-viewer.html?model=compliance.dmn), or in any DMN tool.
 
 Read top to bottom, because the hit policy is *first* and the order carries meaning.
 
-Special-category data is caught by the first rule **regardless of region** — a stricter obligation wins before anything more specific gets a look in. Only then does region matter, and only for personal data: EU personal data has to stay in the EU, personal data elsewhere merely has a retention clock. Everything else is ordinary.
+Special-category data is caught by the first rule **regardless of region**—a stricter obligation wins before anything more specific gets a look in. Only then does region matter, and only for personal data: EU personal data has to stay in the EU, personal data elsewhere merely has a retention clock. Everything else is ordinary.
 
-That ordering is the policy. Move the special-category rule below the EU rule and you have quietly decided that an EU customer's special-category data is governed by residency rather than by sensitivity — which is very likely not what your legal team said.
+That ordering is the policy. Move the special-category rule below the EU rule and you have quietly decided that an EU customer's special-category data is governed by residency rather than by sensitivity—which is very likely not what your legal team said.
 
 ## Set up
 
@@ -48,7 +48,7 @@ CREATE TABLE customers (
 \copy customers FROM 'customers.csv' WITH (FORMAT csv, HEADER true)
 ```
 
-The obligation for every row becomes a column, computed from the rules in force whenever anyone looks — so make it a view:
+The obligation for every row becomes a column, computed from the rules in force whenever anyone looks—so make it a view:
 
 ```sql
 CREATE VIEW obligations AS
@@ -79,7 +79,7 @@ Table: What we owe each customer
 | Tyrell Corp | US | public | standard handling |
 | Wayne Enterprises | UK | personal | retain 24 months |
 
-Umbrella is the row worth pausing on. They are an EU customer with special-category data — and the answer is *not* "store in EU". The special-category rule is listed first, and it wins. Whether that is right is a question for a lawyer, and the point is that the question is now askable: the rule is four lines you can put in front of one.
+Umbrella is the row worth pausing on. They are an EU customer with special-category data—and the answer is *not* "store in EU". The special-category rule is listed first, and it wins. Whether that is right is a question for a lawyer, and the point is that the question is now askable: the rule is four lines you can put in front of one.
 
 ## Why this belongs in the database
 
@@ -113,6 +113,6 @@ ORDER BY id;
 --  Northwind Traders | EU
 ```
 
-*What breaks if we tighten the retention rule?* is the same query against a second model row, diffed against the first. *What were we obliged to do on the day of the breach?* is answerable too, if you version the model rows — because the old rules are still just values in a table.
+*What breaks if we tighten the retention rule?* is the same query against a second model row, diffed against the first. *What were we obliged to do on the day of the breach?* is answerable too, if you version the model rows—because the old rules are still just values in a table.
 
 None of that requires exporting a single customer record to anywhere.

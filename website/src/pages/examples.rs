@@ -20,7 +20,7 @@ fn Walkthrough(#[prop(into)] slug: String, #[prop(into)] scenario: String) -> im
 #[component]
 pub fn ExamplesPage() -> impl IntoView {
     view! {
-        <Title text="Examples — pgdmn"/>
+        <Title text="Examples—pgdmn"/>
         <h1>"Examples"</h1>
 
         <nav class="quicklinks" aria-label="The examples on this page">
@@ -93,7 +93,7 @@ ORDER BY a.id;
         <p>
             "Store each pricing policy as a dated row. One query prices every order under whichever
             version is in effect on the day, and switches to a new one by itself when its start
-            date arrives — no code deploy."
+            date arrives—no code deploy."
         </p>
 
         <ul class="download-list">

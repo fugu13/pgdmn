@@ -6,8 +6,8 @@ use crate::highlight;
 
 /// One function: its full signature, then what it does.
 ///
-/// A description list is the honest markup here — each signature is a term and
-/// each explanation defines it — and it gives screen-reader users a structure
+/// A description list is the honest markup here—each signature is a term and
+/// each explanation defines it—and it gives screen-reader users a structure
 /// they can jump through, which a pile of paragraphs would not.
 ///
 /// The signature is highlighted with the SQL grammar (which is why it reads
@@ -37,7 +37,7 @@ fn H3(#[prop(into)] id: String, #[prop(into)] title: String) -> impl IntoView {
 }
 
 /// A block of shell commands. Same presentation and keyboard behaviour as a SQL
-/// block, but not syntax-highlighted — shell is not SQL, and these are short.
+/// block, but not syntax-highlighted—shell is not SQL, and these are short.
 #[component]
 fn Shell(#[prop(into)] label: String, #[prop(into)] code: String) -> impl IntoView {
     view! {
@@ -50,7 +50,7 @@ fn Shell(#[prop(into)] label: String, #[prop(into)] code: String) -> impl IntoVi
 #[component]
 pub fn DocsPage() -> impl IntoView {
     view! {
-        <Title text="Documentation — pgdmn"/>
+        <Title text="Documentation—pgdmn"/>
         <h1 id="documentation">"Documentation"</h1>
         <p class="lede">
             "Install instructions, and every function pgdmn installs, with its arguments."
@@ -103,7 +103,7 @@ pub fn DocsPage() -> impl IntoView {
 
         <p>
             <strong>"If you want pgrx to manage PostgreSQL"</strong>
-            ", it downloads and builds its own — the quickest way to try pgdmn end to end. "
+            ", it downloads and builds its own—the quickest way to try pgdmn end to end. "
             <code>"cargo pgrx run"</code>" builds pgdmn, installs it into that instance, and drops
             you into a "<code>"psql"</code>" shell:"
         </p>
@@ -151,7 +151,7 @@ SELECT feel_eval('1 + 2');
             </Fun>
             <Fun signature="dmn_eval(model dmnmodel, invocable text, input jsonb DEFAULT NULL) RETURNS jsonb">
                 "Evaluate a named decision, business knowledge model, or decision service.
-                Decisions that depend on other decisions are resolved for you — ask for the
+                Decisions that depend on other decisions are resolved for you—ask for the
                 one you want, and pgdmn works out what it needs first."
             </Fun>
             <Fun signature="dmn_record_eval(model dmnmodel, invocable text, input record DEFAULT NULL) RETURNS jsonb">
@@ -180,7 +180,7 @@ SELECT feel_eval('1 + 2');
                 <code>"round(dmn_eval_numeric(…), 2)"</code>"."
             </Fun>
             <Fun signature="dmn_eval_bool(model dmnmodel, invocable text, input jsonb DEFAULT NULL) RETURNS boolean">
-                "A decision that returns a boolean — usable directly in a "<code>"WHERE"</code>
+                "A decision that returns a boolean—usable directly in a "<code>"WHERE"</code>
                 " clause or a "<code>"CHECK"</code>" constraint."
             </Fun>
             <Fun signature="dmn_eval_date(model dmnmodel, invocable text, input jsonb DEFAULT NULL) RETURNS date">
@@ -241,7 +241,7 @@ SELECT feel_eval('1 + 2');
                 "A FEEL number, as "<code>"numeric"</code>"."
             </Fun>
             <Fun signature="feel_eval_bool(expression text, context jsonb DEFAULT NULL) RETURNS boolean">
-                "A FEEL boolean — usable directly in a "<code>"WHERE"</code>" clause or a "
+                "A FEEL boolean—usable directly in a "<code>"WHERE"</code>" clause or a "
                 <code>"CHECK"</code>" constraint."
             </Fun>
             <Fun signature="feel_eval_text(expression text, context jsonb DEFAULT NULL) RETURNS text">

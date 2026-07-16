@@ -35,7 +35,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tower-http = { version = "0.6", features = ["fs", "set-status"] }
 grass = "0.13"
 # Blog posts are markdown files, embedded at compile time and rendered to HTML
-# during the prerender. Nothing reads them at request time — there is no request.
+# during the prerender. Nothing reads them at request time—there is no request.
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 include_dir = "0.7"
 # SQL is highlighted at build time, into CSS classes rather than inline colours —

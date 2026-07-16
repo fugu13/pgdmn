@@ -12,9 +12,9 @@ This example encodes an eligibility policy as a DMN decision table and evaluates
 
 ## The rules
 
-A decision table lists inputs and outputs as headers and rules as rows. This one takes three inputs — how old is the applicant, what do they earn, and have they been bankrupt — and outputs loan eligibility.
+A decision table lists inputs and outputs as headers and rules as rows. This one takes three inputs—how old is the applicant, what do they earn, and have they been bankrupt—and outputs loan eligibility.
 
-Table: Eligibility — hit policy: F (first)
+Table: Eligibility—hit policy: F (first)
 
 | F   | Age     | Income     | Bankrupt | Eligibility              |
 | --- | ------- | ---------- | -------- | ------------------------ |
@@ -23,7 +23,7 @@ Table: Eligibility — hit policy: F (first)
 | 3   | `>= 18` | `>= 50000` | `false`  | Approved                 |
 | 4   | `>= 18` | `< 50000`  | `false`  | Denied: low income       |
 
-These rules live in a standard DMN file — [open it in dmn-js →](/dmn-viewer.html?model=loan-eligibility.dmn), or in any DMN tool.
+These rules live in a standard DMN file—[open it in dmn-js →](/dmn-viewer.html?model=loan-eligibility.dmn), or in any DMN tool.
 
 The dash is a wildcard: the first rule does not care what you earn, and the second does not care how old you are or how much you make.
 
@@ -52,7 +52,7 @@ CREATE TABLE applicants (
 
 ## One applicant
 
-A short query determines eligibility. Pass the DMN model, the decision to return, and a JSON object containing the inputs, and get an answer back — `dmn_eval_text` unwraps the result, so there are no JSONB quotes to strip.
+A short query determines eligibility. Pass the DMN model, the decision to return, and a JSON object containing the inputs, and get an answer back—`dmn_eval_text` unwraps the result, so there are no JSONB quotes to strip.
 
 ```sql
 SELECT dmn_eval_text(model, 'Eligibility', '{
@@ -67,7 +67,7 @@ FROM models WHERE name = 'loan';
 
 ## Every applicant
 
-The same decision, evaluated against every row of the table. This is the whole point: no export, no service call, no loop in application code — one call per row, and Postgres is free to run it across parallel workers.
+The same decision, evaluated against every row of the table. This is the whole point: no export, no service call, no loop in application code—one call per row, and Postgres is free to run it across parallel workers.
 
 ```sql
 SELECT a.name, a.age, a.income, a.bankrupt,
@@ -99,13 +99,13 @@ A brief explanation follows for how some of the rows evaluated against the DMN m
 
 ### Eli and Fay: the boundary
 
-Eli earns exactly 50000 and is approved. Fay earns 49999 and is not. The rule says `>= 50000`, so the boundary falls between them — and a boundary is the single most common place for a rule to be wrong.
+Eli earns exactly 50000 and is approved. Fay earns 49999 and is not. The rule says `>= 50000`, so the boundary falls between them—and a boundary is the single most common place for a rule to be wrong.
 
 Written as a table, it is one line to check. Buried in application code as `income > 50000` it is a bug nobody notices until Eli complains.
 
 ### Dara: one boolean outranks every number
 
-Dara earns 120000 — more than anyone else in the book — and is declined. The bankruptcy rule sits above both income rules, so the moment that boolean is true, nothing about the money matters.
+Dara earns 120000—more than anyone else in the book—and is declined. The bankruptcy rule sits above both income rules, so the moment that boolean is true, nothing about the money matters.
 
 This is the shape most real policies have: a handful of disqualifiers that short-circuit everything, and then the interesting logic underneath. Expressed as a table it is obvious in one glance which is which.
 
@@ -117,7 +117,7 @@ With a decision table, verifying this constraint only involves looking at the un
 
 ## So how did we do?
 
-Because the decision is just an expression, the outcome is groupable, aggregatable, joinable — anything SQL can do to a column, it can do to a decision.
+Because the decision is just an expression, the outcome is groupable, aggregatable, joinable—anything SQL can do to a column, it can do to a decision.
 
 ```sql
 SELECT dmn_eval_text(m.model, 'Eligibility', jsonb_build_object(
@@ -142,7 +142,7 @@ Table: The book of applications, by outcome
 
 ## Going further
 
-Because the decision is just a column, everything SQL already does to a column works on it. A `boolean` variant reads even more directly in a filter — here, the approval rate as a single number:
+Because the decision is just a column, everything SQL already does to a column works on it. A `boolean` variant reads even more directly in a filter—here, the approval rate as a single number:
 
 ```sql
 SELECT round(
@@ -184,4 +184,4 @@ ORDER BY a.id;
 --  Hana Ito      | Denied: underage
 ```
 
-When the lending policy changes, you load a new model under the same name and every one of these queries reports against the new rules — no redeploy, and the old model is still a value you can keep for the audit.
+When the lending policy changes, you load a new model under the same name and every one of these queries reports against the new rules—no redeploy, and the old model is still a value you can keep for the audit.

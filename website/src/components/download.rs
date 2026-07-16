@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-/// A decision model — a document with rules in it.
+/// A decision model—a document with rules in it.
 #[component]
 fn ModelIcon() -> impl IntoView {
     view! {
@@ -12,7 +12,7 @@ fn ModelIcon() -> impl IntoView {
     }
 }
 
-/// A dataset — rows and columns.
+/// A dataset—rows and columns.
 #[component]
 fn DataIcon() -> impl IntoView {
     view! {
@@ -32,7 +32,7 @@ fn DataIcon() -> impl IntoView {
     }
 }
 
-/// What a sample file is — a DMN model or a dataset. The icon and the accessible
+/// What a sample file is—a DMN model or a dataset. The icon and the accessible
 /// name both follow from it.
 #[derive(Clone, Copy)]
 pub enum FileKind {
@@ -64,7 +64,7 @@ impl FileKind {
 
 /// One downloadable file: an icon and its name, as a bordered list item.
 ///
-/// The icon is decorative — the filename is the link text — so it is hidden from
+/// The icon is decorative—the filename is the link text—so it is hidden from
 /// assistive technology rather than announced. The accessible name says what
 /// activating the link does, which a bare filename would not.
 #[component]
