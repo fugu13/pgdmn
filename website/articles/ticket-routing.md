@@ -1,14 +1,14 @@
 ---
-title: Put the rules in the schema
+title: Clarity in support ticket routing rules
 date: 2026-07-11
 summary: A decision model is a value. Store it in a column, wrap it in a view, and changing how every ticket is triaged becomes an UPDATE of one row—with the old rules still there to audit.
 files: ticket-routing.dmn, tickets.csv
 example: routing
 ---
 
-Support triage rules tend to live in one person's head or scattered through application code, so changing how tickets are assigned means shipping a release—and nobody outside engineering can read the current policy, let alone propose a change to it.
+Support triage rules tend to live in people's heads or scattered through application code. They're also documented in the internal wiki, but that gradually goes stale and out of date.
 
-This example puts the routing rules in the database as a DMN model behind a view, so every ticket is classified by the policy in force and changing that policy is an update to one row rather than a deploy. It covers first-hit routing over two string inputs and the queries that then fall out of a view; escalation timers, round-robin assignment, and load balancing across agents are out of scope.
+This example puts the routing rules in the database as a DMN model behind a view, so every ticket is classified in one place. Also, a table automatically generated from the DMN can be embedded in the wiki, guaranteeing the rules match.
 
 ## The rules
 
