@@ -24,7 +24,7 @@ jobs:
     env:
       DOCKER_BUILD_CACHE: "--cache-from type=gha,scope=pgdmn-test --cache-to type=gha,mode=max,scope=pgdmn-test"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Creates a docker-container builder so `--cache-to type=gha` and
       # `--load` work; sets it as the default buildx builder that
@@ -100,7 +100,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: taiki-e/install-action@v2
         with:
