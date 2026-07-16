@@ -122,11 +122,11 @@ Rolling the promotion out to everyone is not an `UPDATE` at all — it is the ro
 
 Globex's standard tax is not 206.25. It is **206.249175**, and their total is 2706.239175. FEEL arithmetic is exact decimal arithmetic to 34 significant digits. You'll never see binary arithmetic problems like 0.10 + 0.20 = 0.30000000000000004, because in FEEL 0.10 + 0.20 always equals 0.3.
 
-The query rounds the result to 2 decimal places in this example, but that decision is left up to the calling SQL.
+pgdmn's typed numeric functions — like `dmn_eval_numeric`, used above — return PostgreSQL `numeric`, which can exactly represent every number FEEL handles. The query rounds the result to 2 decimal places in this example, but that decision is left up to the calling SQL.
 
 ## Going further
 
-What does the promotion cost the business? The saving is just the difference between the two columns, summed — a single query, no application code:
+What does the promotion cost the business? The saving is the difference between the two columns, summed. Here's how you might calculate that.
 
 ```sql
 SELECT round(sum(dmn_eval_numeric(thru_jun.model, 'Total Price', p.input)), 2) AS thru_jun_book,
@@ -147,7 +147,7 @@ JOIN pricing_policies from_jul
 --        3892.33 |       3503.10 |     389.23
 ```
 
-The everyday query never names a version. It asks for the policy in effect on the day and lets the dates decide — so on 1 July it begins pricing at the promotional rate, with nothing deployed and nothing updated in between:
+The query never names a version. It asks for the policy in effect on the day and lets the dates decide — so on 1 July it begins pricing at the promotional rate, with nothing deployed and nothing updated in between:
 
 ```sql
 SELECT o.customer,
