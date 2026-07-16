@@ -266,6 +266,37 @@ mod tests {
     }
 
     #[pg_test]
+    fn test_feel_eval_decimal_addition_is_exact() {
+        // The pricing article contrasts FEEL's exact decimal arithmetic with
+        // binary float: 0.10 + 0.20 is exactly 0.3, never the
+        // 0.30000000000000004 an f64 would give. Postgres numeric equality would
+        // reject a binary-tainted value, so this pins the claim the page makes.
+        let equals = Spi::get_one::<bool>("SELECT feel_eval_numeric('0.10 + 0.20') = 0.3")
+            .expect("SPI failed")
+            .expect("null");
+        assert!(
+            equals,
+            "0.10 + 0.20 should be exactly 0.3, not a binary-float tail"
+        );
+
+        // It also renders cleanly, with no binary-float tail (scale-tolerant).
+        let text = Spi::get_one::<String>("SELECT feel_eval_numeric('0.10 + 0.20')::text")
+            .expect("SPI failed")
+            .expect("null");
+        assert_eq!(
+            text.trim_end_matches('0').trim_end_matches('.'),
+            "0.3",
+            "0.10 + 0.20 rendered with an unexpected tail: {text}"
+        );
+
+        // FEEL's own equality agrees — what a decision table would rely on.
+        let feel_equal = Spi::get_one::<bool>("SELECT feel_eval_bool('0.10 + 0.20 = 0.3')")
+            .expect("SPI failed")
+            .expect("null");
+        assert!(feel_equal, "FEEL should treat 0.10 + 0.20 = 0.3 as true");
+    }
+
+    #[pg_test]
     fn test_feel_eval_integer_beyond_i64_as_float() {
         // Integers wider than i64 fall back to the f64 output path.
         let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('9223372036854775807 + 1')")

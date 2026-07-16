@@ -120,7 +120,7 @@ Rolling the promotion out to everyone is not an `UPDATE` at all — it is the ro
 
 ## Globex, and what a penny is
 
-Globex's standard tax is not 206.25. It is **206.249175**, and their total is 2706.239175. FEEL arithmetic is exact decimal arithmetic to the 34th decimal place. You'll never see binary arithmetic problems like 0.10 + 0.20 = 0.30000000000000004, because in FEEL 0.10 + 0.20 always equals 0.3.
+Globex's standard tax is not 206.25. It is **206.249175**, and their total is 2706.239175. FEEL arithmetic is exact decimal arithmetic to 34 significant digits. You'll never see binary arithmetic problems like 0.10 + 0.20 = 0.30000000000000004, because in FEEL 0.10 + 0.20 always equals 0.3.
 
 The query rounds the result to 2 decimal places in this example, but that decision is left up to the calling SQL.
 
