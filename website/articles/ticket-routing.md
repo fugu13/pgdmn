@@ -1,7 +1,7 @@
 ---
 title: Clarity in support ticket routing rules
 date: 2026-07-11
-summary: A decision model is a value. Store it in a column, wrap it in a view, and changing how every ticket is triaged becomes an UPDATE of one row—with the old rules still there to audit.
+summary: Routing rules as a DMN decision table behind a view: every ticket is classified in one place, and a table generated from the same model embeds in the wiki, so the docs never drift from the rules that actually run.
 files: ticket-routing.dmn, tickets.csv
 example: routing
 ---
