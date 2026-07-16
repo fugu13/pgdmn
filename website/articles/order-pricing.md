@@ -147,7 +147,7 @@ JOIN pricing_policies from_jul
 --        3892.33 |       3503.10 |     389.23
 ```
 
-The query never names a version. It asks for the policy in effect on the day and lets the dates decide — so on 1 July it begins pricing at the promotional rate, with nothing deployed and nothing updated in between:
+To produce a price report for the current day, no need to specify the pricing model by name or ID. A query can look up the policy in effect — so on 1 July it begins pricing at the promotional rate, with nothing deployed and nothing updated in between:
 
 ```sql
 SELECT o.customer,
