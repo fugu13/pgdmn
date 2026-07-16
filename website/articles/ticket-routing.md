@@ -12,9 +12,7 @@ This example puts the routing rules in the database as a DMN model behind a view
 
 ## The rules
 
-Two string inputs—how urgent, and who is asking—and a queue to land in. Same *first* hit policy, with a catch-all at the bottom so nothing falls through the floor.
-
-This is the model itself, drawn the way a DMN tool draws it: the hit policy in the corner, one numbered row per rule, inputs on the left and the output on the right. It is not a picture *of* the rules—it is the rules, and it is what runs.
+The ticket routing rules are a decision table. The table exactly models the rules, it does not need to be translated into code. It is the rules, and it is what runs.
 
 Table: Queue—hit policy: F (first)
 
@@ -28,9 +26,11 @@ Table: Queue—hit policy: F (first)
 
 This is a standard DMN file—[open it in dmn-js →](/dmn-viewer.html?model=ticket-routing.dmn), or in any DMN tool.
 
-Read it as a policy and it is legible to someone who does not write SQL: wake somebody for anything critical; wake somebody for an enterprise customer with an urgent problem; everything else queues by severity, and enterprise jumps the line. That is a conversation you can have with the person who owns the support budget.
+Read it as a policy and it is legible to someone who does not write SQL. Wake somebody for anything critical. Wake somebody for an enterprise customer with an urgent problem. Everything else queues by severity, and enterprise jumps the line.
 
-## Set up
+That is a conversation you can have with the person who owns the support budget.
+
+## Try it in SQL
 
 Load the model, [`ticket-routing.dmn`](/examples/ticket-routing.dmn), and the tickets from [`tickets.csv`](/examples/tickets.csv). Run this from the directory the two files are in; you will need pgdmn installed first (see [Install](/docs/#install)).
 
@@ -51,7 +51,7 @@ CREATE TABLE tickets (
 
 ## The view is the point
 
-Rather than run the decision by hand each time, make it part of the schema. A view routes every ticket, and everything downstream—dashboards, alerting, the on-call rota—reads the view rather than knowing the rules.
+Rather than run the decision by hand each time, make it part of the schema. A view routes every ticket, and everything downstream reads the view rather than knowing the rules.
 
 ```sql
 CREATE VIEW routed_tickets AS
