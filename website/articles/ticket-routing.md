@@ -30,6 +30,119 @@ Read it as a policy and it is legible to someone who does not write SQL. Wake so
 
 That is a conversation you can have with the person who owns the support budget.
 
+## Displaying the rules
+
+The same standard DMN file can be shown as a table by more than one tool, and none of them change the file.
+
+**dmn-js.** A short HTML file loads [dmn-js](https://bpmn.io/toolkit/dmn-js/) from a CDN and draws the decision table the way a DMN tool does; the hosted copy is the [dmn-js viewer](/dmn-viewer.html?model=ticket-routing.dmn).
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-js-shared.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-js-decision-table.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-js-decision-table-controls.css" />
+    <style>html, body, #canvas { margin: 0; height: 100%; }</style>
+  </head>
+  <body>
+    <div id="canvas"></div>
+    <script src="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/dmn-navigated-viewer.production.min.js"></script>
+    <script>
+      const viewer = new DmnJS({ container: "#canvas" });
+      fetch("ticket-routing.dmn")
+        .then((response) => response.text())
+        .then((xml) => viewer.importXML(xml));
+    </script>
+  </body>
+</html>
+```
+
+**XSLT, right in the browser.** A four-line wrapper names the model and points at a stylesheet, so opening it in a browser (served over http) renders the table: [see it rendered](/display/view.xml).
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="render.xslt"?>
+<render dmn="../examples/ticket-routing.dmn"/>
+```
+
+The stylesheet reads the DMN read-only with `document()` and builds the table itself: [render.xslt](/display/render.xslt).
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0"
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+    xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/">
+  <xsl:output method="html" indent="yes"/>
+
+  <!-- Entry: the wrapper names the DMN; we load it read-only via document(). -->
+  <xsl:template match="/render">
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8"/>
+        <title>Decision table</title>
+        <style>
+          table.decision-table { border-collapse: collapse; }
+          .decision-table th, .decision-table td { border: 1px solid #c9ced6; padding: .35rem .75rem; text-align: left; }
+          .decision-table thead th { background: #eef2f7; }
+          .decision-table th:last-child { background: #d9e3ee; }
+        </style>
+      </head>
+      <body>
+        <xsl:apply-templates select="document(@dmn)//dmn:decisionTable[1]"/>
+      </body>
+    </html>
+  </xsl:template>
+
+  <xsl:template match="dmn:decisionTable">
+    <table class="decision-table">
+      <caption>
+        <xsl:value-of select="ancestor::dmn:decision/@name"/>
+        <xsl:text> (hit policy: </xsl:text>
+        <xsl:value-of select="translate(@hitPolicy, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')"/>
+        <xsl:text>)</xsl:text>
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col"><xsl:value-of select="substring(@hitPolicy, 1, 1)"/></th>
+          <xsl:for-each select="dmn:input">
+            <th scope="col"><xsl:value-of select="dmn:inputExpression/dmn:text"/></th>
+          </xsl:for-each>
+          <xsl:for-each select="dmn:output">
+            <th scope="col"><xsl:value-of select="@name | ancestor::dmn:decision/dmn:variable/@name"/></th>
+          </xsl:for-each>
+        </tr>
+      </thead>
+      <tbody>
+        <xsl:for-each select="dmn:rule">
+          <tr>
+            <td><xsl:value-of select="position()"/></td>
+            <xsl:for-each select="dmn:inputEntry | dmn:outputEntry">
+              <td><xsl:call-template name="cell"><xsl:with-param name="t" select="dmn:text"/></xsl:call-template></td>
+            </xsl:for-each>
+          </tr>
+        </xsl:for-each>
+      </tbody>
+    </table>
+  </xsl:template>
+
+  <xsl:template name="cell">
+    <xsl:param name="t"/>
+    <xsl:choose>
+      <xsl:when test="$t = '-'">any</xsl:when>
+      <xsl:otherwise><xsl:value-of select="translate($t, '&quot;', '')"/></xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+</xsl:stylesheet>
+```
+
+That stylesheet runs anywhere XSLT does: paste both files into [xsltransform.net](https://xsltransform.net/), or run it with `xsltproc`, which ships on macOS and most Linux systems.
+
+```sh
+xsltproc render.xslt view.xml > table.html
+```
+
 ## Try it in SQL
 
 Load the model, [`ticket-routing.dmn`](/examples/ticket-routing.dmn), and the tickets from [`tickets.csv`](/examples/tickets.csv). Run this from the directory the two files are in; you will need pgdmn installed first (see [Install](/docs/#install)).

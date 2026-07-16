@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="render.xslt"?>
+<!-- Open this file in a browser (served over http, not file://) to see the
+     decision table. It leaves the DMN untouched and pulls it in read-only.
+     Point it at another model by changing the dmn attribute below. -->
+<render dmn="../examples/ticket-routing.dmn"/>

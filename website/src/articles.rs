@@ -147,7 +147,7 @@ fn to_html(markdown: &str) -> String {
     let mut rendered = String::new();
     html::push_html(
         &mut rendered,
-        highlight_sql_blocks(Parser::new_ext(markdown, options)).into_iter(),
+        highlight_code_blocks(Parser::new_ext(markdown, options)).into_iter(),
     );
     // A link to a sample file should download it, not render it in the tab. The
     // inline file references in an article are written as ordinary markdown
@@ -156,36 +156,71 @@ fn to_html(markdown: &str) -> String {
     tables_accessible(&rendered)
 }
 
-/// Replace the contents of a ```` ```sql ```` block with highlighted markup, so
-/// SQL in a post looks like SQL everywhere else on the site.
-fn highlight_sql_blocks<'a>(events: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
+/// Replace the contents of every fenced code block with an accessible, styled
+/// block. A ```` ```sql ```` block gets build-time highlighting, so SQL in a
+/// post looks like SQL everywhere else on the site; every other language is
+/// HTML-escaped and shown as plain text. Both are wrapped in a focusable,
+/// horizontally scrollable region, because a block that scrolls sideways has to
+/// be reachable by a keyboard.
+fn highlight_code_blocks<'a>(events: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
     let mut out = Vec::new();
-    let mut sql: Option<String> = None;
+    let mut block: Option<(String, String)> = None;
 
     for event in events {
         match event {
-            Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(ref lang)))
-                if lang.as_ref() == "sql" =>
-            {
-                sql = Some(String::new());
+            Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(ref lang))) => {
+                block = Some((lang.as_ref().to_string(), String::new()));
             }
-            Event::Text(ref text) if sql.is_some() => {
-                if let Some(buffer) = sql.as_mut() {
+            Event::Text(ref text) if block.is_some() => {
+                if let Some((_, buffer)) = block.as_mut() {
                     buffer.push_str(text);
                 }
             }
-            Event::End(TagEnd::CodeBlock) if sql.is_some() => {
-                if let Some(code) = sql.take() {
-                    out.push(Event::Html(
+            Event::End(TagEnd::CodeBlock) if block.is_some() => {
+                if let Some((lang, code)) = block.take() {
+                    let html = if lang == "sql" {
                         format!(
                             "<pre class=\"sql-block\" role=\"region\" aria-label=\"SQL\" \
                              tabindex=\"0\"><code>{}</code></pre>",
                             crate::highlight::sql(&code)
                         )
-                        .into(),
-                    ));
+                    } else {
+                        format!(
+                            "<pre class=\"code-block\" role=\"region\" aria-label=\"{}\" \
+                             tabindex=\"0\"><code>{}</code></pre>",
+                            code_block_label(&lang),
+                            escape_html(&code)
+                        )
+                    };
+                    out.push(Event::Html(html.into()));
                 }
             }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// A short accessible name for a non-SQL code block, from its fence language.
+fn code_block_label(lang: &str) -> &'static str {
+    match lang {
+        "html" => "HTML",
+        "xml" => "XML",
+        "sh" | "bash" | "shell" => "Shell",
+        _ => "Code",
+    }
+}
+
+/// Escape text for display inside a `<code>` element. Only `&`, `<`, and `>`
+/// can change meaning in element content; a literal `&quot;` in the source (as
+/// in the XSLT stylesheet) becomes `&amp;quot;` and renders back as `&quot;`.
+fn escape_html(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
             other => out.push(other),
         }
     }

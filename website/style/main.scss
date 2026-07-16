@@ -154,7 +154,8 @@ ul, ol {
 
 // SQL code block. It scrolls sideways, so it is focusable; anything focusable
 // needs a focus indicator you can actually see.
-.sql-block {
+.sql-block,
+.code-block {
   background: var(--color-code-bg);
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
@@ -392,6 +393,21 @@ ul, ol {
     border: 1px solid var(--color-border);
     border-radius: 0.25rem;
     padding: 0.05rem 0.3rem;
+  }
+
+  // Lightly-styled links to the display assets (view.xml, render.xslt).
+  a[href^="/display/"] {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+    text-decoration: none;
+    white-space: nowrap;
+
+    &:hover {
+      border-color: var(--color-primary);
+    }
   }
 
   blockquote {
