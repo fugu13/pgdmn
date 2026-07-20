@@ -29,7 +29,7 @@ jobs:
       # Creates a docker-container builder so `--cache-to type=gha` and
       # `--load` work; sets it as the default buildx builder that
       # `make test-image`'s `docker buildx build` will use.
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Exposes ACTIONS_RUNTIME_TOKEN / ACTIONS_CACHE_URL into the environment
       # so a raw `docker buildx build --cache-to type=gha` (invoked by the
