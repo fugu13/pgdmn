@@ -35,7 +35,7 @@ jobs:
       # so a raw `docker buildx build --cache-to type=gha` (invoked by the
       # Makefile, not by build-push-action) can read/write the GitHub Actions
       # cache.
-      - uses: crazy-max/ghaction-github-runtime@v3
+      - uses: crazy-max/ghaction-github-runtime@v4
 
       # The container writes compiled artifacts to the bind-mounted `target/`;
       # caching it keeps pgrx/dsntk from recompiling every run. The run_id in
