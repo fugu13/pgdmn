@@ -32,7 +32,7 @@ Dependabot for path deps) and a guard against stray duplicate files
 Commit a CHECKSUMS manifest (per-crate sha256 of the vendored tarballs,
 written by vendor-upgrade). vendor/PATCHES.md exists (summaries +
 measured effects; update it as part of the one-commit-per-change
-discipline) — extend it with upstream-PR links as PUBLIC-006 executes,
+discipline) — extend it with upstream-PR links as UPSTREAM-001 executes,
 teach vendor-status to reconcile the git layer against it, and disable
 squash-merge for vendor PRs so patch-layer separability survives GitHub
 merges.
@@ -44,12 +44,6 @@ Document the vendor/ contribution rules where outsiders will look
 markers; no reformatting), route vendor/ changes via CODEOWNERS, and
 add .github/instructions/vendor.instructions.md so Copilot review stops
 proposing stylistic rewrites of vendored code.
-
-### PUBLIC-006: Open the upstream PRs and link them (executes PERF-006)
-
-BUG-003 first, then the DEPS-001 feature gate, DEPS-002, H4, H14, H9,
-and H3+H20 as a pair. Link each PR from TODO.md and vendor/PATCHES.md
-so the public repo visibly demonstrates the upstream-first posture.
 
 ### PUBLIC-007: Commit a benchmark baseline for the vendor-inspect flow
 
@@ -84,6 +78,14 @@ shared library — a real privilege-escalation surface, not a follow-on
 to the superuser fix. Needs a pgvector-style audit (review every
 installed function/type for anything a non-superuser could turn into
 more access than they started with) before it's safe to flip.
+
+## Upstream
+
+### UPSTREAM-001: Open the upstream PRs and link them (executes PERF-006)
+
+BUG-003 first, then the DEPS-001 feature gate, DEPS-002, H4, H14, H9,
+and H3+H20 as a pair. Link each PR from TODO.md and vendor/PATCHES.md
+so the public repo visibly demonstrates the upstream-first posture.
 
 ## Performance
 

@@ -27,6 +27,6 @@ noise floor, kept on mechanistic grounds.
 | DEPS-002 | feel-number | `Display` is total: ±Inf/NaN print the library's textual form instead of panicking on a missing exponent | closes BUG-004's root cause |
 | lint | several | Minimal edits keeping `make lint -D warnings` green under newer clippy (vendored path deps escape cap-lints); includes one pristine-0.3 site rewritten with `?` | none (non-functional) |
 
-Upstream status: tracked per patch in TODO.md (PERF-006 / PUBLIC-006).
+Upstream status: tracked per patch in TODO.md (PERF-006 / UPSTREAM-001).
 BUG-003, the DEPS-001 gate, and DEPS-002 are the lead candidates; H14
 implements an upstream TODO; H20+H3 must be proposed as a pair.
