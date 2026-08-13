@@ -1,3 +1,4 @@
+pub mod download;
 pub mod footer;
 pub mod header;
 pub mod skip_link;

@@ -16,10 +16,11 @@ pub fn Header() -> impl IntoView {
                 // static host answers every nav click with a redirect first.
                 <nav aria-label="Main navigation">
                     <ul class="site-nav">
+                        <li><A href="/">"Home"</A></li>
                         <li><A href=format!("/{}/", routes::WHY)>"Why pgdmn"</A></li>
                         <li><A href=format!("/{}/", routes::DOCS)>"Docs"</A></li>
                         <li><A href=format!("/{}/", routes::EXAMPLES)>"Examples"</A></li>
-                        <li><A href=format!("/{}/", routes::BLOG)>"Blog"</A></li>
+                        <li><A href=format!("/{}/", routes::ARTICLES)>"Articles"</A></li>
                         <li>
                             <a
                                 href="https://github.com/fugu13/pgdmn"

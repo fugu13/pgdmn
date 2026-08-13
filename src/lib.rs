@@ -266,6 +266,37 @@ mod tests {
     }
 
     #[pg_test]
+    fn test_feel_eval_decimal_addition_is_exact() {
+        // The pricing article contrasts FEEL's exact decimal arithmetic with
+        // binary float: 0.10 + 0.20 is exactly 0.3, never the
+        // 0.30000000000000004 an f64 would give. Postgres numeric equality would
+        // reject a binary-tainted value, so this pins the claim the page makes.
+        let equals = Spi::get_one::<bool>("SELECT feel_eval_numeric('0.10 + 0.20') = 0.3")
+            .expect("SPI failed")
+            .expect("null");
+        assert!(
+            equals,
+            "0.10 + 0.20 should be exactly 0.3, not a binary-float tail"
+        );
+
+        // It also renders cleanly, with no binary-float tail (scale-tolerant).
+        let text = Spi::get_one::<String>("SELECT feel_eval_numeric('0.10 + 0.20')::text")
+            .expect("SPI failed")
+            .expect("null");
+        assert_eq!(
+            text.trim_end_matches('0').trim_end_matches('.'),
+            "0.3",
+            "0.10 + 0.20 rendered with an unexpected tail: {text}"
+        );
+
+        // FEEL's own equality agrees—what a decision table would rely on.
+        let feel_equal = Spi::get_one::<bool>("SELECT feel_eval_bool('0.10 + 0.20 = 0.3')")
+            .expect("SPI failed")
+            .expect("null");
+        assert!(feel_equal, "FEEL should treat 0.10 + 0.20 = 0.3 as true");
+    }
+
+    #[pg_test]
     fn test_feel_eval_integer_beyond_i64_as_float() {
         // Integers wider than i64 fall back to the f64 output path.
         let result = Spi::get_one::<pgrx::JsonB>("SELECT feel_eval('9223372036854775807 + 1')")
@@ -404,7 +435,7 @@ mod tests {
     #[pg_test(error = "FEEL number result is not finite and cannot be converted to NUMERIC")]
     fn test_feel_eval_numeric_rejects_decimal_overflow() {
         // decimal128 overflow rounds to +Inf, whose Display panics inside
-        // dsntk — the boundary must reject before stringifying (BUG-004)
+        // dsntk—the boundary must reject before stringifying (BUG-004)
         Spi::get_one::<pgrx::AnyNumeric>(
             "SELECT feel_eval_numeric(repeat('9', 3100) || ' * ' || repeat('9', 3100))",
         )
@@ -659,6 +690,47 @@ mod tests {
     #[should_panic(expected = "failed to parse DMN XML")]
     fn test_dmn_load_non_dmn_xml() {
         Spi::run("SELECT dmn_load('<root><child/></root>')").unwrap();
+    }
+
+    /// `dmn_load` parses caller-supplied XML, so it must not resolve external
+    /// entities: a `SYSTEM` entity pointing at a file is the classic XXE vector,
+    /// and this runs inside the database. Write a secret to a temp file, ask a
+    /// model to embed it via an external entity, and assert the secret does not
+    /// come back—whether because the parser rejects the DOCTYPE or because it
+    /// leaves the entity unresolved.
+    #[pg_test]
+    fn test_dmn_load_does_not_resolve_external_entities() {
+        let dir = std::env::temp_dir();
+        let secret_path = dir.join("pgdmn_xxe_probe.txt");
+        let secret = "TOP-SECRET-DO-NOT-LEAK";
+        std::fs::write(&secret_path, secret).expect("could not write probe file");
+
+        let payload = format!(
+            r#"<?xml version="1.0"?>
+<!DOCTYPE definitions [<!ENTITY xxe SYSTEM "file://{}">]>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="xxe" name="&xxe;" namespace="https://example.org/xxe">
+  <decision id="D" name="D"><literalExpression><text>1</text></literalExpression></decision>
+</definitions>"#,
+            secret_path.display()
+        );
+
+        // dmn_load may succeed or fail; either is fine. What must never happen is
+        // the file's contents appearing in the parsed model.
+        let escaped = payload.replace('\'', "''");
+        let leaked = std::panic::catch_unwind(|| {
+            Spi::get_one::<String>(&format!("SELECT dmn_name(dmn_load('{escaped}'))"))
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+
+        let _ = std::fs::remove_file(&secret_path);
+        assert!(
+            !leaked.contains(secret),
+            "XXE: external entity resolved, model name leaked the file: {leaked:?}"
+        );
     }
 
     #[pg_test]
@@ -1389,6 +1461,388 @@ mod tests {
         );
     }
 
+    /// Does the *shape* of the SQL change what a DMN evaluation costs?
+    ///
+    /// Same model, same rows, same answers—only the query differs. Gated
+    /// behind `PGDMN_BENCH_SHAPES=1` (`make bench-shapes`) because it is a
+    /// measurement, not an assertion.
+    #[pg_test]
+    #[expect(clippy::too_many_lines, clippy::cast_precision_loss)]
+    fn bench_query_shapes() {
+        if std::env::var("PGDMN_BENCH_SHAPES").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let concat = CONCAT_DMN.replace('\'', "''");
+        let risk = RISK_DMN.replace('\'', "''");
+
+        Spi::run(
+            "CREATE TABLE shapes (\
+             first_name TEXT NOT NULL, last_name TEXT NOT NULL, \
+             age INT NOT NULL, income NUMERIC NOT NULL, credit_score INT NOT NULL, \
+             employment_status TEXT NOT NULL, years_employed INT NOT NULL)",
+        )
+        .expect("CREATE TABLE failed");
+        Spi::run(
+            "INSERT INTO shapes (first_name, last_name, age, income, credit_score, employment_status, years_employed)
+             SELECT 'First_' || lpad(f.n::text, 3, '0'),
+                    'Last_' || lpad(l.n::text, 3, '0'),
+                    18 + ((f.n * 7 + l.n * 3) % 50),
+                    25000 + ((f.n * 13 + l.n * 17) % 100) * 1000,
+                    500 + ((f.n * 11 + l.n * 7) % 350),
+                    (ARRAY['employed','self-employed','unemployed','retired'])[1 + ((f.n + l.n) % 4)],
+                    ((f.n * 3 + l.n * 5) % 20)
+             FROM generate_series(1, 100) AS f(n)
+             CROSS JOIN generate_series(1, 100) AS l(n)",
+        )
+        .expect("INSERT failed");
+        // The same skew the other benchmark uses: some inputs repeat a lot.
+        Spi::run(
+            "INSERT INTO shapes
+             SELECT b.* FROM shapes b, generate_series(5, 100) AS s(n), generate_series(1, 50)
+             WHERE b.first_name = 'First_001'
+               AND b.last_name = 'Last_' || lpad(s.n::text, 3, '0')",
+        )
+        .expect("skew INSERT failed");
+
+        let rows = Spi::get_one::<i64>("SELECT count(*) FROM shapes")
+            .expect("SPI failed")
+            .unwrap();
+        let distinct_names = Spi::get_one::<i64>(
+            "SELECT count(*) FROM (SELECT DISTINCT first_name, last_name FROM shapes) d",
+        )
+        .expect("SPI failed")
+        .unwrap();
+        let distinct_risk = Spi::get_one::<i64>(
+            "SELECT count(*) FROM (SELECT DISTINCT age, income, credit_score, \
+             employment_status, years_employed FROM shapes) d",
+        )
+        .expect("SPI failed")
+        .unwrap();
+
+        let time = |label: &str, sql: &str| -> std::time::Duration {
+            // Warm, then measure.
+            Spi::run(sql).unwrap_or_else(|e| panic!("{label} failed: {e}"));
+            let start = std::time::Instant::now();
+            Spi::run(sql).unwrap_or_else(|e| panic!("{label} failed: {e}"));
+            start.elapsed()
+        };
+
+        // (A) The shape the docs show: evaluate once per row.
+        let naive_concat = time(
+            "naive concat",
+            &format!(
+                "SELECT dmn_eval(dmn_load('{concat}'), 'FullName', \
+                 jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+                 FROM shapes"
+            ),
+        );
+
+        // (B) Evaluate once per DISTINCT input, then join the answers back on.
+        let dedup_concat = time(
+            "dedup concat",
+            &format!(
+                "WITH answers AS (\
+                   SELECT first_name, last_name, \
+                          dmn_eval(dmn_load('{concat}'), 'FullName', \
+                          jsonb_build_object('first_name', first_name, 'last_name', last_name)) AS r \
+                   FROM (SELECT DISTINCT first_name, last_name FROM shapes) d) \
+                 SELECT a.r FROM shapes s \
+                 JOIN answers a USING (first_name, last_name)"
+            ),
+        );
+
+        // (B2) The same dedup, but MATERIALIZED. Without this the planner inlines
+        // the CTE and pulls `dmn_eval` up above the join, evaluating it once per
+        // *output* row again—which silently undoes the deduplication.
+        let dedup_mat_concat = time(
+            "dedup materialized concat",
+            &format!(
+                "WITH answers AS MATERIALIZED (\
+                   SELECT first_name, last_name, \
+                          dmn_eval(dmn_load('{concat}'), 'FullName', \
+                          jsonb_build_object('first_name', first_name, 'last_name', last_name)) AS r \
+                   FROM (SELECT DISTINCT first_name, last_name FROM shapes) d) \
+                 SELECT a.r FROM shapes s \
+                 JOIN answers a USING (first_name, last_name)"
+            ),
+        );
+
+        // (C) The naive shape, but with parallelism actually permitted.
+        Spi::run("SET LOCAL max_parallel_workers_per_gather = 4").expect("SET failed");
+        Spi::run("SET LOCAL parallel_setup_cost = 0").expect("SET failed");
+        Spi::run("SET LOCAL parallel_tuple_cost = 0").expect("SET failed");
+        Spi::run("SET LOCAL min_parallel_table_scan_size = 0").expect("SET failed");
+        let parallel_concat = time(
+            "parallel concat",
+            &format!(
+                "SELECT dmn_eval(dmn_load('{concat}'), 'FullName', \
+                 jsonb_build_object('first_name', first_name, 'last_name', last_name)) \
+                 FROM shapes"
+            ),
+        );
+        let parallel_dedup_concat = time(
+            "parallel dedup concat",
+            &format!(
+                "WITH answers AS MATERIALIZED (\
+                   SELECT first_name, last_name, \
+                          dmn_eval(dmn_load('{concat}'), 'FullName', \
+                          jsonb_build_object('first_name', first_name, 'last_name', last_name)) AS r \
+                   FROM (SELECT DISTINCT first_name, last_name FROM shapes) d) \
+                 SELECT a.r FROM shapes s \
+                 JOIN answers a USING (first_name, last_name)"
+            ),
+        );
+        // (E) Both at once. A MATERIALIZED CTE is scanned serially, which throws
+        // parallelism away—so materialise into a real table instead, which the
+        // planner *can* fill in parallel, then join that.
+        let both_start = std::time::Instant::now();
+        Spi::run(&format!(
+            "CREATE UNLOGGED TABLE answers AS \
+             SELECT first_name, last_name, \
+                    dmn_eval(dmn_load('{concat}'), 'FullName', \
+                    jsonb_build_object('first_name', first_name, 'last_name', last_name)) AS r \
+             FROM (SELECT DISTINCT first_name, last_name FROM shapes) d"
+        ))
+        .expect("CTAS failed");
+        Spi::run("SELECT a.r FROM shapes s JOIN answers a USING (first_name, last_name)")
+            .expect("join failed");
+        let both_concat = both_start.elapsed();
+        Spi::run("DROP TABLE answers").expect("DROP failed");
+
+        Spi::run("RESET max_parallel_workers_per_gather").expect("RESET failed");
+        Spi::run("RESET parallel_setup_cost").expect("RESET failed");
+        Spi::run("RESET parallel_tuple_cost").expect("RESET failed");
+        Spi::run("RESET min_parallel_table_scan_size").expect("RESET failed");
+
+        // (D) Is dmn_load('<literal>') folded once, or re-parsed per row? Put the
+        // model in a table and force it to be a column reference to find out.
+        Spi::run("CREATE TABLE shape_models (name text PRIMARY KEY, model dmnmodel NOT NULL)")
+            .expect("CREATE TABLE failed");
+        Spi::run(&format!(
+            "INSERT INTO shape_models VALUES ('concat', dmn_load('{concat}'))"
+        ))
+        .expect("INSERT model failed");
+        let from_column_concat = time(
+            "model-from-column concat",
+            "SELECT dmn_eval(m.model, 'FullName', \
+             jsonb_build_object('first_name', s.first_name, 'last_name', s.last_name)) \
+             FROM shapes s CROSS JOIN shape_models m WHERE m.name = 'concat'",
+        );
+
+        // The complex model, naive vs deduplicated.
+        let naive_risk = time(
+            "naive risk",
+            &format!(
+                "SELECT dmn_eval(dmn_load('{risk}'), 'RiskScore', \
+                 jsonb_build_object('age', age, 'income', income, 'credit_score', credit_score, \
+                 'employment_status', employment_status, 'years_employed', years_employed)) \
+                 FROM shapes"
+            ),
+        );
+        let dedup_risk = time(
+            "dedup risk",
+            &format!(
+                "WITH answers AS MATERIALIZED (\
+                   SELECT age, income, credit_score, employment_status, years_employed, \
+                          dmn_eval(dmn_load('{risk}'), 'RiskScore', \
+                          jsonb_build_object('age', age, 'income', income, \
+                          'credit_score', credit_score, 'employment_status', employment_status, \
+                          'years_employed', years_employed)) AS r \
+                   FROM (SELECT DISTINCT age, income, credit_score, employment_status, \
+                         years_employed FROM shapes) d) \
+                 SELECT a.r FROM shapes s \
+                 JOIN answers a USING (age, income, credit_score, employment_status, years_employed)"
+            ),
+        );
+
+        let rc = rows as f64;
+        let per_row = |d: std::time::Duration| d.as_micros() as f64 / rc;
+        let speedup = |base: std::time::Duration, other: std::time::Duration| {
+            base.as_secs_f64() / other.as_secs_f64()
+        };
+
+        let report = format!(
+            "Query-shape benchmark: {rows} rows\n\
+             distinct name combos: {distinct_names} | distinct risk combos: {distinct_risk}\n\
+             \n\
+             --- Simple (concat) ---\n\
+             naive (per row):        {:.1} us/row ({:?})\n\
+             dedup, CTE inlined:     {:.1} us/row ({:?})  {:.2}x\n\
+             dedup, MATERIALIZED:    {:.1} us/row ({:?})  {:.2}x\n\
+             parallel (4 workers):   {:.1} us/row ({:?})  {:.2}x\n\
+             parallel + dedup (CTE): {:.1} us/row ({:?})  {:.2}x\n\
+             parallel + dedup (tbl): {:.1} us/row ({:?})  {:.2}x\n\
+             model from a column:    {:.1} us/row ({:?})  {:.2}x\n\
+             \n\
+             --- Complex (risk score) ---\n\
+             naive (per row):        {:.1} us/row ({:?})\n\
+             dedup, MATERIALIZED:    {:.1} us/row ({:?})  {:.2}x\n",
+            per_row(naive_concat),
+            naive_concat,
+            per_row(dedup_concat),
+            dedup_concat,
+            speedup(naive_concat, dedup_concat),
+            per_row(dedup_mat_concat),
+            dedup_mat_concat,
+            speedup(naive_concat, dedup_mat_concat),
+            per_row(parallel_concat),
+            parallel_concat,
+            speedup(naive_concat, parallel_concat),
+            per_row(parallel_dedup_concat),
+            parallel_dedup_concat,
+            speedup(naive_concat, parallel_dedup_concat),
+            per_row(both_concat),
+            both_concat,
+            speedup(naive_concat, both_concat),
+            per_row(from_column_concat),
+            from_column_concat,
+            speedup(naive_concat, from_column_concat),
+            per_row(naive_risk),
+            naive_risk,
+            per_row(dedup_risk),
+            dedup_risk,
+            speedup(naive_risk, dedup_risk),
+        );
+        if let Err(e) = std::fs::write("/pgdmn/benchmark_shapes.txt", &report) {
+            pgrx::warning!("Failed to write benchmark_shapes.txt: {}", e);
+        }
+        pgrx::warning!("{}", report);
+    }
+
+    // A model whose decisions each return a different FEEL type, so every typed
+    // dmn_eval_* variant has something to unwrap.
+    const TYPED_DMN: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="typed" name="Typed" namespace="https://example.org/typed">
+    <decision id="Verdict" name="Verdict">
+        <variable name="Verdict" typeRef="string"/>
+        <literalExpression><text>"Approved"</text></literalExpression>
+    </decision>
+    <decision id="Total" name="Total">
+        <variable name="Total" typeRef="number"/>
+        <literalExpression><text>100 + 10</text></literalExpression>
+    </decision>
+    <decision id="Eligible" name="Eligible">
+        <variable name="Eligible" typeRef="boolean"/>
+        <literalExpression><text>5 > 3</text></literalExpression>
+    </decision>
+    <decision id="Due" name="Due">
+        <variable name="Due" typeRef="date"/>
+        <literalExpression><text>date("2024-03-15")</text></literalExpression>
+    </decision>
+    <decision id="Stamp" name="Stamp">
+        <variable name="Stamp" typeRef="dateTime"/>
+        <literalExpression><text>date and time("2024-03-15T10:30:00")</text></literalExpression>
+    </decision>
+    <decision id="Term" name="Term">
+        <variable name="Term" typeRef="yearMonthDuration"/>
+        <literalExpression><text>duration("P2Y3M")</text></literalExpression>
+    </decision>
+</definitions>"#;
+
+    #[pg_test]
+    fn test_dmn_eval_text() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<String>(&format!(
+            "SELECT dmn_eval_text(dmn_load('{escaped}'), 'Verdict')"
+        ))
+        .expect("SPI failed");
+        // No `#>> '{}'`: a string decision comes back as text, unquoted.
+        assert_eq!(result.unwrap(), "Approved");
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_numeric() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::AnyNumeric>(&format!(
+            "SELECT dmn_eval_numeric(dmn_load('{escaped}'), 'Total')"
+        ))
+        .expect("SPI failed");
+        assert_eq!(result.unwrap().to_string(), "110");
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_numeric_is_arithmetic_without_a_cast() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::AnyNumeric>(&format!(
+            "SELECT round(dmn_eval_numeric(dmn_load('{escaped}'), 'Total') * 1.5, 2)"
+        ))
+        .expect("SPI failed");
+        assert_eq!(result.unwrap().to_string(), "165.00");
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_bool() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<bool>(&format!(
+            "SELECT dmn_eval_bool(dmn_load('{escaped}'), 'Eligible')"
+        ))
+        .expect("SPI failed");
+        assert!(result.unwrap());
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_date() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::datum::Date>(&format!(
+            "SELECT dmn_eval_date(dmn_load('{escaped}'), 'Due')"
+        ))
+        .expect("SPI failed")
+        .unwrap();
+        assert_eq!((result.year(), result.month(), result.day()), (2024, 3, 15));
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_timestamp() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::datum::Timestamp>(&format!(
+            "SELECT dmn_eval_timestamp(dmn_load('{escaped}'), 'Stamp')"
+        ))
+        .expect("SPI failed")
+        .unwrap();
+        assert_eq!(
+            (result.year(), result.month(), result.day(), result.hour()),
+            (2024, 3, 15, 10)
+        );
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_interval() {
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = Spi::get_one::<pgrx::datum::Interval>(&format!(
+            "SELECT dmn_eval_interval(dmn_load('{escaped}'), 'Term')"
+        ))
+        .expect("SPI failed")
+        .unwrap();
+        assert_eq!(result.months(), 27); // P2Y3M
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_typed_rejects_the_wrong_type() {
+        // Asking a string decision for a number is a mistake worth hearing about,
+        // and the error names what came back instead.
+        let escaped = TYPED_DMN.replace('\'', "''");
+        let result = std::panic::catch_unwind(|| {
+            Spi::get_one::<pgrx::AnyNumeric>(&format!(
+                "SELECT dmn_eval_numeric(dmn_load('{escaped}'), 'Verdict')"
+            ))
+        });
+        assert!(result.is_err(), "expected an error, got a number");
+    }
+
+    #[pg_test]
+    fn test_dmn_eval_text_on_the_website_loan_model() {
+        // The shape the website's SQL now uses.
+        let escaped = LOAN_DMN.replace('\'', "''");
+        let result = Spi::get_one::<String>(&format!(
+            "SELECT dmn_eval_text(dmn_load('{escaped}'), 'Eligibility', \
+             '{{\"Age\": 34, \"Income\": 82000, \"Bankrupt\": false}}'::jsonb)"
+        ))
+        .expect("SPI failed");
+        assert_eq!(result.unwrap(), "Approved");
+    }
+
     // --- Record-based evaluation tests ---
 
     #[pg_test]
@@ -1893,19 +2347,19 @@ mod tests {
         };
         let builds_start = builds();
 
-        // Load model A (cold — one build)
+        // Load model A (cold—one build)
         let result_a = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL");
         assert_eq!(builds(), builds_start + 1, "model A should build once");
 
-        // Load model B (cold — different XML, not cached)
+        // Load model B (cold—different XML, not cached)
         let result_b = Spi::get_one::<pgrx::JsonB>(&query_b)
             .expect("SPI failed")
             .expect("model B returned NULL");
         assert_eq!(builds(), builds_start + 2, "model B should build once");
 
-        // Models produce different output — a false cache hit would fail here
+        // Models produce different output—a false cache hit would fail here
         assert_eq!(result_a.0, serde_json::json!("Hello, World!"));
         assert_eq!(result_b.0, serde_json::json!("Goodbye, World!"));
         assert_ne!(
@@ -1913,7 +2367,7 @@ mod tests {
             "Models A and B returned the same result; cache keying may not distinguish them"
         );
 
-        // Model A again (warm — served from cache, no new build)
+        // Model A again (warm—served from cache, no new build)
         let result_a_warm = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL on warm run");
@@ -1950,6 +2404,350 @@ mod tests {
             .expect("SPI failed")
             .expect("model A returned NULL on second run");
         assert_eq!(result_a_again.0, serde_json::json!("Hello, World!"));
+    }
+
+    // The models published on the website, evaluated against the exact rows of
+    // the CSV datasets published alongside them. The site tells visitors what
+    // these produce; these tests are what make that claim true, and what will
+    // fail loudly if a model or an engine upgrade ever changes the answer.
+    const LOAN_DMN: &str = include_str!("../website/public/examples/loan-eligibility.dmn");
+    const PRICING_DMN: &str = include_str!("../website/public/examples/order-pricing.dmn");
+    const PROMO_DMN: &str = include_str!("../website/public/examples/order-pricing-promo.dmn");
+    const ROUTING_DMN: &str = include_str!("../website/public/examples/ticket-routing.dmn");
+    const COMPLIANCE_DMN: &str = include_str!("../website/public/examples/compliance.dmn");
+
+    fn eligibility(age: i32, income: i32, bankrupt: bool) -> serde_json::Value {
+        eval_example(
+            LOAN_DMN,
+            "Eligibility",
+            &format!(r#"{{"Age": {age}, "Income": {income}, "Bankrupt": {bankrupt}}}"#),
+        )
+    }
+
+    #[pg_test]
+    fn test_example_loan_applicants() {
+        // applicants.csv, row by row.
+        assert_eq!(eligibility(34, 82000, false), serde_json::json!("Approved")); // Ada
+        assert_eq!(
+            eligibility(17, 0, false),
+            serde_json::json!("Denied: underage")
+        ); // Bo
+        assert_eq!(
+            eligibility(29, 41000, false),
+            serde_json::json!("Denied: low income")
+        ); // Chen
+        assert_eq!(eligibility(64, 68000, false), serde_json::json!("Approved")); // Gus
+    }
+
+    #[pg_test]
+    fn test_example_loan_boundaries() {
+        // Income of exactly 50000 is approved; a pound short is not.
+        assert_eq!(eligibility(22, 50000, false), serde_json::json!("Approved")); // Eli
+        assert_eq!(
+            eligibility(19, 49999, false),
+            serde_json::json!("Denied: low income")
+        ); // Fay
+    }
+
+    #[pg_test]
+    fn test_example_loan_boolean_input() {
+        // Dara earns 120000 and would sail through on the numbers—but the
+        // boolean says otherwise, and its rule is listed above the income rules.
+        assert_eq!(
+            eligibility(45, 120_000, true),
+            serde_json::json!("Denied: prior bankruptcy")
+        );
+        // The same applicant without the bankruptcy is approved.
+        assert_eq!(
+            eligibility(45, 120_000, false),
+            serde_json::json!("Approved")
+        );
+    }
+
+    #[pg_test]
+    fn test_example_loan_first_hit_policy_wins() {
+        // Hana is 17 with a large income. The underage rule is listed first, and
+        // the table is FIRST, so it wins—this is the row that makes the hit
+        // policy visible on the website.
+        assert_eq!(
+            eligibility(17, 95000, false),
+            serde_json::json!("Denied: underage")
+        );
+    }
+
+    /// Evaluate a pricing decision exactly the way the website's SQL does —
+    /// unwrap the JSONB, cast to numeric, round to pennies—and return what
+    /// psql would print.
+    ///
+    /// Asserting on the rounded numeric rather than the raw FEEL number is
+    /// deliberate: whether a whole result serialises as `10` or `10.0` is an
+    /// engine detail, while `10.00` is what the page promises a reader.
+    fn priced(model: &str, base: &str, rate: &str, invocable: &str) -> String {
+        let escaped_xml = model.replace('\'', "''");
+        let query = format!(
+            "SELECT round((dmn_eval(dmn_load('{escaped_xml}'), '{invocable}', \
+             '{{\"Base Price\": {base}, \"Tax Rate\": {rate}}}'::jsonb) #>> '{{}}')::numeric, 2)::text"
+        );
+        Spi::get_one::<String>(&query)
+            .expect("SPI failed")
+            .expect("dmn_eval returned NULL")
+    }
+
+    #[pg_test]
+    fn test_example_order_pricing_chains_decisions() {
+        // Total Price depends on Tax Amount, which pgdmn resolves without the
+        // caller asking for it: we only ever request the decision we want.
+        assert_eq!(priced(PRICING_DMN, "100.00", "0.10", "Tax Amount"), "10.00");
+        assert_eq!(
+            priced(PRICING_DMN, "100.00", "0.10", "Total Price"),
+            "110.00"
+        );
+    }
+
+    #[pg_test]
+    fn test_example_orders_match_the_published_table() {
+        // Every row of orders.csv under the standard model, and every figure
+        // printed in the results table on the website.
+        let rows = [
+            ("100.00", "0.10", "10.00", "110.00"),      // Northwind Traders
+            ("2499.99", "0.0825", "206.25", "2706.24"), // Globex
+            ("45.50", "0.20", "9.10", "54.60"),         // Initech
+            ("1000.00", "0.00", "0.00", "1000.00"),     // Umbrella Corp
+            ("19.99", "0.075", "1.50", "21.49"),        // Acme Supply
+        ];
+
+        for (base, rate, tax, total) in rows {
+            assert_eq!(
+                priced(PRICING_DMN, base, rate, "Tax Amount"),
+                tax,
+                "tax for {base} @ {rate}"
+            );
+            assert_eq!(
+                priced(PRICING_DMN, base, rate, "Total Price"),
+                total,
+                "total for {base} @ {rate}"
+            );
+        }
+    }
+
+    #[pg_test]
+    fn test_example_promo_model_prices_the_same_orders_differently() {
+        // The promotional model takes 10% off first, then taxes the net price.
+        // Same orders, same query, same invocable name—a different model row.
+        let rows = [
+            ("100.00", "0.10", "99.00"),      // Northwind Traders
+            ("2499.99", "0.0825", "2435.62"), // Globex
+            ("45.50", "0.20", "49.14"),       // Initech
+            ("1000.00", "0.00", "900.00"),    // Umbrella Corp
+            ("19.99", "0.075", "19.34"),      // Acme Supply
+        ];
+
+        for (base, rate, total) in rows {
+            assert_eq!(
+                priced(PROMO_DMN, base, rate, "Total Price"),
+                total,
+                "promo total for {base} @ {rate}"
+            );
+        }
+
+        // And it exposes the same invocable names, which is what lets one query
+        // serve both models.
+        assert_eq!(priced(PROMO_DMN, "100.00", "0.10", "Net Price"), "90.00");
+        assert_eq!(priced(PROMO_DMN, "100.00", "0.10", "Tax Amount"), "9.00");
+    }
+
+    #[pg_test]
+    fn test_example_pricing_policies_takes_effect_switch() {
+        // The pricing example stores two dated versions of one `retail` policy in
+        // a `pricing_policies` table and lets the query pick whichever is in
+        // effect on a given day—the latest whose takes_effect has arrived.
+        // Through June that is the standard model; from 1 July it is the
+        // promotional one, with nothing updated in between. This is the switch
+        // the article and examples page turn on, so verify it against the real
+        // engine rather than trusting the prose.
+        let standard = PRICING_DMN.replace('\'', "''");
+        let promo = PROMO_DMN.replace('\'', "''");
+
+        Spi::run(&format!(
+            "CREATE TEMP TABLE pricing_policies (
+               name         text NOT NULL,
+               takes_effect date NOT NULL,
+               model        dmnmodel NOT NULL,
+               PRIMARY KEY (name, takes_effect));
+             INSERT INTO pricing_policies VALUES
+               ('retail', DATE '2026-01-01', dmn_load('{standard}')),
+               ('retail', DATE '2026-07-01', dmn_load('{promo}'));"
+        ))
+        .expect("failed to set up pricing_policies");
+
+        // Single order (100.00 @ 0.10) under the version in effect on the day —
+        // the article's "Set up" query and its result.
+        let price_as_of = |as_of: &str| -> String {
+            Spi::get_one::<pgrx::AnyNumeric>(&format!(
+                "SELECT round(dmn_eval_numeric(model, 'Total Price', \
+                   '{{\"Base Price\": 100.00, \"Tax Rate\": 0.10}}'::jsonb), 2) \
+                 FROM pricing_policies \
+                 WHERE name = 'retail' AND takes_effect <= DATE '{as_of}' \
+                 ORDER BY takes_effect DESC LIMIT 1"
+            ))
+            .expect("SPI failed")
+            .expect("no policy in effect")
+            .to_string()
+        };
+        assert_eq!(price_as_of("2026-06-30"), "110.00", "standard through June");
+        assert_eq!(price_as_of("2026-07-01"), "99.00", "promo from 1 July");
+
+        // The whole book (orders.csv) under the in-effect version: the standard
+        // book through June, the promotional book from July—the same totals
+        // the article's cost query and the examples page's table print.
+        let book_as_of = |as_of: &str| -> String {
+            Spi::get_one::<pgrx::AnyNumeric>(&format!(
+                "WITH orders(base_price, tax_rate) AS (VALUES \
+                   (100.00, 0.10), (2499.99, 0.0825), (45.50, 0.20), \
+                   (1000.00, 0.00), (19.99, 0.075)) \
+                 SELECT round(sum(dmn_eval_numeric(pol.model, 'Total Price', \
+                   jsonb_build_object('Base Price', base_price, 'Tax Rate', tax_rate))), 2) \
+                 FROM orders \
+                 CROSS JOIN LATERAL ( \
+                   SELECT model FROM pricing_policies \
+                   WHERE name = 'retail' AND takes_effect <= DATE '{as_of}' \
+                   ORDER BY takes_effect DESC LIMIT 1) pol"
+            ))
+            .expect("SPI failed")
+            .expect("no policy in effect")
+            .to_string()
+        };
+        assert_eq!(
+            book_as_of("2026-06-30"),
+            "3892.33",
+            "standard book through June"
+        );
+        assert_eq!(
+            book_as_of("2026-07-01"),
+            "3503.10",
+            "promo book from 1 July"
+        );
+    }
+
+    /// The aggregate figures printed in the "Going further" sections of the
+    /// articles—approval rate, book values, promotion cost—computed by the
+    /// real engine over the published datasets, exactly as the articles' SQL
+    /// does. Hand-computed aggregates are the easy place for a wrong number to
+    /// slip onto the site; this is what keeps them honest.
+    #[pg_test]
+    fn test_article_aggregate_figures() {
+        let loan = LOAN_DMN.replace('\'', "''");
+        let standard = PRICING_DMN.replace('\'', "''");
+        let promo = PROMO_DMN.replace('\'', "''");
+
+        // Loan approval rate over applicants.csv: 3 approved of 8 -> 37.5%.
+        let approval = Spi::get_one::<pgrx::AnyNumeric>(&format!(
+            "WITH applicants(age, income, bankrupt) AS (VALUES \
+               (34, 82000, false), (17, 0, false), (29, 41000, false), \
+               (45, 120000, true), (22, 50000, false), (19, 49999, false), \
+               (64, 68000, false), (17, 95000, false)) \
+             SELECT round(100.0 * count(*) FILTER (WHERE dmn_eval_text(dmn_load('{loan}'), \
+               'Eligibility', jsonb_build_object('Age', age, 'Income', income, \
+               'Bankrupt', bankrupt)) = 'Approved') / count(*), 1) \
+             FROM applicants"
+        ))
+        .expect("SPI failed")
+        .expect("null");
+        assert_eq!(approval.to_string(), "37.5");
+
+        // Pricing book values over orders.csv, summed unrounded then rounded —
+        // the shape the order-pricing article's query uses.
+        let orders = "orders(base_price, tax_rate) AS (VALUES \
+             (100.00, 0.10), (2499.99, 0.0825), (45.50, 0.20), \
+             (1000.00, 0.00), (19.99, 0.075))";
+        let book = |model: &str| -> String {
+            Spi::get_one::<pgrx::AnyNumeric>(&format!(
+                "WITH {orders} \
+                 SELECT round(sum(dmn_eval_numeric(dmn_load('{model}'), 'Total Price', \
+                   jsonb_build_object('Base Price', base_price, 'Tax Rate', tax_rate))), 2) \
+                 FROM orders"
+            ))
+            .expect("SPI failed")
+            .expect("null")
+            .to_string()
+        };
+        assert_eq!(book(&standard), "3892.33", "standard book value");
+        assert_eq!(book(&promo), "3503.10", "promo book value");
+
+        let given_away = Spi::get_one::<pgrx::AnyNumeric>(&format!(
+            "WITH {orders} \
+             SELECT round(sum(dmn_eval_numeric(dmn_load('{standard}'), 'Total Price', \
+                   jsonb_build_object('Base Price', base_price, 'Tax Rate', tax_rate)) \
+                 - dmn_eval_numeric(dmn_load('{promo}'), 'Total Price', \
+                   jsonb_build_object('Base Price', base_price, 'Tax Rate', tax_rate))), 2) \
+             FROM orders"
+        ))
+        .expect("SPI failed")
+        .expect("null");
+        assert_eq!(given_away.to_string(), "389.23", "promotion cost");
+    }
+
+    fn queue(priority: &str, tier: &str) -> serde_json::Value {
+        eval_example(
+            ROUTING_DMN,
+            "Queue",
+            &format!(r#"{{"Priority": "{priority}", "Customer Tier": "{tier}"}}"#),
+        )
+    }
+
+    #[pg_test]
+    fn test_example_ticket_routing() {
+        // tickets.csv, row by row.
+        assert_eq!(queue("critical", "startup"), serde_json::json!("pager"));
+        assert_eq!(queue("high", "enterprise"), serde_json::json!("pager"));
+        assert_eq!(queue("low", "startup"), serde_json::json!("tier-1"));
+        assert_eq!(queue("high", "startup"), serde_json::json!("tier-2"));
+        assert_eq!(queue("normal", "enterprise"), serde_json::json!("tier-2"));
+        assert_eq!(queue("low", "free"), serde_json::json!("tier-1"));
+        assert_eq!(queue("critical", "enterprise"), serde_json::json!("pager"));
+        assert_eq!(queue("normal", "free"), serde_json::json!("tier-1"));
+    }
+
+    fn handling(region: &str, data_class: &str) -> serde_json::Value {
+        eval_example(
+            COMPLIANCE_DMN,
+            "Handling",
+            &format!(r#"{{"Region": "{region}", "Data Class": "{data_class}"}}"#),
+        )
+    }
+
+    #[pg_test]
+    fn test_example_compliance_handling() {
+        // customers.csv, row by row. "special" is caught first regardless of
+        // region, so Umbrella's EU residency never gets a say.
+        assert_eq!(
+            handling("EU", "personal"),
+            serde_json::json!("store in EU, retain 24 months")
+        );
+        assert_eq!(
+            handling("US", "personal"),
+            serde_json::json!("retain 24 months")
+        );
+        assert_eq!(
+            handling("US", "special"),
+            serde_json::json!("encrypt, restrict access, retain 6 months")
+        );
+        assert_eq!(
+            handling("EU", "special"),
+            serde_json::json!("encrypt, restrict access, retain 6 months")
+        );
+        assert_eq!(
+            handling("UK", "public"),
+            serde_json::json!("standard handling")
+        );
+        assert_eq!(
+            handling("EU", "public"),
+            serde_json::json!("standard handling")
+        );
+        assert_eq!(
+            handling("UK", "personal"),
+            serde_json::json!("retain 24 months")
+        );
     }
 }
 

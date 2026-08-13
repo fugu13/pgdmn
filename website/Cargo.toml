@@ -3,6 +3,15 @@ name = "pgdmn-website"
 version = "0.1.0"
 edition = "2024"
 
+# Standalone workspace: excluding "website" from the root workspace's members
+# is not enough on its own — from a nested git worktree (.claude/worktrees/...
+# inside the main checkout), Cargo's ancestor search walks past the worktree's
+# own exclude and reaches the main checkout's root Cargo.toml, where the
+# exclude pattern no longer matches the deeper relative path. An explicit
+# empty [workspace] table (mirroring profiling/Cargo.toml) stops the search
+# here regardless of nesting depth.
+[workspace]
+
 # Keep the shared baseline in sync with the root Cargo.toml [lints.clippy]
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
@@ -16,6 +25,10 @@ return_self_not_must_use = "allow"
 wildcard_imports = "allow"       # leptos prelude imports
 doc_markdown = "allow"
 implicit_hasher = "allow"
+# A content page is one long `view!` of markup and prose. Its line count measures
+# how much it says, not how complex it is, and splitting a page into components
+# purely to satisfy a line budget would fragment it for no reader's benefit.
+too_many_lines = "allow"
 
 # The site is prerendered to static HTML and has no client-side interactivity,
 # so there is no wasm/hydration target: the crate is server-side only. Leptos
@@ -30,3 +43,11 @@ axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tower-http = { version = "0.7", features = ["fs", "set-status"] }
 grass = "0.13"
+# Blog posts are markdown files, embedded at compile time and rendered to HTML
+# during the prerender. Nothing reads them at request time—there is no request.
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+include_dir = "0.7"
+# SQL is highlighted at build time, into CSS classes rather than inline colours —
+# the site ships no JavaScript, and the palette belongs in the stylesheet.
+# `default-fancy` keeps the regex engine pure Rust, with no C dependency.
+syntect = { version = "5.3", default-features = false, features = ["default-fancy"] }

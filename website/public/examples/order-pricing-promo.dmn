@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             id="order_pricing_promo"
+             name="OrderPricingPromo"
+             namespace="https://pgdmn.com/examples/pricing-promo">
+    <inputData id="BasePrice" name="Base Price">
+        <variable name="Base Price" typeRef="number"/>
+    </inputData>
+    <inputData id="TaxRate" name="Tax Rate">
+        <variable name="Tax Rate" typeRef="number"/>
+    </inputData>
+    <decision id="NetPrice" name="Net Price">
+        <variable name="Net Price" typeRef="number"/>
+        <informationRequirement id="ir_NetPrice_BasePrice">
+            <requiredInput href="#BasePrice"/>
+        </informationRequirement>
+        <literalExpression>
+            <text>Base Price * 0.9</text>
+        </literalExpression>
+    </decision>
+    <decision id="TaxAmount" name="Tax Amount">
+        <variable name="Tax Amount" typeRef="number"/>
+        <informationRequirement id="ir_TaxAmount_NetPrice">
+            <requiredDecision href="#NetPrice"/>
+        </informationRequirement>
+        <informationRequirement id="ir_TaxAmount_TaxRate">
+            <requiredInput href="#TaxRate"/>
+        </informationRequirement>
+        <literalExpression>
+            <text>Net Price * Tax Rate</text>
+        </literalExpression>
+    </decision>
+    <decision id="TotalPrice" name="Total Price">
+        <variable name="Total Price" typeRef="number"/>
+        <informationRequirement id="ir_TotalPrice_NetPrice">
+            <requiredDecision href="#NetPrice"/>
+        </informationRequirement>
+        <informationRequirement id="ir_TotalPrice_TaxAmount">
+            <requiredDecision href="#TaxAmount"/>
+        </informationRequirement>
+        <literalExpression>
+            <text>Net Price + Tax Amount</text>
+        </literalExpression>
+    </decision>
+    <dmndi:DMNDI>
+        <dmndi:DMNDiagram id="DRD">
+            <dmndi:DMNShape id="shape_TotalPrice" dmnElementRef="TotalPrice">
+                <dc:Bounds x="240" y="60" width="180" height="80"/>
+            </dmndi:DMNShape>
+            <dmndi:DMNShape id="shape_TaxAmount" dmnElementRef="TaxAmount">
+                <dc:Bounds x="440" y="220" width="180" height="80"/>
+            </dmndi:DMNShape>
+            <dmndi:DMNShape id="shape_NetPrice" dmnElementRef="NetPrice">
+                <dc:Bounds x="180" y="380" width="180" height="80"/>
+            </dmndi:DMNShape>
+            <dmndi:DMNShape id="shape_BasePrice" dmnElementRef="BasePrice">
+                <dc:Bounds x="180" y="540" width="180" height="70"/>
+            </dmndi:DMNShape>
+            <dmndi:DMNShape id="shape_TaxRate" dmnElementRef="TaxRate">
+                <dc:Bounds x="520" y="540" width="180" height="70"/>
+            </dmndi:DMNShape>
+            <dmndi:DMNEdge id="edge_NetPrice_BasePrice" dmnElementRef="ir_NetPrice_BasePrice">
+                <di:waypoint x="270" y="540"/>
+                <di:waypoint x="270" y="460"/>
+            </dmndi:DMNEdge>
+            <dmndi:DMNEdge id="edge_TaxAmount_NetPrice" dmnElementRef="ir_TaxAmount_NetPrice">
+                <di:waypoint x="360" y="420"/>
+                <di:waypoint x="490" y="300"/>
+            </dmndi:DMNEdge>
+            <dmndi:DMNEdge id="edge_TaxAmount_TaxRate" dmnElementRef="ir_TaxAmount_TaxRate">
+                <di:waypoint x="610" y="540"/>
+                <di:waypoint x="570" y="300"/>
+            </dmndi:DMNEdge>
+            <dmndi:DMNEdge id="edge_TotalPrice_NetPrice" dmnElementRef="ir_TotalPrice_NetPrice">
+                <di:waypoint x="270" y="380"/>
+                <di:waypoint x="300" y="140"/>
+            </dmndi:DMNEdge>
+            <dmndi:DMNEdge id="edge_TotalPrice_TaxAmount" dmnElementRef="ir_TotalPrice_TaxAmount">
+                <di:waypoint x="530" y="220"/>
+                <di:waypoint x="360" y="140"/>
+            </dmndi:DMNEdge>
+        </dmndi:DMNDiagram>
+    </dmndi:DMNDI>
+</definitions>

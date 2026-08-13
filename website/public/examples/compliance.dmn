@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="data_handling"
+             name="DataHandling"
+             namespace="https://pgdmn.com/examples/compliance">
+    <inputData id="Region" name="Region">
+        <variable name="Region" typeRef="string"/>
+    </inputData>
+    <inputData id="DataClass" name="Data Class">
+        <variable name="Data Class" typeRef="string"/>
+    </inputData>
+    <decision id="Handling" name="Handling">
+        <variable name="Handling" typeRef="string"/>
+        <informationRequirement>
+            <requiredInput href="#Region"/>
+        </informationRequirement>
+        <informationRequirement>
+            <requiredInput href="#DataClass"/>
+        </informationRequirement>
+        <decisionTable hitPolicy="FIRST">
+            <input>
+                <inputExpression typeRef="string"><text>Region</text></inputExpression>
+            </input>
+            <input>
+                <inputExpression typeRef="string"><text>Data Class</text></inputExpression>
+            </input>
+            <output name="Handling" typeRef="string"/>
+            <rule>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>"special"</text></inputEntry>
+                <outputEntry><text>"encrypt, restrict access, retain 6 months"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>"EU"</text></inputEntry>
+                <inputEntry><text>"personal"</text></inputEntry>
+                <outputEntry><text>"store in EU, retain 24 months"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>"personal"</text></inputEntry>
+                <outputEntry><text>"retain 24 months"</text></outputEntry>
+            </rule>
+            <rule>
+                <inputEntry><text>-</text></inputEntry>
+                <inputEntry><text>-</text></inputEntry>
+                <outputEntry><text>"standard handling"</text></outputEntry>
+            </rule>
+        </decisionTable>
+    </decision>
+</definitions>

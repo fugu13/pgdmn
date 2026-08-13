@@ -64,7 +64,7 @@ upgrade() {
 
 Pristine upstream sources from crates.io (sha256 of each tarball in the
 command output above); the PGDMN patch layer is re-applied on top by
-follow-up commits — run 'make vendor-inspect' to drive that.
+follow-up commits—run 'make vendor-inspect' to drive that.
 
 THIS COMMIT INTENTIONALLY DROPS the previous patch layer from the working
 tree; the extension will not build until the layer is re-applied."

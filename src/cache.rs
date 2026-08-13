@@ -42,7 +42,7 @@ type ExpressionEvaluators = HashMap<String, Rc<Evaluator>>;
 /// Upper bound on cached prepared FEEL evaluators per backend. Reaching it
 /// clears the whole cache: realistic workloads evaluate a small, stable set of
 /// (expression, context shape) pairs, so LRU bookkeeping buys nothing, and the
-/// worst case — a workload cycling through more than this many distinct pairs —
+/// worst case—a workload cycling through more than this many distinct pairs —
 /// merely degrades to the previous parse-per-call behavior plus a map probe.
 const FEEL_CACHE_MAX_ENTRIES: usize = 1024;
 
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn mixed_list_matches_scalar_list() {
         // A list starting with a context but containing a scalar unifies to a
-        // non-context type in the parser, i.e. an opaque variable — the same
+        // non-context type in the parser, i.e. an opaque variable—the same
         // as a scalar list. Locks in the first-element short-circuit.
         let mixed = ctx_of(vec![(
             "items",
