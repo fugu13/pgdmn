@@ -70,6 +70,21 @@ the personal content-preference rule in CLAUDE.md's Behaviors section
 should ship in a public repo, and add a DMN trademark acknowledgment
 (OMG) to the README if counsel thinks it worthwhile.
 
+### PUBLIC-009: Evaluate whether pgdmn should be a trusted extension
+
+`pgdmn.control` now sets `superuser = true` explicitly (matches
+Postgres's documented default; every install-script command is `CREATE
+FUNCTION ... LANGUAGE c`, which requires superuser regardless of this
+flag). Separately, and only after a deliberate security review, decide
+whether to also set `trusted = true`. Postgres runs a trusted
+extension's install script *as* superuser even when invoked by a
+non-superuser, so `trusted = true` would let any role with `CREATE`
+privilege on the database install this natively-compiled, unsandboxed
+shared library — a real privilege-escalation surface, not a follow-on
+to the superuser fix. Needs a pgvector-style audit (review every
+installed function/type for anything a non-superuser could turn into
+more access than they started with) before it's safe to flip.
+
 ## Performance
 
 ### PERF-001: Zero-copy DmnModel datum layout
