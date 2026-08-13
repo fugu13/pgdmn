@@ -449,7 +449,32 @@ ul, ol {
       font-family: var(--font-mono);
       font-size: 0.88rem;
     }
+
+    // Inside a table, tint the whole cell and give it a border with some
+    // presence, so a marked row reads as "this row matters"—not as an
+    // accidental text selection sitting inside an otherwise plain row.
+    // Nested here (rather than a flat `td:has(mark)`) so its specificity
+    // beats the plain `td` border set above.
+    td:has(mark) {
+      background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+      border-top: 2px solid var(--color-primary);
+      border-bottom: 2px solid var(--color-primary);
+
+      mark {
+        background: none;
+        padding: 0;
+      }
+    }
   }
+}
+
+// Text worth calling out in prose. Tinted to match the site palette rather
+// than the browser's default yellow; the surrounding text colour is kept so
+// contrast doesn't depend on the highlight.
+mark {
+  background: color-mix(in srgb, var(--color-primary) 20%, var(--color-surface));
+  color: inherit;
+  padding: 0 0.15em;
 }
 
 // Function reference (docs page)

@@ -1,5 +1,5 @@
 ---
-title: The obligation is a column
+title: Standardize and clarify regulatory requirements
 date: 2026-07-10
 summary: Data-handling rules as a decision table, evaluated per row. What must we encrypt, what may not leave the EU—answered by a query rather than by a policy document nobody has read since the audit.
 files: compliance.dmn, customers.csv
@@ -27,7 +27,7 @@ Read top to bottom, because the hit policy is *first* and the order carries mean
 
 Special-category data is caught by the first rule **regardless of region**—a stricter obligation wins before anything more specific gets a look in. Only then does region matter, and only for personal data: EU personal data has to stay in the EU, personal data elsewhere merely has a retention clock. Everything else is ordinary.
 
-That ordering is the policy. Move the special-category rule below the EU rule and you have quietly decided that an EU customer's special-category data is governed by residency rather than by sensitivity—which is very likely not what your legal team said.
+If you express the same policy in code, the order could change in an innocuous looking diff that the legal department never sees. A DMN policy stored in the database can be restricted behind permissions, and made available for the legal department to check directly without needing to understand programming languages.
 
 ## Set up
 
@@ -73,13 +73,13 @@ Table: What we owe each customer
 | Northwind Traders | EU | personal | store in EU, retain 24 months |
 | Globex | US | personal | retain 24 months |
 | Initech | US | special | encrypt, restrict access, retain 6 months |
-| Umbrella Corp | EU | special | encrypt, restrict access, retain 6 months |
+| <mark>Umbrella Corp</mark> | <mark>EU</mark> | <mark>special</mark> | <mark>encrypt, restrict access, retain 6 months</mark> |
 | Acme Supply | UK | public | standard handling |
 | Soylent Industries | EU | public | standard handling |
 | Tyrell Corp | US | public | standard handling |
 | Wayne Enterprises | UK | personal | retain 24 months |
 
-Umbrella is the row worth pausing on. They are an EU customer with special-category data—and the answer is *not* "store in EU". The special-category rule is listed first, and it wins. Whether that is right is a question for a lawyer, and the point is that the question is now askable: the rule is four lines you can put in front of one.
+Umbrella Corp has an unusual policy applied. They are an EU customer with special-category data—and the answer is *not* "store in EU". The special-category rule is listed first, and it wins. Whether that is right is a question for a lawyer. If the lawyers have approved the DMN rules, then anyone can inspect the rules and be sure why that policy applies. And the point is that the question is now askable: the rule is four lines you can put in front of one.
 
 ## Why this belongs in the database
 
@@ -115,4 +115,4 @@ ORDER BY id;
 
 *What breaks if we tighten the retention rule?* is the same query against a second model row, diffed against the first. *What were we obliged to do on the day of the breach?* is answerable too, if you version the model rows—because the old rules are still just values in a table.
 
-None of that requires exporting a single customer record to anywhere.
+None of this requires moving sensitive customer records between systems to answer regulatory questions. Everything is evaluated in the database of record.
