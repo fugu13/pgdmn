@@ -60,6 +60,33 @@ pub fn DocsPage() -> impl IntoView {
             <a href="/examples/">"Examples"</a>" page."
         </p>
 
+        <nav class="quicklinks" aria-label="The sections on this page">
+            <ul>
+                <li>
+                    <a href="#install">"Install"</a>
+                    <span>"Build pgdmn from source with pgrx, then enable it in a database"</span>
+                </li>
+                <li>
+                    <a href="#dmn-functions">"DMN functions"</a>
+                    <span>"Load a DMN model and evaluate a decision, business knowledge model,
+                    or decision service"</span>
+                </li>
+                <li>
+                    <a href="#introspection-functions">"Introspection functions"</a>
+                    <span>"Inspect a loaded model: its invocables, metadata, and original XML"</span>
+                </li>
+                <li>
+                    <a href="#feel-functions">"FEEL functions"</a>
+                    <span>"Evaluate FEEL expressions directly, with no model involved"</span>
+                </li>
+                <li>
+                    <a href="#performance">"Performance"</a>
+                    <span>"Why every function is safe to run in parallel, and how model parsing
+                    is cached"</span>
+                </li>
+            </ul>
+        </nav>
+
         <H2 id="install" title="Install"/>
         <p>
             "pgdmn is a PostgreSQL extension. To install it, you build it from source, then copy
