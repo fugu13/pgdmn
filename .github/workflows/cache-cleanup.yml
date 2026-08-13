@@ -1,0 +1,25 @@
+name: Cache cleanup
+
+# A PR-scoped Actions cache (buildx layers, target/) becomes permanently
+# unreachable the moment its PR closes -- refs/pull/<N>/merge can never be
+# restored again -- but GitHub only reclaims that space via LRU eviction once
+# the repo's 10GB cache quota is hit, which can evict a still-useful cache
+# instead. Delete a closed PR's caches immediately. See CI-005.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    name: Delete this PR's caches
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache delete --all --succeed-on-no-caches \
+            --ref refs/pull/${{ github.event.pull_request.number }}/merge \
+            --repo ${{ github.repository }}
