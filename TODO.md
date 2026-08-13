@@ -70,6 +70,23 @@ the personal content-preference rule in CLAUDE.md's Behaviors section
 should ship in a public repo, and add a DMN trademark acknowledgment
 (OMG) to the README if counsel thinks it worthwhile.
 
+### PUBLIC-009: PGXN readiness—packaging, META.json, and pgrx precedent
+
+META.json already exists and targets PGXN's meta-spec (pgxn.org/meta/spec.txt),
+but has a FIXME placeholder maintainer contact and has never been validated
+against PGXN's actual distribution tooling (`pgxn-utils`/`pgxn_meta` validate,
+building a real PGXN zip bundle). The open question is packaging: PGXN's
+traditional distribution model assumes a PGXS-based `make && make install`
+build, which doesn't match how pgrx extensions are normally built
+(`cargo pgrx package`/`install`)—and this project's build is Docker-only by
+design (see CLAUDE.md's Decided section), in further tension with PGXN's
+assume-it-builds-from-source model. Before shipping: survey existing pgrx-based
+extensions that list on PGXN (if any) for how they bridge this—a Makefile
+wrapper that shells out to cargo-pgrx, prebuilt artifacts, or something else—and
+decide whether pgdmn follows suit or PGXN isn't the right distribution channel
+given the toolchain, with crates.io/GitHub releases as the alternative. Fix the
+FIXME contact and validate META.json either way.
+
 ## Performance
 
 ### PERF-001: Zero-copy DmnModel datum layout
