@@ -157,11 +157,12 @@ fn to_html(markdown: &str) -> String {
 }
 
 /// Replace the contents of every fenced code block with an accessible, styled
-/// block. A ```` ```sql ```` block gets build-time highlighting, so SQL in a
-/// post looks like SQL everywhere else on the site; every other language is
-/// HTML-escaped and shown as plain text. Both are wrapped in a focusable,
-/// horizontally scrollable region, because a block that scrolls sideways has to
-/// be reachable by a keyboard.
+/// block. ```` ```sql ````, ```` ```html ````, ```` ```xml ````, and
+/// ```` ```sh ````/```` ```bash ```` blocks get build-time highlighting, so
+/// code in a post looks like code everywhere else on the site; any other
+/// language is HTML-escaped and shown as plain text. All are wrapped in a
+/// focusable, horizontally scrollable region, because a block that scrolls
+/// sideways has to be reachable by a keyboard.
 fn highlight_code_blocks<'a>(events: impl Iterator<Item = Event<'a>>) -> Vec<Event<'a>> {
     let mut out = Vec::new();
     let mut block: Option<(String, String)> = None;
@@ -185,11 +186,13 @@ fn highlight_code_blocks<'a>(events: impl Iterator<Item = Event<'a>>) -> Vec<Eve
                             crate::highlight::sql(&code)
                         )
                     } else {
+                        let body = crate::highlight::fenced(&lang, &code)
+                            .unwrap_or_else(|| escape_html(&code));
                         format!(
                             "<pre class=\"code-block\" role=\"region\" aria-label=\"{}\" \
                              tabindex=\"0\"><code>{}</code></pre>",
                             code_block_label(&lang),
-                            escape_html(&code)
+                            body
                         )
                     };
                     out.push(Event::Html(html.into()));
@@ -206,6 +209,7 @@ fn code_block_label(lang: &str) -> &'static str {
     match lang {
         "html" => "HTML",
         "xml" => "XML",
+        "xslt" | "xsl" => "XSLT",
         "sh" | "bash" | "shell" => "Shell",
         _ => "Code",
     }

@@ -69,7 +69,7 @@ The same standard DMN file can be shown as a table by more than one tool, and no
 
 The stylesheet reads the DMN read-only with `document()` and builds the table itself: [render.xslt](/display/render.xslt).
 
-```xml
+```xslt
 <?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet version="1.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -223,4 +223,4 @@ When the routing changes, you `UPDATE` one row. No migration, no deploy, no rede
 UPDATE models SET model = dmn_load(:'routing_v2') WHERE name = 'routing';
 ```
 
-And because the old model is still just a value, you can keep it. Version the rows, timestamp them, and you can answer the question every audit eventually asks: not *what would this ticket be routed to now*, but *what rule routed it that night, and who changed it*.
+And because the old model is still just a value, you can keep it. Version the rows, timestamp them, and in addition to "what would this ticket be routed to now" you can answer audit questions such as "what rule routed it two weeks ago, and who changed it?"

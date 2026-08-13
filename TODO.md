@@ -269,6 +269,15 @@ Two findings worth writing down for users, on the Docs page and in the README.
 The site defines its palette once, in light colours, and never consults `prefers-color-scheme`. A visitor whose system is set to dark gets a bright white page regardless. CLAUDE.md already forbids a dark-mode *toggle* on the grounds that the system preference is the right signal—but the site does not currently honour that signal either way.
 
 Add a `prefers-color-scheme: dark` block redefining the custom properties in `style/main.scss`. Verify the dark palette holds 4.5:1 contrast for text and 3:1 for interface elements and focus indicators, which the highlighted table rows and the muted secondary text are the most likely to fail.
+
+### WEB-004: A specificity budget for table-cell border overrides
+
+`td:has(mark)` in `style/main.scss` beats the plain `.post-content table td` border by nesting inside the same `table { }` block and relying on `:has()`'s specificity—reasoned about by hand, with a comment explaining why the ordering holds, no lint or test backing it up. Fine for one override; the next thing that needs to win against the base `td` border will likely repeat the same manual reasoning. If a third such override shows up, consider having the base `td` rule read a CSS custom property (e.g. `border-color: var(--td-border, var(--color-border))`) so overrides set a variable instead of re-fighting specificity.
+
+### WEB-005: Consolidate the code-block language table in highlight.rs/articles.rs
+
+`highlight::fenced`'s language match and `articles::code_block_label`'s match both enumerate the same fence languages (`html`, `xml`, `xslt`/`xsl`, `sh`/`bash`) in two separate places, growing one arm at a time as languages are added. Not urgent at four languages, but worth folding into one table (language → syntax lookup + accessible label) if a third or fourth language shows up.
+
 ### RANGE-002: Accept PG range types as inputs in the record-eval path
 
 Extend `pg_datum_to_feel` with arms for `NUMRANGEOID`, `INT4RANGEOID`, `INT8RANGEOID`, `DATERANGEOID`, `TSRANGEOID`: read via pgrx `Range<T>`, convert bounds with the existing scalar arms, and build `Value::Range` with `IntervalType::Closed`/`Opened`/`OpenedUndef` (infinite bound → `OpenedUndef`). No SQL signature changes—`feel_record_eval` and `dmn_record_eval` start accepting range-typed columns, the only inbound channel for binding a FEEL range variable (JSON cannot carry one). Decide the policy for PG `empty` ranges (error is more consistent with the mixed-interval precedent in convert.rs) and defer `TSTZRANGEOID` with the timezone question. Round-trip property tests (PG range → FEEL → `feel_eval_numrange` → PG range) pair with the existing numrange output path. Discrete-range canonicalization (`int4range '[1,4]'` arrives as `[1,5)`) is same-set but changes `.end`/`.end included` property values—document it.
