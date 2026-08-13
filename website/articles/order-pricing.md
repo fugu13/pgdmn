@@ -163,5 +163,5 @@ CROSS JOIN LATERAL (
 ORDER BY o.id;
 ```
 
-Run it in June and every row is the standard price; run it on 1 July and every row is the promotional one—the same query, a different answer, because the calendar moved. It runs backwards just as well: to see what an order would have cost on any past day, ask as of that date. The older version is still right there, dated, so last quarter's prices stay reproducible exactly.
+Run it in June and every row is the standard price; run it on 1 July and every row is the promotional one. The query uses the current date to pick the applicable pricing policy. It runs backwards just as well: to see what an order would have cost on any past day, ask as of that date. The older version is still right there, dated, so last quarter's prices stay reproducible exactly.
 
