@@ -362,6 +362,14 @@ print the Intel library's textual form instead of panicking on a missing
 exponent). pgdmn's BUG-004 SQL-error guards stay in place—the SQL
 boundary still rejects non-finite results with a clear error.
 
+### ADOPT-001: Migrate to pgrx 0.18
+
+pgrx and pgrx-tests 0.16.1 → 0.18.0 is a breaking framework major that Dependabot cannot land on its own (rejected PRs #31/#32): the embed entrypoint moved — `::pgrx::pgrx_embed!()` in `src/bin/pgrx_embed.rs` no longer resolves (`cannot find pgrx_embed in pgrx`, `main function not found in crate pgrx_embed_pgdmn`), which is only the first surfaced breakage before the SQL-entity/schema-generation and datum-API changes across two minor cycles (0.16 → 0.17 → 0.18). Do this as a dedicated migration: bump both crates together (they are a matched pair and must move in lockstep), rebuild the test image (`make test-image`, Cargo.lock changed), and run the full `make test` suite plus the custom `DmnModel` InOutFuncs and `pgrx::datum::Interval` paths that are the most version-sensitive. Update the `pgrx_embed` gotcha in CLAUDE.md if the embed API shape changes. Not a triage-merge.
+
+### ADOPT-002: Migrate to rapidhash 4.x
+
+rapidhash 1.4.0 → 4.5.1 is a breaking API rename Dependabot cannot land on its own (rejected PR #30): `RapidInlineHasher`, `rapidhash_seeded`, and `RAPID_SEED` no longer exist in the crate, and all three are load-bearing in `src/cache.rs` — the 128-bit content hash is two independently seeded 64-bit passes (`rapidhash_seeded(bytes, RAPID_SEED)` and `rapidhash_seeded(bytes, SECOND_SEED)`), and its collision reasoning depends on the algorithm being well-mixed. Porting to 4.x means finding the renamed API, confirming an equivalent seeded 64-bit primitive exists, and re-validating the double-seeded 128-bit collision argument and the cache-key contract test before trusting cached ASTs — a stale/weaker hash means wrong answers, not errors. The algorithm change itself is safe for the caches (per-backend, never persisted, so no stored hashes to invalidate). Do this as a dedicated, tested change, not a triage-merge; keep the `[profile.dev.package.rapidhash]` opt-level-3 override.
+
 ## Chores
 
 ### CHORE-002: OpenGraph and social meta tags

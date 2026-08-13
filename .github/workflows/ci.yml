@@ -24,18 +24,18 @@ jobs:
     env:
       DOCKER_BUILD_CACHE: "--cache-from type=gha,scope=pgdmn-test --cache-to type=gha,mode=max,scope=pgdmn-test"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Creates a docker-container builder so `--cache-to type=gha` and
       # `--load` work; sets it as the default buildx builder that
       # `make test-image`'s `docker buildx build` will use.
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Exposes ACTIONS_RUNTIME_TOKEN / ACTIONS_CACHE_URL into the environment
       # so a raw `docker buildx build --cache-to type=gha` (invoked by the
       # Makefile, not by build-push-action) can read/write the GitHub Actions
       # cache.
-      - uses: crazy-max/ghaction-github-runtime@v3
+      - uses: crazy-max/ghaction-github-runtime@v4
 
       # The container writes compiled artifacts to the bind-mounted `target/`;
       # caching it keeps pgrx/dsntk from recompiling every run. The run_id in
@@ -45,7 +45,7 @@ jobs:
       # prefix retires caches saved before target/test-pgdata was excluded (see
       # the prune steps below) -- those carry a 0755 PG data dir that Postgres
       # refuses to start on.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: target
           key: ${{ runner.os }}-cargo-target-v2-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload proptest regressions on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: proptest-regressions
           path: |
@@ -100,9 +100,9 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-audit
 

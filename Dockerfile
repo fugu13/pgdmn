@@ -1,5 +1,5 @@
 # dsntk 0.3 uses let-chains (stable since Rust 1.88)
-FROM rust:1.95-bookworm
+FROM rust:1.97-bookworm
 
 # Install PostgreSQL 17 and build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

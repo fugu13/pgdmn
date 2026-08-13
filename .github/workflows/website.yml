@@ -27,7 +27,7 @@ jobs:
     name: Lint and prerender
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No toolchain is installed here on purpose: website/rust-toolchain.toml
       # pins it, and rustup honours that on the first cargo call. Installing
@@ -67,7 +67,7 @@ jobs:
           grep -qx 'www.pgdmn.com' website/dist/CNAME || { echo "::error::CNAME is not www.pgdmn.com"; exit 1; }
           echo "index, 404, CNAME, .nojekyll and stylesheet all present"
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main'
         with:
           path: website/dist
@@ -84,9 +84,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
           enablement: true
 
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
