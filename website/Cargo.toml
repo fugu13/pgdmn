@@ -3,6 +3,15 @@ name = "pgdmn-website"
 version = "0.1.0"
 edition = "2024"
 
+# Standalone workspace: excluding "website" from the root workspace's members
+# is not enough on its own — from a nested git worktree (.claude/worktrees/...
+# inside the main checkout), Cargo's ancestor search walks past the worktree's
+# own exclude and reaches the main checkout's root Cargo.toml, where the
+# exclude pattern no longer matches the deeper relative path. An explicit
+# empty [workspace] table (mirroring profiling/Cargo.toml) stops the search
+# here regardless of nesting depth.
+[workspace]
+
 # Keep the shared baseline in sync with the root Cargo.toml [lints.clippy]
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
