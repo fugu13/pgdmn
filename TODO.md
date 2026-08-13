@@ -310,6 +310,10 @@ Today `ci.yml` rebuilds `pgdmn-test` with a `type=gha` buildx layer cache inject
 
 Add a CI check that enforces this project's documentation conventions automatically: the README has a SQL example for every function, and `docs/` structure invariants hold. The sibling `datasend` repo runs a `scripts/doc_check.py` in CI for the same purpose; pgdmn's doc conventions are currently enforced only by review.
 
+### CI-005: `pgdmn-test` buildx GHA cache is near the 10GB repo quota
+
+`actions/cache list` shows the `type=gha` buildx layer cache (`DOCKER_BUILD_CACHE`, `mode=max`) plus the `target` cache together sit at ~9.9GB of GitHub's 10GB per-repo Actions cache quota. `mode=max` caches every intermediate layer rather than just the final image, and nothing currently prunes older `buildkit-blob-*` entries. Once the quota is hit, GitHub evicts LRU entries mid-cycle, which can force a full image rebuild in a single job and was a likely contributor to the `No space left on device` CI failures fixed by the `Free disk space` step in `ci.yml`. Consider `mode=min` or an explicit prune step.
+
 ## Dependencies
 
 ### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension (done in vendor; upstream PR pending)
