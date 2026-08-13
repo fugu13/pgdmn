@@ -363,6 +363,12 @@ Today `ci.yml` rebuilds `pgdmn-test` with a `type=gha` buildx layer cache inject
 
 Add a CI check that enforces this project's documentation conventions automatically: the README has a SQL example for every function, and `docs/` structure invariants hold. The sibling `datasend` repo runs a `scripts/doc_check.py` in CI for the same purpose; pgdmn's doc conventions are currently enforced only by review.
 
+### CI-005: `pgdmn-test` buildx GHA cache is near the 10GB repo quota (partially done)
+
+`gh api repos/fugu13/pgdmn/actions/caches --paginate` showed the `type=gha` buildx layer cache (`DOCKER_BUILD_CACHE`, `mode=max`) plus the `target` cache sitting at ~9.9GB of GitHub's 10GB per-repo Actions cache quota. The dominant contributor turned out to be dead weight: every closed/merged PR's `refs/pull/<N>/merge`-scoped caches (buildx blobs + `target/`) stay in the store — unreachable forever, since that ref can never be restored again — until GitHub's LRU eviction reclaims them, which can evict a still-useful cache instead and force a full from-scratch image rebuild in a single job (fresh apt install, fresh `cargo install cargo-pgrx`, fresh full compile); that was a likely contributor to the `No space left on device` failures fixed by the `Free disk space` step in `ci.yml`. Three closed PRs (`refs/pull/42`, `44`, `45`) accounted for ~3.9GB by themselves; pruned manually via `gh cache delete --all --ref refs/pull/<N>/merge` (a dozen entries deletes in ~4s, cheap enough to automate), and `.github/workflows/cache-cleanup.yml` now runs the same deletion on every `pull_request: closed` event so this doesn't reaccumulate.
+
+What's still open: `refs/heads/main`'s own cache (buildx blobs regenerate on every push that touches `Cargo.lock`, since the Dockerfile `COPY`s it before `cargo fetch --locked`) isn't pruned by anything — old main-branch blob generations just sit until eviction. `mode=min` would not help here regardless (this Dockerfile is single-stage, so every layer already ends up in the final image). CI-001 (publish the image to GHCR instead of layer-caching through Actions cache) would sidestep the quota entirely and is the more thorough fix if main's cache growth becomes a problem again.
+
 ## Dependencies
 
 ### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension (done in vendor; upstream PR pending)
