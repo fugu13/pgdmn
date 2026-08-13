@@ -45,7 +45,7 @@ jobs:
       # prefix retires caches saved before target/test-pgdata was excluded (see
       # the prune steps below) -- those carry a 0755 PG data dir that Postgres
       # refuses to start on.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: target
           key: ${{ runner.os }}-cargo-target-v2-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
