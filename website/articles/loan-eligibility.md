@@ -8,7 +8,7 @@ example: loan
 
 A lender has to turn a handful of applicant facts into a single approve-or-decline, and the rules that do it are exactly the sort that read opaquely and break quietly when they live in application code. Additionally, the details of the approval rules are updated frequently.
 
-This example encodes an eligibility policy as a DMN decision table and evaluates it across a table of applicants in SQL.
+This example encodes an eligibility policy as a DMN decision table and evaluates it across a table of applicants in SQL. This way, decision rules can be modeled and verified outside of application code.
 
 ## The rules
 
