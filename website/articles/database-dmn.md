@@ -1,7 +1,7 @@
 ---
 title: DMN in the database
 date: 2026-08-14
-summary: Thoughts on DMN, and why and how it belongs in the database.
+summary: An introduction to DMN, why it matters for software developers, and the natural fit between DMN and the database.
 ---
 
 The large majority of software developers have no familiarity with DMN, BPMN, and most other standards of OMG (yes, that's the name). Real quick, those are [Decision Model & Notation](https://www.omg.org/dmn/), [Business Process Model & Notation](https://www.omg.org/bpmn/), and [Object Management Group](https://www.omg.org/).
