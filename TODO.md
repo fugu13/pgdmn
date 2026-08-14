@@ -2,25 +2,18 @@
 
 ## Public release readiness
 
-### PUBLIC-010: Enable secret scanning, push protection, and private vulnerability reporting right after going public
+### PUBLIC-011: Set repo homepage once the custom domain is live (topics done)
 
-GitHub's native secret-scanning and push-protection are free for public
-repos and near-zero setup, but only apply once the repo is public — do
-this immediately after the visibility flip, not as an afterthought. A
-point-in-time preflight sweep finding no secrets today isn't a
-substitute for an ongoing control on every future push. Private
-vulnerability reporting bundles with this: SECURITY.md already
-documents and links to it, but `gh api repos/fugu13/pgdmn/private-vulnerability-reporting`
-currently 404s on both GET and PUT — confirm it actually turns on once
-public rather than assuming the SECURITY.md link works.
-
-### PUBLIC-011: Set repo topics and homepage after going public
-
-The GitHub repo currently has no topics and no homepage URL set. Add
-DMN/FEEL/PostgreSQL-relevant topics for discoverability and set the
-homepage to www.pgdmn.com once the site is live — cosmetic, but worth
-doing at the same moment as the visibility flip rather than forgetting
-it.
+Topics set (`dmn`, `feel`, `decision`, `postgres`, `pgrx` — mirrors
+Cargo.toml's `keywords`). Homepage still open: GitHub Pages is
+configured and serving (`build_type: workflow`, HTTPS enforced), but
+the custom domain isn't wired up yet — `cname` is unset and
+`www.pgdmn.com` doesn't resolve; the site is currently reachable only
+at `fugu13.github.io/pgdmn`. Blocked on the Route 53 DNS records
+(A/AAAA for the apex, CNAME for `www`), external to GitHub. Set the
+repo homepage to `https://www.pgdmn.com` once that resolves and serves
+correctly — not before, or the field points at a domain that just
+errors.
 
 ## PGXN
 

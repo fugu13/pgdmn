@@ -18,3 +18,16 @@ self-approval deadlock. `.github/instructions/vendor.instructions.md`
 tells Copilot review not to propose reformatting, flag `PGDMN:`
 comments, apply pedantic/nursery lint suggestions, or propose inline
 fixes anywhere under `vendor/`.
+
+### PUBLIC-010: Enable secret scanning, push protection, and private vulnerability reporting right after going public (done)
+
+All three verified live via a fresh `gh api` fetch after the
+visibility flip, not assumed from the settings PATCH response:
+`secret_scanning` and `secret_scanning_push_protection` both
+`"enabled"`; `private-vulnerability-reporting` returns
+`{"enabled": true}` (it 404'd on both GET and PUT while the repo was
+private — confirms the endpoint genuinely wasn't available until the
+flip, not a bug). `secret_scanning_non_provider_patterns` and
+`secret_scanning_validity_checks` were left disabled — narrower,
+more advanced sub-features not named in the original ask; enable
+separately if wanted.
