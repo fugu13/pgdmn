@@ -23,6 +23,12 @@ pub fn Footer() -> impl IntoView {
                 </a>
                 "."
             </p>
+            <p>
+                "my personal website is "
+                <a href="https://www.russellduhon.com" rel="noopener noreferrer" target="_blank">
+                    "www.russellduhon.com"
+                </a>
+            </p>
         </footer>
     }
 }
