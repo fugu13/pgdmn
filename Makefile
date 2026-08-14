@@ -1,4 +1,4 @@
-.PHONY: help test-image check build test bench lint fmt verify clean website website-dev website-build website-serve website-lint website-fmt website-clean vendor-status vendor-diff vendor-test vendor-bench vendor-check vendor-upgrade vendor-inspect
+.PHONY: help test-image check build test bench lint fmt verify clean doc-check license-check website website-dev website-build website-serve website-lint website-fmt website-clean vendor-status vendor-diff vendor-test vendor-bench vendor-check vendor-upgrade vendor-inspect
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -40,10 +40,27 @@ lint: test-image vendor-check ## Run clippy (deny warnings), rustfmt check, and 
 fmt: test-image ## Auto-format code
 	$(DOCKER_RUN) cargo fmt
 
-verify: fmt lint vendor-check ## Run after code changes: fmt + lint + vendor integrity (clippy subsumes check)
+verify: fmt lint vendor-check license-check ## Run after code changes: fmt + lint + vendor integrity + license policy (clippy subsumes check)
 
 clean: ## Remove build artifacts
 	rm -rf target/
+
+doc-check: ## Verify README.md and the website Docs page cover every SQL-facing function (CI-004)
+	@scripts/doc_check.sh
+
+# license-check is host-native (no Docker/pgrx/PostgreSQL involved -- cargo-deny
+# only reads Cargo.toml/Cargo.lock via `cargo metadata`), so it follows the same
+# category as vendor-check rather than the Docker-wrapped `lint` recipe. It runs
+# once per cargo workspace (root pgdmn + vendored dsntk crates, website/,
+# profiling/ are three separate workspaces -- see the root Cargo.toml's
+# `exclude` -- each with its own Cargo.lock), all pointed at the one shared
+# deny.toml so the license allowlist lives in a single place. `--locked`
+# keeps a lint-style check from ever silently rewriting a Cargo.lock (see
+# BUG-001 on why this repo treats lockfile fidelity as load-bearing).
+license-check: ## Check dependency licenses across all three cargo workspaces (cargo-deny; host-native)
+	cargo deny --locked check -c deny.toml licenses
+	cd website && cargo deny --locked check -c ../deny.toml licenses
+	cd profiling && cargo deny --locked check -c ../deny.toml licenses
 
 # --- Vendored dsntk management ------------------------------------------
 # The git history under vendor/ is a pristine upstream base plus a minimal
@@ -54,13 +71,18 @@ clean: ## Remove build artifacts
 # its subject line ("Vendor pristine dsntk X" from vendor-upgrade, or the
 # original migration merge). Body text mentioning "pristine" must not match.
 VENDOR_PRISTINE ?= $(shell git log --format='%H;%s' -- vendor | awk -F';' '$$2 ~ /^Vendor pristine|vendor becomes pristine/ {print $$1; exit}')
-# Upstream tests skipped for environmental reasons (one line per skip):
+# Upstream tests skipped, one line per skip. Most are skipped for
+# environmental reasons; dmn_3_1148/dmn_3_1149 are skipped because they
+# intentionally no longer pass (H23 disables the builtins they conform-test):
 #   external_functions  - requires a live local Java RPC evaluator service (also
 #                         compiled out of default builds by DEPS-001)
-#   bif_now             - asserts against the wall clock; flaky by construction
 #   dmn_3_0076          - TCK model invoking external Java functions (same service)
 #   dmn_3_0103::_0017   - asserts a local-timezone-dependent date-time rendering
-VENDOR_SKIPS = --skip external_functions --skip bif_now --skip dmn_3_0076 --skip dmn_3_0103::_0017
+#   dmn_3_1148          - TCK conformance test for now(); H23 removes now() as a
+#                         callable FEEL function (IMMUTABLE contract), so this
+#                         model no longer conforms by design, not by accident
+#   dmn_3_1149          - same as dmn_3_1148, for today()
+VENDOR_SKIPS = --skip external_functions --skip dmn_3_0076 --skip dmn_3_0103::_0017 --skip dmn_3_1148 --skip dmn_3_1149
 VENDOR_TEST_PKGS = -p dsntk-common -p dsntk-feel -p dsntk-feel-number -p dsntk-feel-parser -p dsntk-feel-evaluator -p dsntk-model -p dsntk-model-evaluator
 
 vendor-status: ## Show vendored dsntk version, pristine base, and patch-layer size

@@ -108,11 +108,48 @@ jobs:
 
       - run: cargo audit
 
+  # Dependency license policy (cargo-deny, allowlist in deny.toml). Unlike the
+  # audit job above, this is a policy gate on *future* PRs, not a scan for
+  # externally-discovered vulnerabilities in code already merged -- there is
+  # no "unfixable upstream advisory" analog here, a rejected license is
+  # exactly the outcome the gate exists to produce, so it stays on the
+  # required aggregate. Pure manifest/lockfile analysis (`cargo metadata`
+  # under the hood) -- no Docker/pgrx/PG needed, so it runs directly on the
+  # runner. Three separate `cargo deny` invocations because the repo is three
+  # separate cargo workspaces (root pgdmn + vendored dsntk crates, website/,
+  # profiling/ -- see the root Cargo.toml's `exclude`), each with its own
+  # Cargo.lock; `make license-check` points all three at the one shared
+  # deny.toml.
+  license:
+    name: cargo-deny (license policy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: taiki-e/install-action@v2.85.5
+        with:
+          tool: cargo-deny
+
+      - run: make license-check
+
+  # Enforces CI-004: README.md and the website Docs page must each cover every
+  # #[pg_extern] function in src/functions/*.rs. Pure text analysis over the
+  # checked-out source (scripts/doc_check.sh) -- no Docker/pgrx/PG needed, so
+  # this runs directly on the runner rather than through the extension job's
+  # container. Deliberately unconditional (no `paths:` filter -- see CI-003)
+  # so it always reports and never leaves the required aggregate pending.
+  docs:
+    name: Documentation coverage (README + website Docs page)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: make doc-check
+
   ci:
     name: CI aggregate
     if: always()
     # audit is deliberately excluded here because it is non-blocking.
-    needs: [extension]
+    needs: [extension, docs, license]
     runs-on: ubuntu-latest
     steps:
       # A single required status check that goes green only if every needed job
