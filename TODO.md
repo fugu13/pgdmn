@@ -2,47 +2,6 @@
 
 ## Public release readiness
 
-### PUBLIC-001: Strip RELEASEPLAN.md before flipping public (user decision)
-
-The panel flagged RELEASEPLAN.md's promotion-target names and upsell
-strategy as the one item that cannot be un-seen after publication (it is
-linked from the README). Move internal marketing content to private
-notes, and decide explicitly whether the git history containing it is
-acceptable or the repository should be published with fresh history.
-
-### PUBLIC-002: SECURITY.md and private vulnerability reporting
-
-Add SECURITY.md (report via GitHub private security advisories; trust
-model: DMN XML and FEEL expressions are untrusted SQL input evaluated
-in-process; no network stack linked—external evaluation compiled out;
-vendored-engine issues coordinated with upstream). Enable private
-vulnerability reporting when the repo goes public.
-
-### PUBLIC-003: Extension CI workflow
-
-.github/workflows currently covers only the website. Add a workflow for
-PRs touching src/, vendor/, Cargo.*, Makefile, Dockerfile: at minimum
-`make vendor-check` + `cargo check` + the vendored test gate, plus
-cargo-audit (advisories against vendored versions do not surface via
-Dependabot for path deps) and a guard against stray duplicate files
-(a "* 2.toml" incident occurred once).
-
-### PUBLIC-004: Durable vendor manifests (CHECKSUMS and squash-merge done; PATCHES.md reconciliation still open)
-
-`vendor/CHECKSUMS` is now committed (per-crate sha256, written
-automatically by `vendor-upgrade`'s `scripts/vendor.sh`; a drift check
-against it runs as part of `make vendor-status`). Squash-merge and
-rebase-merge are now disabled repo-wide (only merge commits are
-allowed), which covers this item's original ask (vendor PRs
-specifically) as a side effect of the broader decision. vendor/PATCHES.md
-exists (summaries + measured effects; update it as part of the
-one-commit-per-change discipline) — still open: extend it with
-upstream-PR links as UPSTREAM-001 executes, and teach `vendor-status`
-to also reconcile the *git patch layer* against it (a separate check
-from the CHECKSUMS drift check already in place — this one would
-verify every commit under `vendor/` maps to a documented PATCHES.md
-entry and vice versa, which nothing currently checks).
-
 ### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (CODEOWNERS routing and CONTRIBUTING.md vendor/ rules done; enforcement and the Copilot instruction still open)
 
 `.github/CODEOWNERS` routes `vendor/**` and `vendor/CHECKSUMS` to
@@ -56,25 +15,6 @@ admin-bypassable — no self-approval deadlock) needs an explicit
 automatically. Also still open: add
 `.github/instructions/vendor.instructions.md` so Copilot review stops
 proposing stylistic rewrites of vendored code.
-
-### PUBLIC-007: Commit a benchmark baseline for the vendor-inspect flow
-
-vendor-inspect step 4 needs a committed reference (the detailed
-measurement report is a private session artifact). Commit a per-scenario baseline table
-(median, machine, toolchain, date—e.g. profiling/baselines/) and
-point the prompt at it, so someone other than the original author can
-run the regression gate.
-
-### PUBLIC-008: Decide the lint-churn policy for vendored code
-
-`make lint`'s -D warnings covers vendored code (path deps escape
-cap-lints), so toolchain bumps force edits to pristine upstream files
-(rustc 1.95 already did). Either scope the hard gate to the pgdmn
-package (`cargo clippy -p pgdmn`) or record lint-only vendor commits as
-fold-into-next-pristine-swap churn in PATCHES.md. Also decide whether
-the personal content-preference rule in CLAUDE.md's Behaviors section
-should ship in a public repo, and add a DMN trademark acknowledgment
-(OMG) to the README if counsel thinks it worthwhile.
 
 ### PUBLIC-010: Enable secret scanning, push protection, and private vulnerability reporting right after going public
 
@@ -150,6 +90,8 @@ more access than they started with) before it's safe to flip.
 BUG-003 first, then the DEPS-001 feature gate, DEPS-002, H4, H14, H9,
 and H3+H20 as a pair. Link each PR from TODO.md and vendor/PATCHES.md
 so the public repo visibly demonstrates the upstream-first posture.
+(DEPS-001/DEPS-002 are vendor/PATCHES.md patch IDs — the vendor-side
+work is done; this item tracks only opening the upstream PRs.)
 
 ## Performance
 
@@ -222,25 +164,6 @@ lead with that PR). It does fix the H21 latent defect (FeelNumber
 integer comparisons via FFI string round trips) that we left untouched.
 H20 and H3 must be offered as a pair (measured interaction).
 
-### CHORE-005: Evaluate re-vendoring on dsntk 0.3.0 (done)
-
-0.3.0 is mostly FEEL range/interval rework (`IntervalType` replaces
-bools in AST/Value variants), new built-ins, expanded `in` semantics,
-and Rust 2024 let-chain restyling. Port costs identified: the H13 AST
-walker must add the new variants (fails the build by design), H14/H19
-need manual rebases over heavily-restyled builders/bifs files, and the
-Docker toolchain must move from Rust 1.85 to ≥1.88 for let-chains
-(re-test the dev-profile LTO ICE while at it). Everything else rebases
-near-clean—decision_table.rs, model_definitions.rs, context.rs and
-the model-evaluator files are functionally unchanged upstream.
-
-Executed 2026-07-14: pristine 0.3.0 vendored (13 crates, recognizer
-joined the graph), full patch layer re-applied commit-by-commit with
-gates, H13 walker extended for IntervalType, H19 reworked around 0.3's
-allocation-free Name::as_str (lazy memoization retained after the eager
-variant measurably regressed), BUG-003 re-verified absent upstream and
-re-applied. Engine wins on 0.3 match the 0.2-era measurements.
-
 ## Conversions
 
 ### CONVERT-001: Integers above i64::MAX lose precision in feel_to_json
@@ -258,30 +181,6 @@ fixed.
 ### TEST-001: Property-based tests for DMN round trips
 
 Write property-based tests (proptest) for DMN round trips: parse -> serialize -> parse should be identity. Commit the persisted `proptest-regressions/` directories.
-
-### TEST-002: Automated accessibility testing for the website
-
-Integrate axe-core into the website's test suite via Playwright: launch the SSR server, run axe-core against each page, fail on any violation at the "critical" or "serious" level.
-
-### TEST-003: Flaky timing assertion in cache test (done)
-
-`test_cache_different_models_independent` asserted the warm (cached) evaluation is at least 2x faster than the cold one and failed spuriously under load (observed again 2026-07-14 after the evaluator got faster: cold=464µs, warm=367µs). Fixed by exposing a test-only `dmn_evaluator_builds()` counter (`src/cache.rs`, gated to test builds) and asserting build counts instead of wall-clock ratios.
-
-## Documentation
-
-### DOCS-001: Feature docs for major features (dropped)
-
-Dropped 2026-07-14 with the `docs/` directory. Explanation aimed at users belongs where users are—the website's Docs page and the walkthroughs in `website/posts/`—rather than in a parallel set of files inside the repo that only contributors would ever open. Conventions live in CLAUDE.md; findings and future work live here.
-
-### DOCS-002: UI behavioral descriptions for the website (dropped)
-
-Dropped 2026-07-14 with the `docs/` directory, for the same reason. The behaviour of the site is described by the site.
-
-## Accessibility
-
-### A11Y-001: Install accessibility review agents
-
-Install the core agents from Community-Access/accessibility-agents into `.claude/agents/` with `install.sh --project`, so UI changes to the website get structured accessibility review before commit.
 
 ## Features
 
@@ -319,59 +218,25 @@ Scoping note: no typed-introspection columns get added to `dmn_invocables`/`dmn_
 - Whether to support checking multiple invocables in one call or keep it single-invocable
 - How to handle invocables that exist in one model but not the other (report as incompatible vs. skip with warning)
 
-### FEAT-005: Mobile hamburger menu
+### WEB-006: Mobile hamburger menu
 
 The site navigation needs a responsive hamburger menu for narrow viewports.
 
-The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which WEB-001 removed. Either implement it without script—a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert—or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
+The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which the static-prerender decision (WEB-001, see CLAUDE.md) removed. Either implement it without script—a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert—or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
 
-### PERF-009: Tell people to let the planner parallelize
-
-Evaluating a decision is pure, per-row, self-contained work—the ideal parallel workload—and parallelism is worth more than every other change to the query put together. The functions are already `IMMUTABLE` and `PARALLEL SAFE`, so this needs no code change; it needs a reader who knows to check that their plan actually has a Gather in it.
-
-Measured with `make bench-shapes` (2026-07-14), same model and rows under different SQL, against a naive per-row baseline of 18 µs/row simple and 68 µs/row complex:
-
-| Query shape | Speedup |
-|---|---|
-| **Permit parallelism** | **3.8×** |
-| Deduplicate inputs, `MATERIALIZED` | 1.35–1.5× |
-| Deduplicate inputs, plain CTE | 1.00×—no effect |
-| Parallel *and* deduplicated | 1.3× |
-| Model from a table column vs. an inline literal | 1.0×—no penalty |
-
-Two findings worth writing down for users, on the Docs page and in the README.
-
-**The deduplication trap.** The obvious way to write "evaluate once per distinct input, then join the answers back" is a plain CTE, and it does *nothing*: the planner inlines the CTE and pulls `dmn_eval` back up above the join, so it evaluates once per output row exactly as before. It looks like an optimization and measures like the baseline. `WITH … AS MATERIALIZED` is what holds the evaluation down at the distinct-row count.
-
-**They do not compose.** A `MATERIALIZED` CTE is scanned serially, throwing the parallelism away. Given the choice, take the parallelism.
-
-### WEB-003: Respect prefers-color-scheme
-
-The site defines its palette once, in light colours, and never consults `prefers-color-scheme`. A visitor whose system is set to dark gets a bright white page regardless. CLAUDE.md already forbids a dark-mode *toggle* on the grounds that the system preference is the right signal—but the site does not currently honour that signal either way.
-
-Add a `prefers-color-scheme: dark` block redefining the custom properties in `style/main.scss`. Verify the dark palette holds 4.5:1 contrast for text and 3:1 for interface elements and focus indicators, which the highlighted table rows and the muted secondary text are the most likely to fail.
-
-### WEB-004: A specificity budget for table-cell border overrides
-
-`td:has(mark)` in `style/main.scss` beats the plain `.post-content table td` border by nesting inside the same `table { }` block and relying on `:has()`'s specificity—reasoned about by hand, with a comment explaining why the ordering holds, no lint or test backing it up. Fine for one override; the next thing that needs to win against the base `td` border will likely repeat the same manual reasoning. If a third such override shows up, consider having the base `td` rule read a CSS custom property (e.g. `border-color: var(--td-border, var(--color-border))`) so overrides set a variable instead of re-fighting specificity.
-
-### WEB-005: Consolidate the code-block language table in highlight.rs/articles.rs
-
-`highlight::fenced`'s language match and `articles::code_block_label`'s match both enumerate the same fence languages (`html`, `xml`, `xslt`/`xsl`, `sh`/`bash`) in two separate places, growing one arm at a time as languages are added. Not urgent at four languages, but worth folding into one table (language → syntax lookup + accessible label) if a third or fourth language shows up.
-
-### RANGE-002: Accept PG range types as inputs in the record-eval path
+### FEAT-007: Accept PG range types as inputs in the record-eval path
 
 Extend `pg_datum_to_feel` with arms for `NUMRANGEOID`, `INT4RANGEOID`, `INT8RANGEOID`, `DATERANGEOID`, `TSRANGEOID`: read via pgrx `Range<T>`, convert bounds with the existing scalar arms, and build `Value::Range` with `IntervalType::Closed`/`Opened`/`OpenedUndef` (infinite bound → `OpenedUndef`). No SQL signature changes—`feel_record_eval` and `dmn_record_eval` start accepting range-typed columns, the only inbound channel for binding a FEEL range variable (JSON cannot carry one). Decide the policy for PG `empty` ranges (error is more consistent with the mixed-interval precedent in convert.rs) and defer `TSTZRANGEOID` with the timezone question. Round-trip property tests (PG range → FEEL → `feel_eval_numrange` → PG range) pair with the existing numrange output path. Discrete-range canonicalization (`int4range '[1,4]'` arrives as `[1,5)`) is same-set but changes `.end`/`.end included` property values—document it.
 
-### RANGE-003: feel_eval_daterange and feel_eval_tsrange typed variants
+### FEAT-008: feel_eval_daterange and feel_eval_tsrange typed variants
 
 Stage 2 of the numrange work: map FEEL date and date-time ranges onto `daterange`/`tsrange` via pgrx `Range<Date>`/`Range<Timestamp>`, mirroring `feel_eval_numrange`. Note PG canonicalizes discrete `daterange` (`[a..b]` becomes `[a..b+1)`)—same set, different rendering; document alongside the implementation.
 
-### UNARY-001: feel_unary_test—evaluate decision-table-style unary tests against a value
+### FEAT-009: feel_unary_test—evaluate decision-table-style unary tests against a value
 
 `feel_unary_test(tests text, value jsonb, context jsonb DEFAULT NULL) → boolean`: parse `tests` with `parse_unary_tests` (the exact grammar of a decision-table input entry, including `-`, `not(...)`, ranges, and comma lists), bind `value` as the FEEL `?` placeholder, build the `In` node exactly as dsntk's own decision-table evaluator does, and evaluate. Enables rules-stored-in-tables matching (`WHERE feel_unary_test(r.quantity_test, to_jsonb(42))`). Needs a `/spec` first: the null-result policy (error like `feel_eval_bool` vs. decision-table-style false) and the temporal-typing story (a JSONB string stays a FEEL string, so `< today()` needs context-passed dates or later typed overloads) are behavior decisions.
 
-### NULLS-001: Surface explained FEEL nulls the JSONB paths discard
+### FEAT-010: Surface explained FEEL nulls the JSONB paths discard
 
 dsntk 0.3 attaches explanations to many nulls (`null(position must not be zero)`) that `feel_eval`/`dmn_eval` currently flatten to bare JSON null (convert.rs maps `Null(_)` dropping the message). Candidate shapes: `feel_eval_detail`/`dmn_eval_detail` returning `(result jsonb, null_reason text)`, or emitting the explanation as a DEBUG-level notice inside the existing functions (zero new API). The explanation text is upstream-owned prose that rewords between releases—whatever ships must document that it is diagnostic, not a stable contract. Decide the shape before implementing.
 
@@ -379,35 +244,11 @@ dsntk 0.3 attaches explanations to many nulls (`null(position must not be zero)`
 
 Nothing verifies that the site's internal links resolve. The prerendered output makes this cheap and exact: every link either corresponds to a file in `website/dist` or it does not. Add a check to the `Website` workflow that walks the generated HTML, resolves each internal `href` against `dist/`, and fails on any that points nowhere.
 
-This would have caught the trailing-slash problem WEB-001 fixed by hand (linking `/why` when the file is `why/index.html`), and it guards the class of breakage a static site is most prone to: a renamed route silently leaving dead links behind.
+This would have caught a trailing-slash problem fixed by hand early on (linking `/why` when the file is `why/index.html`), and it guards the class of breakage a static site is most prone to: a renamed route silently leaving dead links behind.
 
-### WEB-001: Prerender the website to static HTML (done)
+### WEB-007: OpenGraph and social meta tags
 
-The website shipped a wasm hydration bundle (343 KB of wasm plus 19.5 KB of JS) to hydrate pages with no client-side interactivity at all—no signals, no server functions, no client state. The bundle bought nothing while forcing a `wasm-bindgen` crate/CLI version match on the build host and a server-capable host in production.
-
-Done 2026-07-13. Dropped the `hydrate` feature, `wasm-bindgen`, `console_error_panic_hook`, the `cdylib` crate type, the `wasm-release` profile, and `cargo-leptos` itself. Every route is now `SsrMode::Static` and rendered to `website/dist` by a `prerender` binary, which also compiles Sass in-process via `grass` and emits `404.html` and `.nojekyll`. The decision is recorded in CLAUDE.md.
-
-### FEAT-003: Syntax highlighting in code blocks (done)
-
-Done 2026-07-14. SQL is highlighted at build time by syntect (`website/src/highlight.rs`), emitting CSS classes rather than inline colours—the palette lives in `style/main.scss`, in dark tones chosen to stay legible without colour. The client-side option was closed by WEB-001's no-JavaScript rule. Markdown code fences in blog posts are highlighted through the same path. DMN (XML) highlighting is not implemented: no XML is shown on the site.
-
-### FEAT-004: Markdown-based blog infrastructure (done)
-
-Done 2026-07-14. Posts are markdown files in `website/posts/`, embedded at compile time (`include_dir`) and rendered by `pulldown-cmark` during the prerender. A single `/blog/:slug` route enumerates its slugs from the files themselves via Leptos's `StaticRoute::prerender_params`, so adding a post is adding a file—no Rust change, no route to register. Front matter carries title, date, summary, and the example the post walks through. A malformed post fails the build, naming the file.
-
-The one convention the blog adds: a paragraph reading `Table: …` immediately above a markdown table becomes that table's caption, which is what lets the renderer give tables a caption, `scope`-d column headers, and a keyboard-reachable scroll wrapper that bare markdown would not have.
-
-### FEAT-006: Website CI/CD deployment pipeline (done)
-
-Set up automated builds and deployment for the website. Hosting is GitHub Pages, canonically at `www.pgdmn.com` with the apex redirecting there. The earlier evaluation of SSR-capable hosts (Fly.io, Railway) is closed: Pages serves static files only and cannot run a server process.
-
-Done 2026-07-13. The `Website` workflow (`.github/workflows/website.yml`) lints, prerenders, asserts the output ships no scripts or wasm and that the deployable artifact is complete, then publishes `website/dist` to Pages on every push to `main`. The prerender emits `CNAME`, `404.html`, and `.nojekyll`.
-
-Going live still needs three manual steps, recorded in RELEASEPLAN.md: a paid plan for Pages from a private repo, the Route 53 A/AAAA/CNAME records, and enforcing HTTPS once the certificate is issued.
-
-### PERF-010: Fingerprint models instead of hashing the XML per call (done)
-
-Done 2026-07-15, delivered by the dsntk 0.3 vendoring merge rather than by dedicated work here. `cache.rs` now keys the evaluator cache on the model's 128-bit XML content hash, computed once when the model is loaded and stored on `DmnModel`, so `dmn_eval` no longer rehashes or memcmp's the whole XML per call to find its evaluator. The residual datum-side cost—the full XML is still CBOR-decoded from the datum on every row—is tracked separately as PERF-001 (zero-copy DmnModel datum layout). The finding that motivated deferring this stands: FEEL evaluation itself is the bottleneck (`dmn_record_eval` is only 5–9% faster than `dmn_eval`), so the serialization hops were never where the time went.
+Add og:title, og:description, og:image, and Twitter card meta tags to the website shell and per-page overrides via leptos_meta.
 
 ## CI
 
@@ -423,16 +264,6 @@ Today `ci.yml` rebuilds `pgdmn-test` with a `type=gha` buildx layer cache inject
 
 `ci.yml` intentionally has no `paths:` filter so the required `CI aggregate` check always reports; a path-filtered required check stays pending forever and blocks merges. Add a `dorny/paths-filter`-style gate (or equivalent) that skips the extension lint/test work for docs-only and website-only PRs while still letting the aggregate job run unconditionally, restoring the savings without reintroducing that failure mode.
 
-### CI-004: Documentation-integrity check in CI (SQL/docs-page coverage done; generic `docs/` structure invariants still open)
-
-`scripts/doc_check.sh`, wired into `make doc-check` and the required CI `docs` job, verifies every `#[pg_extern]` function in `src/functions/*.rs` has a worked example in README.md and is mentioned on the website's Docs page. Scope is narrower than datasend's `scripts/doc_check.py`: no TODO/BUGHISTORY ID cross-referencing (pgdmn's doc set doesn't have the same ID-guide-table structure), and generic `docs/` structure invariants remain unimplemented if wanted later.
-
-### CI-006: Automated dependency license gate (done)
-
-`deny.toml` at the repo root (allowlist: MIT, Apache-2.0, Unicode-3.0, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, Unlicense, BSL-1.0, CC0-1.0) checked via `make license-check`, run once per cargo workspace (root pgdmn + vendored dsntk crates, website/, profiling/, since each has its own Cargo.lock). Wired into `make verify` (host-native, no Docker needed) and a new blocking `license` CI job on the required aggregate. `r-efi`'s `MIT OR Apache-2.0 OR LGPL-2.1-or-later` passes via the allowed MIT/Apache-2.0 arms; LGPL itself is deliberately not allowlisted, so a future crate offering only an LGPL license would still be rejected.
-
-Also fixed along the way: `website/Cargo.toml` was missing the empty `[workspace]` table that `profiling/Cargo.toml` already has, which broke plain `cargo`/`make website-lint`/`make website-build` whenever the checkout is nested inside another checkout of the same repo (e.g. an agent worktree under `.claude/worktrees/`); both `website/Cargo.toml` and `profiling/Cargo.toml` were also missing a `license` field.
-
 ### CI-005: `pgdmn-test` buildx GHA cache is near the 10GB repo quota (partially done)
 
 `gh api repos/fugu13/pgdmn/actions/caches --paginate` showed the `type=gha` buildx layer cache (`DOCKER_BUILD_CACHE`, `mode=max`) plus the `target` cache sitting at ~9.9GB of GitHub's 10GB per-repo Actions cache quota. The dominant contributor turned out to be dead weight: every closed/merged PR's `refs/pull/<N>/merge`-scoped caches (buildx blobs + `target/`) stay in the store — unreachable forever, since that ref can never be restored again — until GitHub's LRU eviction reclaims them, which can evict a still-useful cache instead and force a full from-scratch image rebuild in a single job (fresh apt install, fresh `cargo install cargo-pgrx`, fresh full compile); that was a likely contributor to the `No space left on device` failures fixed by the `Free disk space` step in `ci.yml`. Three closed PRs (`refs/pull/42`, `44`, `45`) accounted for ~3.9GB by themselves; pruned manually via `gh cache delete --all --ref refs/pull/<N>/merge` (a dozen entries deletes in ~4s, cheap enough to automate), and `.github/workflows/cache-cleanup.yml` now runs the same deletion on every `pull_request: closed` event so this doesn't reaccumulate.
@@ -441,46 +272,11 @@ What's still open: `refs/heads/main`'s own cache (buildx blobs regenerate on eve
 
 ## Dependencies
 
-### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension (done in vendor; upstream PR pending)
-
-dsntk-feel-evaluator 0.3.0 hard-depends on reqwest 0.13 with the rustls/aws-lc provider, used only by its `evaluator_java.rs`—a blocking HTTP client that calls a local Java RPC server (127.0.0.1:22023) when a model invokes an "external Java function". pgdmn never wants that inside a PostgreSQL backend, but feature unification is additive so it cannot be opted out downstream; the extension `.so` now statically links reqwest, rustls, and the AWS-LC C library, and the Docker image needs cmake to build aws-lc-sys. The fix is upstream (fits the minimal-upstreamable-patch working agreement): land a small PR on DecisionToolkit/dsntk putting `evaluator_java`/`evaluator_pmml` and the reqwest dependency behind an off-by-default cargo feature (e.g. `external-functions`) that returns an explained null when disabled; 0.2's `default-features = false` reqwest with a ring provider is the fallback shape. pgdmn then consumes dsntk-feel-evaluator with the feature off, removing the HTTP/TLS stack from the backend entirely and demoting the `src/guard.rs` boundary rejection from load-bearing to belt-and-suspenders (the guard is inherently partial for DMN models—see the module docs in `src/guard.rs`). Once merged and adopted, remove cmake from the Dockerfile (comment there points here). No local `[patch]`/fork in the interim.
-
-Resolved in the vendored copy (the vendoring decision superseded the
-no-fork constraint): `vendor/dsntk-feel-evaluator` now has an
-off-by-default `external-functions` cargo feature gating the evaluators
-and the optional reqwest dependency; disabled builds return an explained
-null for external invocations. reqwest/rustls/aws-lc/hyper/quinn are
-unreachable in the extension graph (verified with cargo tree) and cmake
-is out of the Dockerfile. The feature gate is the shape to offer
-upstream; `src/guard.rs` remains as belt-and-suspenders and its FEEL
-literal-expression gap is now closed at the build level.
-
-### DEPS-002: Upstream fix for non-finite FeelNumber Display panic (done in vendor; upstream PR pending)
-
-dsntk-feel-number's `Display` unwraps on the assumption that `bid128_to_string` output contains `'E'`; ±Inf/NaN—reachable because `Mul`/`Add` results are not finiteness-guarded, unlike `pow`/`from_str`—panic instead of printing. pgdmn guards its direct number conversions (BUG-004), but a non-finite number inside a `Value::Range` endpoint still panics via the Display catch-all in `feel_to_json`, and every other dsntk consumer stays exposed. Propose upstream either guarding arithmetic like `pow` does (overflow → FEEL null) or making `Display` total (print `+Inf`/`-Inf`/`NaN`). Minimal upstreamable patch per the working agreement.
-
-Fixed in the vendored copy: `Display` is now total (non-finite values
-print the Intel library's textual form instead of panicking on a missing
-exponent). pgdmn's BUG-004 SQL-error guards stay in place—the SQL
-boundary still rejects non-finite results with a clear error.
-
-### ADOPT-001: Migrate to pgrx 0.18
-
-pgrx and pgrx-tests 0.16.1 → 0.18.0 is a breaking framework major that Dependabot cannot land on its own (rejected PRs #31/#32): the embed entrypoint moved — `::pgrx::pgrx_embed!()` in `src/bin/pgrx_embed.rs` no longer resolves (`cannot find pgrx_embed in pgrx`, `main function not found in crate pgrx_embed_pgdmn`), which is only the first surfaced breakage before the SQL-entity/schema-generation and datum-API changes across two minor cycles (0.16 → 0.17 → 0.18). Do this as a dedicated migration: bump both crates together (they are a matched pair and must move in lockstep), rebuild the test image (`make test-image`, Cargo.lock changed), and run the full `make test` suite plus the custom `DmnModel` InOutFuncs and `pgrx::datum::Interval` paths that are the most version-sensitive. Update the `pgrx_embed` gotcha in CLAUDE.md if the embed API shape changes. Not a triage-merge.
-
 ### ADOPT-002: Migrate to rapidhash 4.x
 
 rapidhash 1.4.0 → 4.5.1 is a breaking API rename Dependabot cannot land on its own (rejected PR #30): `RapidInlineHasher`, `rapidhash_seeded`, and `RAPID_SEED` no longer exist in the crate, and all three are load-bearing in `src/cache.rs` — the 128-bit content hash is two independently seeded 64-bit passes (`rapidhash_seeded(bytes, RAPID_SEED)` and `rapidhash_seeded(bytes, SECOND_SEED)`), and its collision reasoning depends on the algorithm being well-mixed. Porting to 4.x means finding the renamed API, confirming an equivalent seeded 64-bit primitive exists, and re-validating the double-seeded 128-bit collision argument and the cache-key contract test before trusting cached ASTs — a stale/weaker hash means wrong answers, not errors. The algorithm change itself is safe for the caches (per-backend, never persisted, so no stored hashes to invalidate). Do this as a dedicated, tested change, not a triage-merge; keep the `[profile.dev.package.rapidhash]` opt-level-3 override.
 
 ## Chores
-
-### CHORE-002: OpenGraph and social meta tags
-
-Add og:title, og:description, og:image, and Twitter card meta tags to the website shell and per-page overrides via leptos_meta.
-
-### CHORE-004: Build the Docker image as the non-root user from the start (done)
-
-The base image installed the toolchain, fetched crates, and (formerly) initialized pgrx as root, while tests must run as the non-root `pgdmn` user—the mismatch caused BUG-001 and BUG-002 and was patched with a `chmod`, a `chown`, and a second `cargo pgrx init` in a separate `test` stage. The Dockerfile now creates `pgdmn` first and runs `cargo install cargo-pgrx`, `rustup component add`, `cargo fetch --locked`, and `cargo pgrx init` as that user (with `CARGO_HOME` under its home), making ownership correct by construction in a single stage.
 
 ### FEAT-001: `dmn_create_input_type` helper
 
@@ -492,6 +288,6 @@ SELECT dmn_create_input_type(dmn_load('<xml>'), 'Eligibility', 'eligibility_inpu
 -- Creates: CREATE TYPE eligibility_input AS ("Age" numeric, "Income" numeric)
 ```
 
-### CHORE-003: Migrate website to Rust 2024 edition (done)
+### CHORE-006: Migrate to pgrx 0.18
 
-The website used edition 2021 for cargo-leptos/wasm-bindgen compatibility. Migrated to edition 2024 on 2026-07-13 under rustc 1.95: `cargo fix --edition` reported no source changes, and both `make website-lint` and `make website-build` pass on the new edition.
+pgrx and pgrx-tests 0.16.1 → 0.18.0 is a breaking framework major that Dependabot cannot land on its own (rejected PRs #31/#32): the embed entrypoint moved — `::pgrx::pgrx_embed!()` in `src/bin/pgrx_embed.rs` no longer resolves (`cannot find pgrx_embed in pgrx`, `main function not found in crate pgrx_embed_pgdmn`), which is only the first surfaced breakage before the SQL-entity/schema-generation and datum-API changes across two minor cycles (0.16 → 0.17 → 0.18). Do this as a dedicated migration: bump both crates together (they are a matched pair and must move in lockstep), rebuild the test image (`make test-image`, Cargo.lock changed), and run the full `make test` suite plus the custom `DmnModel` InOutFuncs and `pgrx::datum::Interval` paths that are the most version-sensitive. Update the `pgrx_embed` gotcha in CLAUDE.md if the embed API shape changes. Not a triage-merge.

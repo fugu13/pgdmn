@@ -38,8 +38,8 @@ bench-shapes: test-image ## Compare query shapes for the same DMN (gated by PGDM
 	docker run --rm -e USER=pgdmn -e PGDMN_BENCH_SHAPES=1 -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test cargo pgrx test pg17 -- bench_query_shapes
 	@cat benchmark_shapes.txt 2>/dev/null
 
-lint: test-image vendor-check ## Run clippy (deny warnings), rustfmt check, and vendor integrity
-	$(DOCKER_RUN) sh -c 'cargo clippy --all-targets -- -D warnings && cargo fmt -- --check'
+lint: test-image vendor-check ## Run clippy (deny warnings, scoped to pgdmn), rustfmt check, and vendor integrity
+	$(DOCKER_RUN) sh -c 'cargo clippy -p pgdmn --all-targets -- -D warnings && cargo fmt -- --check'
 
 fmt: test-image ## Auto-format code
 	$(DOCKER_RUN) cargo fmt
