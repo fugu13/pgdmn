@@ -1,27 +1,5 @@
 # TODO
 
-## Public release readiness
-
-### PUBLIC-010: Enable secret scanning, push protection, and private vulnerability reporting right after going public
-
-GitHub's native secret-scanning and push-protection are free for public
-repos and near-zero setup, but only apply once the repo is public — do
-this immediately after the visibility flip, not as an afterthought. A
-point-in-time preflight sweep finding no secrets today isn't a
-substitute for an ongoing control on every future push. Private
-vulnerability reporting bundles with this: SECURITY.md already
-documents and links to it, but `gh api repos/fugu13/pgdmn/private-vulnerability-reporting`
-currently 404s on both GET and PUT — confirm it actually turns on once
-public rather than assuming the SECURITY.md link works.
-
-### PUBLIC-011: Set repo topics and homepage after going public
-
-The GitHub repo currently has no topics and no homepage URL set. Add
-DMN/FEEL/PostgreSQL-relevant topics for discoverability and set the
-homepage to www.pgdmn.com once the site is live — cosmetic, but worth
-doing at the same moment as the visibility flip rather than forgetting
-it.
-
 ## PGXN
 
 Packaging and distribution work for listing pgdmn on PGXN. Not required to
