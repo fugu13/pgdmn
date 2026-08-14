@@ -3,7 +3,9 @@
 //! There is no server in production: whatever this writes is exactly what gets
 //! served.
 
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use leptos::prelude::LeptosOptions;
@@ -11,6 +13,7 @@ use leptos_axum::generate_route_list_with_ssg;
 use pgdmn_website::app::shell;
 use pgdmn_website::articles;
 use pgdmn_website::routes;
+use pgdmn_website::stylesheet;
 
 type BoxError = Box<dyn std::error::Error>;
 
@@ -73,11 +76,28 @@ async fn main() -> Result<(), BoxError> {
 
 /// Sass is compiled in-process rather than by an external binary, so the build
 /// has no host tool to keep version-matched.
+///
+/// The output filename is content-hashed (`style.<hash>.css`) so a browser or
+/// CDN cache can never serve a stale stylesheet after a change: the URL
+/// itself changes whenever the content does, rather than relying on a cache
+/// lifetime the site doesn't control (GitHub Pages allows no custom cache
+/// headers). Every route renders after this runs, so `stylesheet::set_href`
+/// only ever needs to happen once.
 fn compile_stylesheet() -> Result<(), BoxError> {
     let options = grass::Options::default().style(grass::OutputStyle::Compressed);
     let css = grass::from_path(STYLESHEET, &options)
         .map_err(|e| format!("failed to compile {STYLESHEET}: {e}"))?;
-    fs::write(Path::new(DIST).join("style.css"), css)?;
+
+    let mut hasher = DefaultHasher::new();
+    css.hash(&mut hasher);
+    // Truncated to 32 bits on purpose: a short cache-busting id, not a
+    // strength-critical hash—one file, never compared against another.
+    #[expect(clippy::cast_possible_truncation)]
+    let short_hash = hasher.finish() as u32;
+    let filename = format!("style.{short_hash:08x}.css");
+
+    fs::write(Path::new(DIST).join(&filename), css)?;
+    stylesheet::set_href(format!("/{filename}"));
     Ok(())
 }
 
