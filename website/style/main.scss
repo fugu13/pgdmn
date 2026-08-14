@@ -68,7 +68,12 @@ body {
   max-width: var(--max-width);
   margin: 0 auto;
   display: flex;
-  align-items: center;
+  // The logo (1.25rem) and nav links (0.95rem) differ in size, so
+  // centering their line boxes (align-items: center) doesn't land their
+  // text on the same visual line—box-center and text-baseline diverge
+  // differently per font size. Baseline alignment lines up the actual
+  // text instead.
+  align-items: baseline;
   justify-content: space-between;
   gap: 1.5rem;
 }
