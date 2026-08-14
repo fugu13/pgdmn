@@ -4,3 +4,11 @@
 *.swo
 benchmark_results.txt
 /target-host
+/website/dist
+
+.DS_Store
+Thumbs.db
+.env
+.env.*
+.idea/
+.vscode/

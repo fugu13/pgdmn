@@ -87,6 +87,14 @@ this immediately after the visibility flip, not as an afterthought. A
 point-in-time preflight sweep finding no secrets today isn't a
 substitute for an ongoing control on every future push.
 
+### PUBLIC-011: Set repo topics and homepage after going public
+
+The GitHub repo currently has no topics and no homepage URL set. Add
+DMN/FEEL/PostgreSQL-relevant topics for discoverability and set the
+homepage to www.pgdmn.com once the site is live — cosmetic, but worth
+doing at the same moment as the visibility flip rather than forgetting
+it.
+
 ## Upstream
 
 ### UPSTREAM-001: Open the upstream PRs and link them (executes PERF-006)
