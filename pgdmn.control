@@ -1,5 +1,9 @@
 comment = 'pgdmn: DMN (Decision Model and Notation) support for PostgreSQL'
 default_version = '@CARGO_VERSION@'
 module_pathname = '$libdir/pgdmn'
+# Every install-script command is `CREATE FUNCTION ... LANGUAGE c`, which
+# itself requires superuser — stated explicitly (matching the PG default)
+# rather than left implicit, so a non-superuser gets an upfront error
+# instead of a confusing mid-script permission failure.
 relocatable = false
-superuser = false
+superuser = true

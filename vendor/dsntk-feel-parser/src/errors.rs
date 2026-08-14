@@ -35,3 +35,9 @@ pub fn err_not_a_feel_name(s: &str) -> DsntkError {
 pub fn err_syntax_error(input: &str) -> DsntkError {
   ParserError(format!("syntax error: {input}")).into()
 }
+
+// PGDMN: H22 — depth-cap rejection, reported the same way as any other parser error
+// (see vendor/PATCHES.md).
+pub fn err_expression_too_deeply_nested(max_depth: u32) -> DsntkError {
+  ParserError(format!("expression nested too deeply, exceeds maximum allowed depth of {max_depth}")).into()
+}

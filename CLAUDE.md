@@ -30,9 +30,11 @@ Two host-native exceptions (always with `cargo +stable-aarch64-apple-darwin`—t
 | `make test` | pgrx test suite against PG17 |
 | `make lint` | clippy (deny warnings) + rustfmt check |
 | `make fmt` | Auto-format |
-| `make verify` | fmt + lint—run after every code change (lint's clippy subsumes check) |
+| `make verify` | fmt + lint + vendor integrity + license policy—run after every code change (lint's clippy subsumes check) |
 | `make bench` | DMN eval benchmark |
-| `make vendor-status` / `vendor-diff` | Vendored dsntk version, pristine base, carried patch layer |
+| `make doc-check` | README/website Docs page cover every SQL-facing function (host-native) |
+| `make license-check` | Dependency license allowlist via `cargo-deny`, all three cargo workspaces (host-native) |
+| `make vendor-status` / `vendor-diff` | Vendored dsntk version, pristine base, carried patch layer, `vendor/CHECKSUMS` drift |
 | `make vendor-test` | Vendored engine suites in Docker (env-dependent upstream tests skipped) |
 | `make vendor-bench` | Host-native engine benchmarks (canary methodology: Performance section below) |
 | `make vendor-upgrade VERSION=x.y.z` | Stage a new pristine upstream tree (drops the patch layer) |
@@ -76,7 +78,8 @@ website/
 
 ### Decided
 
-- **dsntk is vendored (`vendor/`, 13 crates) and patched in-tree for performance.** The patch set must stay minimal, separable (one commit per change), and upstreamable: `PGDMN:` comments at every change site, no reformatting of surrounding code, repo lint/style conventions do not apply to vendor code (`vendor/rustfmt.toml` disables formatting; cap-lints still surfaces default clippy lints in `make lint`). The user trades ~10% of a speedup for substantially less vendor diff—always report scope alongside speed. Safety net: the vendored crates are workspace members and their test suites (3,600+ evaluator tests, DMN TCK corpus) must stay green after any vendor change.
+- **dsntk is vendored (`vendor/`, 13 crates) and patched in-tree for performance.** The patch set must stay minimal, separable (one commit per change), and upstreamable: `PGDMN:` comments at every change site, no reformatting of surrounding code, repo lint/style conventions do not apply to vendor code (`vendor/rustfmt.toml` disables formatting; cap-lints still surfaces default clippy lints in `make lint`). The user trades ~10% of a speedup for substantially less vendor diff—always report scope alongside speed. Safety net: the vendored crates are workspace members and their test suites (3,600+ evaluator tests, DMN TCK corpus) must stay green after any vendor change. Provenance is durable, not just asserted: `vendor-upgrade` writes `vendor/CHECKSUMS` (per-crate sha256) automatically on every pristine swap, and `make vendor-status` flags drift against it.
+- **Dependency licenses are allowlist-gated** (`deny.toml`, `make license-check`, part of `make verify` and a required CI job). MIT/Apache-2.0/Unicode-3.0/BSD-2/3-Clause/ISC/Zlib/Unlicense/BSL-1.0/CC0-1.0 only; `r-efi`'s `MIT OR Apache-2.0 OR LGPL-2.1-or-later` passes via the allowed MIT/Apache-2.0 arms, but LGPL itself is deliberately not allowlisted—a future crate offering only an LGPL license is rejected, not silently accepted through the OR.
 - **Perf claims are canary-gated measurements.** Benchmark windows are gated on an untouched-code micro-benchmark canary (Performance section below); sub-microsecond deltas across separate builds are noise below ~8%. Candidate optimization removals are measured at the final tip, not only in isolation—optimizations interact.
 - **Evaluation caches are content-addressed by 128-bit double-seeded rapidhash** (DMN: model XML hash; FEEL: expression text + context-shape digest). The shape digest deliberately mirrors the vendored parser's scope derivation—an accepted, test-pinned tradeoff; re-verify on dsntk upgrades.
 - **Docker-only extension builds.** The pgrx toolchain and PG17 live in the images; the host never needs them. The Dockerfile copies `Cargo.lock` and fetches `--locked` so the image's crate cache matches the repo (see BUG-001 in BUGHISTORY.md).
@@ -122,6 +125,7 @@ website/
 - `parse_expression(scope, expr, trace)` takes 3 args
 - `pgrx::datum::Interval::new(months, days, micros)`—months first
 - `pgrx_embed` binary required: `[[bin]] name = "pgrx_embed_pgdmn"`
+- `website/Cargo.toml` and `profiling/Cargo.toml` both need an empty `[workspace]` table (the root `Cargo.toml` excludes them via `exclude = ["profiling", "website"]`). Without it, Cargo's workspace-root search doesn't stop at the excluding manifest and walks further up looking for one—harmless from a normal checkout, but fails with "current package believes it's in a workspace when it's not" whenever the checkout is nested inside another checkout of the same repo, exactly the layout of an agent worktree under `.claude/worktrees/`.
 
 ## Performance
 
@@ -168,10 +172,12 @@ BKM · H18 allocation-free invocable lookup · H3 copy-on-write FeelContext
 replace()/split() · H9 stack-buffer number formatting · H19 lazy memoized
 builtin resolution · H6 owned coercion path · H20 filter waste cuts · BUG-003
 `?`-entry semantics · DEPS-001 external-functions gate · DEPS-002 total
-Display. Constraints: **H20 ships only with H3** (each alone regresses
-filters—measured interaction); **H19 must stay lazy** (eager build-time
-`Bif::from_str` regressed 3× in both the 0.2 and 0.3 cycles); the H13 AST
-walker is exhaustive by design and fails the build on new parser variants.
+Display · H22 FEEL expression nesting depth cap (500) · H23 now()/today()
+removed from builtin dispatch. Constraints: **H20 ships only with H3** (each
+alone regresses filters—measured interaction); **H19 must stay lazy**
+(eager build-time `Bif::from_str` regressed 3× in both the 0.2 and 0.3
+cycles); the H13 AST walker is exhaustive by design and fails the build on
+new parser variants.
 
 ### Behavioral deviations from pristine upstream
 
@@ -180,8 +186,12 @@ short-circuit, quantifier early-exit—observable only via side-effecting
 external functions, which are compiled out anyway); one diagnostic null
 message no longer embeds the whole input context; BUG-003 spec alignment;
 external invocations yield an explained null (DEPS-001); non-finite Display
-is total (DEPS-002). pgdmn-side: integral JSON literals normalize on
-pass-through (`5.0` → `5`; numeric value preserved, property-tested).
+is total (DEPS-002); FEEL expressions nested past a depth of 500 are rejected
+with a parse error instead of being parsed (H22); `now()`/`today()` are no
+longer resolvable FEEL function names, so calling either now yields the same
+explained null as any unrecognized function name (H23). pgdmn-side: integral
+JSON literals normalize on pass-through (`5.0` → `5`; numeric value
+preserved, property-tested).
 
 ### Measuring
 

@@ -77,6 +77,7 @@ dsntk-feel-evaluator = "0.3"
 dsntk-model-evaluator = "0.3"
 dsntk-feel-temporal = "0.3"
 rapidhash = "1"
+lru = "0.18"
 
 [dev-dependencies]
 pgrx-tests = "0.16"

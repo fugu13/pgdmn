@@ -27,29 +27,32 @@ cargo-audit (advisories against vendored versions do not surface via
 Dependabot for path deps) and a guard against stray duplicate files
 (a "* 2.toml" incident occurred once).
 
-### PUBLIC-004: Durable vendor manifests
+### PUBLIC-004: Durable vendor manifests (CHECKSUMS done; PATCHES.md reconciliation and squash-merge still open)
 
-Commit a CHECKSUMS manifest (per-crate sha256 of the vendored tarballs,
-written by vendor-upgrade). vendor/PATCHES.md exists (summaries +
-measured effects; update it as part of the one-commit-per-change
-discipline)—extend it with upstream-PR links as PUBLIC-006 executes,
-teach vendor-status to reconcile the git layer against it, and disable
-squash-merge for vendor PRs so patch-layer separability survives GitHub
-merges.
+`vendor/CHECKSUMS` is now committed (per-crate sha256, written
+automatically by `vendor-upgrade`'s `scripts/vendor.sh`; a drift check
+against it runs as part of `make vendor-status`). vendor/PATCHES.md
+exists (summaries + measured effects; update it as part of the
+one-commit-per-change discipline) — still open: extend it with
+upstream-PR links as UPSTREAM-001 executes, teach `vendor-status` to
+also reconcile the *git patch layer* (a separate check from the
+CHECKSUMS drift check) against it, and disable squash-merge for vendor
+PRs so patch-layer separability survives GitHub merges.
 
-### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction
+### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (CODEOWNERS routing added; CONTRIBUTING.md exists but lacks vendor/ rules; enforcement and the Copilot instruction still open)
 
-Document the vendor/ contribution rules where outsiders will look
-(never edit vendor/ in feature PRs; one commit per change; PGDMN:
-markers; no reformatting), route vendor/ changes via CODEOWNERS, and
-add .github/instructions/vendor.instructions.md so Copilot review stops
+`.github/CODEOWNERS` now routes `vendor/**` and `vendor/CHECKSUMS` to
+@fugu13. `CONTRIBUTING.md` now exists (added independently) with
+build/test/PR conventions, but has no vendor/-specific section yet.
+Branch-protection enforcement (`require_code_owner_reviews`, verified
+path-scoped and admin-bypassable — no self-approval deadlock) needs an
+explicit `gh api` call the maintainer runs themselves; it was not
+applied automatically. Still open: add the vendor/ contribution rules
+where outsiders will look (never edit vendor/ in feature PRs; one
+commit per change; PGDMN: markers; no reformatting) to
+`CONTRIBUTING.md`, and add
+`.github/instructions/vendor.instructions.md` so Copilot review stops
 proposing stylistic rewrites of vendored code.
-
-### PUBLIC-006: Open the upstream PRs and link them (executes PERF-006)
-
-BUG-003 first, then the DEPS-001 feature gate, DEPS-002, H4, H14, H9,
-and H3+H20 as a pair. Link each PR from TODO.md and vendor/PATCHES.md
-so the public repo visibly demonstrates the upstream-first posture.
 
 ### PUBLIC-007: Commit a benchmark baseline for the vendor-inspect flow
 
@@ -86,6 +89,57 @@ wrapper that shells out to cargo-pgrx, prebuilt artifacts, or something else—a
 decide whether pgdmn follows suit or PGXN isn't the right distribution channel
 given the toolchain, with crates.io/GitHub releases as the alternative. Fix the
 FIXME contact and validate META.json either way.
+
+### PUBLIC-010: Enable secret scanning, push protection, and private vulnerability reporting right after going public
+
+GitHub's native secret-scanning and push-protection are free for public
+repos and near-zero setup, but only apply once the repo is public — do
+this immediately after the visibility flip, not as an afterthought. A
+point-in-time preflight sweep finding no secrets today isn't a
+substitute for an ongoing control on every future push. Private
+vulnerability reporting bundles with this: SECURITY.md already
+documents and links to it, but `gh api repos/fugu13/pgdmn/private-vulnerability-reporting`
+currently 404s on both GET and PUT — confirm it actually turns on once
+public rather than assuming the SECURITY.md link works.
+
+### PUBLIC-011: Set repo topics and homepage after going public
+
+The GitHub repo currently has no topics and no homepage URL set. Add
+DMN/FEEL/PostgreSQL-relevant topics for discoverability and set the
+homepage to www.pgdmn.com once the site is live — cosmetic, but worth
+doing at the same moment as the visibility flip rather than forgetting
+it.
+
+### PUBLIC-012: Add PGXN badge to README once published
+
+Add a PGXN badge to the README's badge row once the extension is
+actually published there (see the PGXN Setup steps in PUBLIC-009). A
+crates.io badge is a separate, lower-priority call — PGXN-only
+distribution is the current plan, not crates.io, so a crates.io badge
+only makes sense if that plan changes; don't add one just to have one.
+
+### PUBLIC-013: Evaluate whether pgdmn should be a trusted extension
+
+`pgdmn.control` now sets `superuser = true` explicitly (matches
+Postgres's documented default; every install-script command is `CREATE
+FUNCTION ... LANGUAGE c`, which requires superuser regardless of this
+flag). Separately, and only after a deliberate security review, decide
+whether to also set `trusted = true`. Postgres runs a trusted
+extension's install script *as* superuser even when invoked by a
+non-superuser, so `trusted = true` would let any role with `CREATE`
+privilege on the database install this natively-compiled, unsandboxed
+shared library — a real privilege-escalation surface, not a follow-on
+to the superuser fix. Needs a pgvector-style audit (review every
+installed function/type for anything a non-superuser could turn into
+more access than they started with) before it's safe to flip.
+
+## Upstream
+
+### UPSTREAM-001: Open the upstream PRs and link them (executes PERF-006)
+
+BUG-003 first, then the DEPS-001 feature gate, DEPS-002, H4, H14, H9,
+and H3+H20 as a pair. Link each PR from TODO.md and vendor/PATCHES.md
+so the public repo visibly demonstrates the upstream-first posture.
 
 ## Performance
 
@@ -359,9 +413,15 @@ Today `ci.yml` rebuilds `pgdmn-test` with a `type=gha` buildx layer cache inject
 
 `ci.yml` intentionally has no `paths:` filter so the required `CI aggregate` check always reports; a path-filtered required check stays pending forever and blocks merges. Add a `dorny/paths-filter`-style gate (or equivalent) that skips the extension lint/test work for docs-only and website-only PRs while still letting the aggregate job run unconditionally, restoring the savings without reintroducing that failure mode.
 
-### CI-004: Documentation-integrity check in CI
+### CI-004: Documentation-integrity check in CI (SQL/docs-page coverage done; generic `docs/` structure invariants still open)
 
-Add a CI check that enforces this project's documentation conventions automatically: the README has a SQL example for every function, and `docs/` structure invariants hold. The sibling `datasend` repo runs a `scripts/doc_check.py` in CI for the same purpose; pgdmn's doc conventions are currently enforced only by review.
+`scripts/doc_check.sh`, wired into `make doc-check` and the required CI `docs` job, verifies every `#[pg_extern]` function in `src/functions/*.rs` has a worked example in README.md and is mentioned on the website's Docs page. Scope is narrower than datasend's `scripts/doc_check.py`: no TODO/BUGHISTORY ID cross-referencing (pgdmn's doc set doesn't have the same ID-guide-table structure), and generic `docs/` structure invariants remain unimplemented if wanted later.
+
+### CI-006: Automated dependency license gate (done)
+
+`deny.toml` at the repo root (allowlist: MIT, Apache-2.0, Unicode-3.0, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, Unlicense, BSL-1.0, CC0-1.0) checked via `make license-check`, run once per cargo workspace (root pgdmn + vendored dsntk crates, website/, profiling/, since each has its own Cargo.lock). Wired into `make verify` (host-native, no Docker needed) and a new blocking `license` CI job on the required aggregate. `r-efi`'s `MIT OR Apache-2.0 OR LGPL-2.1-or-later` passes via the allowed MIT/Apache-2.0 arms; LGPL itself is deliberately not allowlisted, so a future crate offering only an LGPL license would still be rejected.
+
+Also fixed along the way: `website/Cargo.toml` was missing the empty `[workspace]` table that `profiling/Cargo.toml` already has, which broke plain `cargo`/`make website-lint`/`make website-build` whenever the checkout is nested inside another checkout of the same repo (e.g. an agent worktree under `.claude/worktrees/`); both `website/Cargo.toml` and `profiling/Cargo.toml` were also missing a `license` field.
 
 ### CI-005: `pgdmn-test` buildx GHA cache is near the 10GB repo quota (partially done)
 

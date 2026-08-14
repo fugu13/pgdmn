@@ -280,6 +280,9 @@ SELECT feel_eval('1 + 2');
             <Fun signature="feel_eval_timestamp(expression text, context jsonb DEFAULT NULL) RETURNS timestamp">
                 "A FEEL date and time, as "<code>"timestamp"</code>"."
             </Fun>
+            <Fun signature="feel_eval_numrange(expression text, context jsonb DEFAULT NULL) RETURNS numrange">
+                "A FEEL range of numbers, as "<code>"numrange"</code>"."
+            </Fun>
             <Fun signature="feel_eval_interval(expression text, context jsonb DEFAULT NULL) RETURNS interval">
                 "A FEEL duration, as "<code>"interval"</code>". Both flavours convert: years
                 and months, and days and time."

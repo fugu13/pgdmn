@@ -6,3 +6,11 @@
 benchmark_results.txt
 benchmark_shapes.txt
 /target-host
+/website/dist
+
+.DS_Store
+Thumbs.db
+.env
+.env.*
+.idea/
+.vscode/

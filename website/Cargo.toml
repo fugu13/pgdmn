@@ -2,6 +2,7 @@
 name = "pgdmn-website"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 
 # Standalone workspace: excluding "website" from the root workspace's members
 # is not enough on its own — from a nested git worktree (.claude/worktrees/...

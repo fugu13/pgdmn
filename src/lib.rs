@@ -109,6 +109,19 @@ mod tests {
         assert_eq!(result.unwrap().0, serde_json::json!(2));
     }
 
+    #[pg_test]
+    #[should_panic(expected = "nested too deeply")]
+    fn test_feel_eval_depth_cap_rejects_deep_nesting() {
+        // A FEEL expression nested well past the vendored parser's depth cap (H22, see
+        // vendor/PATCHES.md) must raise a SQL error, not crash the backend. 600 levels of
+        // unary minus is comfortably over the 500-level cap and orders of magnitude under
+        // the measured native-stack-overflow floor, so this exercises the cap itself, not
+        // the crash it exists to prevent.
+        let expression = format!("{}1", "-".repeat(600));
+        let query = format!("SELECT feel_eval('{expression}')");
+        Spi::get_one::<pgrx::JsonB>(&query).expect("SPI failed");
+    }
+
     // --- FEEL evaluator cache correctness ---
     // The prepared-evaluator cache key must capture the context *shape*, because
     // FEEL name tokenization depends on which names are in scope: the same

@@ -1,0 +1,19 @@
+# sha256 of each vendored dsntk crate's crates.io tarball, as fetched from
+# https://static.crates.io/crates/<name>/<name>-<version>.crate at vendoring
+# time. Written automatically by `make vendor-upgrade VERSION=x.y.z`
+# (scripts/vendor.sh, upgrade())—do not hand-edit; re-run vendor-upgrade to
+# regenerate. See vendor/README.md for how this fits the pristine-base +
+# patch-layer model.
+dsntk-common 0.3.0 65ee58caab5b274df569dd2e241b8f725e4b36048ba764c91ec0992d07eb180c
+dsntk-examples 0.3.0 5f422e0bd8e0c6efb665a9a671df4b715e12dde28516ee6f2806c612b09762fe
+dsntk-feel 0.3.0 afd5819f7a2138a396cd60be50ed75b1ce02b678a4a42a1ce7dcc8e6d5a9fca7
+dsntk-feel-evaluator 0.3.0 7f37ed26ddf58723c71c113d4b873bbcdad778db628c8a0f4ceabe4525877fa8
+dsntk-feel-grammar 0.3.0 437b6db2cee7b34192a0b1b0202de1bd2584419cc48fa5f07cb5fdefd5a9e794
+dsntk-feel-number 0.3.0 b5e2ddd95df93d5cbd6d458e98b117a1cdc4415b4b8fbc9eadbf7e2f447b09ce
+dsntk-feel-parser 0.3.0 38fc2836a61622baaea471aa5a2a0d5cc6e3c9f2801142c097fb5a3eab58ea6f
+dsntk-feel-regex 0.3.0 5332c06b782a0f6ae628d2fa85fa4b4e6fc4ae8f9313f9b0aa852b468c7ef260
+dsntk-feel-temporal 0.3.0 c05e304bf66e49b241338850722238e876597152463776cd41ded713619a4cb1
+dsntk-macros 0.3.0 30add2042657f374405b129a9f7cbc1d04ba8066e2a97f8eb0357ce9c2d48e02
+dsntk-model 0.3.0 25ed8a96ad84f3a3efbf559d2ae5eaf15698a4c71d76853304f28ac5b8b73056
+dsntk-model-evaluator 0.3.0 f94ede78cc3e0aca7b234f0d27db90d7871bf115b2ac3bc038deaedd76236aa5
+dsntk-recognizer 0.3.0 ff69a835b10a3b34968230604c2dd89fc3f46fe1b505d028632c997d687a0bb1

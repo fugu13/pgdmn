@@ -56,7 +56,6 @@ pub fn evaluate_bif(bif: Bif, parameters: &[Value]) -> Value {
     Bif::Modulo => bif_modulo(parameters),
     Bif::MonthOfYear => bif_month_of_year(parameters),
     Bif::Not => bif_not(parameters),
-    Bif::Now => bif_now(parameters),
     Bif::Number => bif_number(parameters),
     Bif::Odd => bif_odd(parameters),
     Bif::Overlaps => bif_overlaps(parameters),
@@ -87,7 +86,6 @@ pub fn evaluate_bif(bif: Bif, parameters: &[Value]) -> Value {
     Bif::SubstringBefore => bif_substring_before(parameters),
     Bif::Sum => bif_sum(parameters),
     Bif::Time => bif_time(parameters),
-    Bif::Today => bif_today(parameters),
     Bif::Union => bif_union(parameters),
     Bif::UpperCase => bif_upper_case(parameters),
     Bif::WeekOfYear => bif_week_of_year(parameters),
@@ -487,6 +485,11 @@ fn bif_not(parameters: &[Value]) -> Value {
   }
 }
 
+// PGDMN: H23 — unreachable since `Bif::Now` no longer exists (removed from
+// dsntk-feel/src/bif.rs so `now()` is unresolvable as a FEEL function call,
+// preserving the `IMMUTABLE` contract on pgdmn's SQL-facing functions). Left
+// in place rather than deleted, matching the minimal-vendor-diff convention.
+#[expect(dead_code)] // PGDMN: H23 — see comment above
 fn bif_now(parameters: &[Value]) -> Value {
   match parameters.len() {
     0 => core::now(),
@@ -726,6 +729,9 @@ fn bif_time(parameters: &[Value]) -> Value {
   }
 }
 
+// PGDMN: H23 — unreachable since `Bif::Today` no longer exists; see the
+// comment on `bif_now` above for the full rationale.
+#[expect(dead_code)] // PGDMN: H23 — see comment above
 fn bif_today(parameters: &[Value]) -> Value {
   match parameters.len() {
     0 => core::today(),

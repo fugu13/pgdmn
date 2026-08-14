@@ -1,0 +1,5 @@
+# Vendored dsntk sources and their integrity manifest carry an extra review
+# step: any PR touching them routes through this file's owner. Everything
+# else in the repo is unowned—no blanket review requirement (PUBLIC-005).
+vendor/** @fugu13
+vendor/CHECKSUMS @fugu13
