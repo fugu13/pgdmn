@@ -31,3 +31,19 @@ flip, not a bug). `secret_scanning_non_provider_patterns` and
 `secret_scanning_validity_checks` were left disabled — narrower,
 more advanced sub-features not named in the original ask; enable
 separately if wanted.
+
+### PUBLIC-011: Set repo topics and homepage after going public (done)
+
+Topics set: `dmn`, `feel`, `decision`, `postgres`, `pgrx` (mirrors
+Cargo.toml's `keywords`). Homepage set to `https://www.pgdmn.com` once
+the Route 53 DNS records were wired up and the site actually resolved
+— that alone wasn't sufficient, though: DNS pointing at GitHub's
+servers doesn't make Pages serve the site by itself, since GitHub's
+edge routes by which repo has *claimed* the domain (`cname` on the
+Pages API), not just by where DNS points. `www.pgdmn.com` returned
+GitHub's generic "there isn't a GitHub Pages site here" page until the
+custom domain was explicitly set (`PUT .../pages` with
+`cname=www.pgdmn.com`) — after that, the certificate approved
+(covers both `www.pgdmn.com` and `pgdmn.com`) and HTTPS enforcement
+was turned on. Verified live: both domains serve real content over
+HTTP and HTTPS, and the apex redirects (301) to `https://www.pgdmn.com`.

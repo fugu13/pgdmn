@@ -1,20 +1,5 @@
 # TODO
 
-## Public release readiness
-
-### PUBLIC-011: Set repo homepage once the custom domain is live (topics done)
-
-Topics set (`dmn`, `feel`, `decision`, `postgres`, `pgrx` — mirrors
-Cargo.toml's `keywords`). Homepage still open: GitHub Pages is
-configured and serving (`build_type: workflow`, HTTPS enforced), but
-the custom domain isn't wired up yet — `cname` is unset and
-`www.pgdmn.com` doesn't resolve; the site is currently reachable only
-at `fugu13.github.io/pgdmn`. Blocked on the Route 53 DNS records
-(A/AAAA for the apex, CNAME for `www`), external to GitHub. Set the
-repo homepage to `https://www.pgdmn.com` once that resolves and serves
-correctly — not before, or the field points at a domain that just
-errors.
-
 ## PGXN
 
 Packaging and distribution work for listing pgdmn on PGXN. Not required to
