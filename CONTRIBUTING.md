@@ -33,6 +33,15 @@ The full set lives in [CLAUDE.md](CLAUDE.md)—error handling, lint policy, nami
 - **Validate at boundaries, trust internals.** Check SQL inputs where they enter; do not re-check them deeper in.
 - **Error messages are for the SQL author who reads them**, and include the offending value.
 
+## Working with vendor/
+
+`vendor/` holds the DMN/FEEL engine (dsntk), patched in-tree. It has its own rules, stricter than the rest of the repo:
+
+- **Never touch `vendor/` in a feature PR.** Vendor changes are their own PR, reviewed on their own terms—`.github/CODEOWNERS` routes any PR touching `vendor/**` through its owner automatically.
+- **One commit per logical change**, each carrying a `PGDMN:` comment at every site it touches. This keeps the patch layer separable from the pristine upstream base—see `vendor/README.md` and `vendor/PATCHES.md` for the full model.
+- **Don't reformat.** `vendor/rustfmt.toml` disables `make fmt` there on purpose, so a diff against pristine upstream stays legible. Resist the urge to clean up surrounding style even when touching a line right next to it.
+- Every carried patch is logged in `vendor/PATCHES.md` with what it does and its measured effect—add an entry as part of the same commit, not a follow-up.
+
 ## Work items
 
 Tracked in `TODO.md` with stable prefixed IDs. If you want to take one on, or propose one, that is the place.

@@ -1581,7 +1581,6 @@ dependencies = [
  "proptest",
  "rapidhash",
  "serde",
- "serde_cbor",
  "serde_json",
 ]
 

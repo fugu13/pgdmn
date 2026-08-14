@@ -27,30 +27,33 @@ cargo-audit (advisories against vendored versions do not surface via
 Dependabot for path deps) and a guard against stray duplicate files
 (a "* 2.toml" incident occurred once).
 
-### PUBLIC-004: Durable vendor manifests (CHECKSUMS done; PATCHES.md reconciliation and squash-merge still open)
+### PUBLIC-004: Durable vendor manifests (CHECKSUMS and squash-merge done; PATCHES.md reconciliation still open)
 
 `vendor/CHECKSUMS` is now committed (per-crate sha256, written
 automatically by `vendor-upgrade`'s `scripts/vendor.sh`; a drift check
-against it runs as part of `make vendor-status`). vendor/PATCHES.md
+against it runs as part of `make vendor-status`). Squash-merge and
+rebase-merge are now disabled repo-wide (only merge commits are
+allowed), which covers this item's original ask (vendor PRs
+specifically) as a side effect of the broader decision. vendor/PATCHES.md
 exists (summaries + measured effects; update it as part of the
 one-commit-per-change discipline) — still open: extend it with
-upstream-PR links as UPSTREAM-001 executes, teach `vendor-status` to
-also reconcile the *git patch layer* (a separate check from the
-CHECKSUMS drift check) against it, and disable squash-merge for vendor
-PRs so patch-layer separability survives GitHub merges.
+upstream-PR links as UPSTREAM-001 executes, and teach `vendor-status`
+to also reconcile the *git patch layer* against it (a separate check
+from the CHECKSUMS drift check already in place — this one would
+verify every commit under `vendor/` maps to a documented PATCHES.md
+entry and vice versa, which nothing currently checks).
 
-### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (CODEOWNERS routing added; CONTRIBUTING.md exists but lacks vendor/ rules; enforcement and the Copilot instruction still open)
+### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (CODEOWNERS routing and CONTRIBUTING.md vendor/ rules done; enforcement and the Copilot instruction still open)
 
-`.github/CODEOWNERS` now routes `vendor/**` and `vendor/CHECKSUMS` to
-@fugu13. `CONTRIBUTING.md` now exists (added independently) with
-build/test/PR conventions, but has no vendor/-specific section yet.
-Branch-protection enforcement (`require_code_owner_reviews`, verified
-path-scoped and admin-bypassable — no self-approval deadlock) needs an
-explicit `gh api` call the maintainer runs themselves; it was not
-applied automatically. Still open: add the vendor/ contribution rules
-where outsiders will look (never edit vendor/ in feature PRs; one
-commit per change; PGDMN: markers; no reformatting) to
-`CONTRIBUTING.md`, and add
+`.github/CODEOWNERS` routes `vendor/**` and `vendor/CHECKSUMS` to
+@fugu13. `CONTRIBUTING.md` now has a "Working with vendor/" section
+covering the patch discipline (never edit vendor/ in feature PRs; one
+commit per change; PGDMN: markers; no reformatting; PATCHES.md entry
+per commit). Still open: branch-protection enforcement
+(`require_code_owner_reviews`, verified path-scoped and
+admin-bypassable — no self-approval deadlock) needs an explicit
+`gh api` call the maintainer runs themselves; it was not applied
+automatically. Also still open: add
 `.github/instructions/vendor.instructions.md` so Copilot review stops
 proposing stylistic rewrites of vendored code.
 
@@ -73,23 +76,6 @@ the personal content-preference rule in CLAUDE.md's Behaviors section
 should ship in a public repo, and add a DMN trademark acknowledgment
 (OMG) to the README if counsel thinks it worthwhile.
 
-### PUBLIC-009: PGXN readiness—packaging, META.json, and pgrx precedent
-
-META.json already exists and targets PGXN's meta-spec (pgxn.org/meta/spec.txt),
-but has a FIXME placeholder maintainer contact and has never been validated
-against PGXN's actual distribution tooling (`pgxn-utils`/`pgxn_meta` validate,
-building a real PGXN zip bundle). The open question is packaging: PGXN's
-traditional distribution model assumes a PGXS-based `make && make install`
-build, which doesn't match how pgrx extensions are normally built
-(`cargo pgrx package`/`install`)—and this project's build is Docker-only by
-design (see CLAUDE.md's Decided section), in further tension with PGXN's
-assume-it-builds-from-source model. Before shipping: survey existing pgrx-based
-extensions that list on PGXN (if any) for how they bridge this—a Makefile
-wrapper that shells out to cargo-pgrx, prebuilt artifacts, or something else—and
-decide whether pgdmn follows suit or PGXN isn't the right distribution channel
-given the toolchain, with crates.io/GitHub releases as the alternative. Fix the
-FIXME contact and validate META.json either way.
-
 ### PUBLIC-010: Enable secret scanning, push protection, and private vulnerability reporting right after going public
 
 GitHub's native secret-scanning and push-protection are free for public
@@ -110,15 +96,39 @@ homepage to www.pgdmn.com once the site is live — cosmetic, but worth
 doing at the same moment as the visibility flip rather than forgetting
 it.
 
-### PUBLIC-012: Add PGXN badge to README once published
+## PGXN
+
+Packaging and distribution work for listing pgdmn on PGXN. Not required to
+flip the repo public — a separate, later distribution milestone.
+
+### PGXN-001: PGXN readiness—packaging, META.json, and pgrx precedent
+
+META.json already exists and targets PGXN's meta-spec (pgxn.org/meta/spec.txt),
+but has a FIXME placeholder maintainer contact and has never been validated
+against PGXN's actual distribution tooling (`pgxn-utils`/`pgxn_meta` validate,
+building a real PGXN zip bundle). The open question is packaging: PGXN's
+traditional distribution model assumes a PGXS-based `make && make install`
+build, which doesn't match how pgrx extensions are normally built
+(`cargo pgrx package`/`install`)—and this project's build is Docker-only by
+design (see CLAUDE.md's Decided section), in further tension with PGXN's
+assume-it-builds-from-source model. Before shipping: survey existing pgrx-based
+extensions that list on PGXN (if any) for how they bridge this—a Makefile
+wrapper that shells out to cargo-pgrx, prebuilt artifacts, or something else—and
+decide whether pgdmn follows suit or PGXN isn't the right distribution channel
+given the toolchain, with crates.io/GitHub releases as the alternative. Fix the
+FIXME contact and validate META.json either way.
+
+### PGXN-002: Add PGXN badge to README once published
 
 Add a PGXN badge to the README's badge row once the extension is
-actually published there (see the PGXN Setup steps in PUBLIC-009). A
+actually published there (see the PGXN Setup steps in PGXN-001). A
 crates.io badge is a separate, lower-priority call — PGXN-only
 distribution is the current plan, not crates.io, so a crates.io badge
 only makes sense if that plan changes; don't add one just to have one.
 
-### PUBLIC-013: Evaluate whether pgdmn should be a trusted extension
+## Safety
+
+### SAFETY-001: Evaluate whether pgdmn should be a trusted extension
 
 `pgdmn.control` now sets `superuser = true` explicitly (matches
 Postgres's documented default; every install-script command is `CREATE
