@@ -2,20 +2,6 @@
 
 ## Public release readiness
 
-### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (CODEOWNERS routing and CONTRIBUTING.md vendor/ rules done; enforcement and the Copilot instruction still open)
-
-`.github/CODEOWNERS` routes `vendor/**` and `vendor/CHECKSUMS` to
-@fugu13. `CONTRIBUTING.md` now has a "Working with vendor/" section
-covering the patch discipline (never edit vendor/ in feature PRs; one
-commit per change; PGDMN: markers; no reformatting; PATCHES.md entry
-per commit). Still open: branch-protection enforcement
-(`require_code_owner_reviews`, verified path-scoped and
-admin-bypassable — no self-approval deadlock) needs an explicit
-`gh api` call the maintainer runs themselves; it was not applied
-automatically. Also still open: add
-`.github/instructions/vendor.instructions.md` so Copilot review stops
-proposing stylistic rewrites of vendored code.
-
 ### PUBLIC-010: Enable secret scanning, push protection, and private vulnerability reporting right after going public
 
 GitHub's native secret-scanning and push-protection are free for public
