@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
+use std::num::NonZeroUsize;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use dsntk_feel::context::FeelContext;
 use dsntk_feel::values::Value;
 use dsntk_feel::{Evaluator, FeelScope, FeelType, Name};
 use dsntk_model_evaluator::ModelEvaluator;
+use lru::LruCache;
 
 use crate::types::dmn_model::DmnModel;
 
@@ -39,6 +41,30 @@ type DmnEvaluatorKey = ([u64; 2], usize);
 /// Inner FEEL cache level: full expression text -> prepared evaluator.
 type ExpressionEvaluators = HashMap<String, Rc<Evaluator>>;
 
+/// Upper bound on cached DMN model evaluators per backend, enforced by true
+/// LRU eviction (see `EVALUATOR_CACHE`). A `ModelEvaluator` wraps a compiled
+/// whole model — every decision table and FEEL AST it contains — so it is far
+/// more memory-expensive per entry than a prepared FEEL evaluator, and this
+/// bound is deliberately much smaller than `FEEL_CACHE_MAX_ENTRIES`. A
+/// database-embedded decision engine plausibly keeps a modest, fairly stable
+/// set of distinct model versions active per connection (low tens, e.g.
+/// versions in rotation during a deploy); 64 gives headroom above that
+/// without leaving the cache large enough to be a meaningful memory sink on
+/// its own. This is the mitigation for a resource-exhaustion finding: nothing
+/// revokes the default `PUBLIC` EXECUTE grant on `dmn_load`, so any
+/// connected role can otherwise grow this cache without bound by looping
+/// `dmn_load` over a stream of distinct model XML.
+const EVALUATOR_CACHE_MAX_ENTRIES: usize = 64;
+
+/// `EVALUATOR_CACHE_MAX_ENTRIES` as a `NonZeroUsize` for `LruCache::with_hasher`.
+/// A `match` rather than `.unwrap()`/`.expect()` keeps this free of panicking
+/// calls in non-test code; the `None` arm is unreachable since the constant
+/// above is a nonzero literal.
+const EVALUATOR_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(EVALUATOR_CACHE_MAX_ENTRIES) {
+    Some(cap) => cap,
+    None => NonZeroUsize::MIN,
+};
+
 /// Upper bound on cached prepared FEEL evaluators per backend. Reaching it
 /// clears the whole cache: realistic workloads evaluate a small, stable set of
 /// (expression, context shape) pairs, so LRU bookkeeping buys nothing, and the
@@ -47,8 +73,14 @@ type ExpressionEvaluators = HashMap<String, Rc<Evaluator>>;
 const FEEL_CACHE_MAX_ENTRIES: usize = 1024;
 
 thread_local! {
-    static EVALUATOR_CACHE: RefCell<HashMap<DmnEvaluatorKey, Arc<ModelEvaluator>, RapidBuildHasher>> =
-        RefCell::new(HashMap::with_hasher(RapidBuildHasher::default()));
+    /// DMN model evaluators keyed by XML content hash. Bounded with true LRU
+    /// eviction (unlike `FEEL_EVALUATOR_CACHE`'s clear-wholesale strategy):
+    /// each entry is expensive enough, and cache pressure here is intended to
+    /// stay rare enough, that evicting only the single least-recently-used
+    /// entry is worth the bookkeeping — clearing the whole cache on overflow
+    /// would also discard a model that is still hot.
+    static EVALUATOR_CACHE: RefCell<LruCache<DmnEvaluatorKey, Arc<ModelEvaluator>, RapidBuildHasher>> =
+        RefCell::new(LruCache::with_hasher(EVALUATOR_CACHE_CAP, RapidBuildHasher::default()));
 
     /// Prepared FEEL evaluators keyed by context-shape digest, then by the full
     /// expression text. Two levels so that cache hits allocate nothing: the
@@ -78,12 +110,18 @@ fn dmn_evaluator_builds() -> i64 {
 /// `DmnModel` is created) plus the XML length, so per-row cache probes never
 /// rehash or memcmp the XML itself. A false hit would require two different
 /// models of equal length whose XML collides in all 128 hash bits (see
-/// `content_hash128`), so no equality check on the XML is performed.
+/// `content_hash128`), so no equality check on the XML is performed. Bounded
+/// at `EVALUATOR_CACHE_MAX_ENTRIES` with LRU eviction, so an unbounded stream
+/// of distinct models (e.g. `dmn_load` looped over generated XML by any role
+/// with the default `PUBLIC` EXECUTE grant) cannot grow this cache without
+/// bound.
 pub fn get_or_build_evaluator(model: &DmnModel) -> Result<Arc<ModelEvaluator>, String> {
     let key = (model.xml_hash, model.xml.len());
 
-    // Check cache first
-    let cached = EVALUATOR_CACHE.with_borrow(|cache| cache.get(&key).cloned());
+    // Check cache first. `LruCache::get` takes `&mut self` because a hit also
+    // marks the entry most-recently-used, so this borrows mutably even though
+    // it's only a read.
+    let cached = EVALUATOR_CACHE.with_borrow_mut(|cache| cache.get(&key).cloned());
     if let Some(evaluator) = cached {
         return Ok(evaluator);
     }
@@ -99,9 +137,10 @@ pub fn get_or_build_evaluator(model: &DmnModel) -> Result<Arc<ModelEvaluator>, S
     let evaluator = ModelEvaluator::new(&[definitions])
         .map_err(|e| format!("failed to build model evaluator: {e}"))?;
 
-    // Cache it
+    // Cache it. `put` evicts the least-recently-used entry itself if the
+    // cache is already at `EVALUATOR_CACHE_MAX_ENTRIES`.
     EVALUATOR_CACHE.with_borrow_mut(|cache| {
-        cache.insert(key, Arc::clone(&evaluator));
+        cache.put(key, Arc::clone(&evaluator));
     });
 
     Ok(evaluator)
@@ -358,5 +397,77 @@ mod tests {
         let forged = ctx_of(vec![("a\u{1}v\u{0}\u{0}\u{0}b", num(1))]);
         let real = ctx_of(vec![("a", num(1)), ("b", num(2))]);
         assert_ne!(context_shape_digest(&forged), context_shape_digest(&real));
+    }
+
+    /// Minimal, distinct-by-`id` DMN XML (adapted from the `SIMPLE_DMN`
+    /// fixture in `src/lib.rs`): a single decision with a literal expression,
+    /// no decision table needed to get a byte-distinct XML per `id`, hence a
+    /// distinct content hash and cache key.
+    fn fixture_model(id: usize) -> DmnModel {
+        let xml = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="fixture_{id}"
+             name="Fixture{id}"
+             namespace="https://example.org/fixture/{id}">
+    <decision id="Greeting" name="Greeting">
+        <variable name="Greeting" typeRef="string"/>
+        <literalExpression>
+            <text>"Hello, {id}!"</text>
+        </literalExpression>
+    </decision>
+</definitions>"#
+        );
+        DmnModel::from_xml(&xml).expect("fixture DMN XML must parse")
+    }
+
+    fn evaluator_builds() -> i64 {
+        EVALUATOR_BUILDS.with(std::cell::Cell::get)
+    }
+
+    #[test]
+    fn evaluator_cache_evicts_least_recently_used() {
+        let first = fixture_model(0);
+        let second = fixture_model(1);
+
+        // Fill the cache to exactly its cap: ids 0..CAP, oldest (id 0) to
+        // newest (id CAP-1).
+        for id in 0..EVALUATOR_CACHE_MAX_ENTRIES {
+            get_or_build_evaluator(&fixture_model(id)).expect("build must succeed");
+        }
+
+        // Touch id 0 again: a cache hit (no rebuild) that also promotes it to
+        // most-recently-used, so id 1 — not id 0 — becomes the LRU victim.
+        let builds_before_touch = evaluator_builds();
+        get_or_build_evaluator(&first).expect("cached fetch must succeed");
+        assert_eq!(
+            evaluator_builds(),
+            builds_before_touch,
+            "re-fetching a cached model must not rebuild it"
+        );
+
+        // Insert one more distinct model, pushing the cache over its cap by
+        // one and forcing an eviction.
+        get_or_build_evaluator(&fixture_model(EVALUATOR_CACHE_MAX_ENTRIES))
+            .expect("build must succeed");
+
+        // id 0 was just touched (most-recently-used) and must still be cached.
+        let builds_before_first_refetch = evaluator_builds();
+        get_or_build_evaluator(&first).expect("cached fetch must succeed");
+        assert_eq!(
+            evaluator_builds(),
+            builds_before_first_refetch,
+            "the most-recently-used entry must survive eviction"
+        );
+
+        // id 1 was the actual least-recently-used entry and must have been
+        // evicted, so re-fetching it rebuilds.
+        let builds_before_second_refetch = evaluator_builds();
+        get_or_build_evaluator(&second).expect("rebuild must succeed");
+        assert_eq!(
+            evaluator_builds(),
+            builds_before_second_refetch + 1,
+            "the least-recently-used entry must have been evicted and rebuilt"
+        );
     }
 }
