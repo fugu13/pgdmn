@@ -5,3 +5,16 @@ original stable ID and header, so the ID stays traceable without cluttering
 the active list. This practice starts now — the items pruned from `TODO.md`
 in the 2026-08-14 cleanup were deleted outright, not archived, and are not
 backfilled here.
+
+### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (done)
+
+`.github/CODEOWNERS` routes `vendor/**` and `vendor/CHECKSUMS` to
+@fugu13. `CONTRIBUTING.md` has a "Working with vendor/" section
+covering the patch discipline (never edit vendor/ in feature PRs; one
+commit per change; PGDMN: markers; no reformatting; PATCHES.md entry
+per commit). Branch-protection enforcement (`require_code_owner_reviews`)
+is live on `main`, verified path-scoped and admin-bypassable — no
+self-approval deadlock. `.github/instructions/vendor.instructions.md`
+tells Copilot review not to propose reformatting, flag `PGDMN:`
+comments, apply pedantic/nursery lint suggestions, or propose inline
+fixes anywhere under `vendor/`.
