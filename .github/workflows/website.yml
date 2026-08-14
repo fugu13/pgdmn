@@ -59,9 +59,13 @@ jobs:
 
       - name: Assert the deployable artifact is complete
         run: |
-          for f in index.html 404.html CNAME style.css; do
+          for f in index.html 404.html CNAME; do
             test -s "website/dist/$f" || { echo "::error::missing or empty website/dist/$f"; exit 1; }
           done
+          # The stylesheet's filename is content-hashed (style.<hash>.css), so
+          # its name isn't fixed like the files above.
+          stylesheet=$(find website/dist -maxdepth 1 -name 'style.*.css' -size +0c)
+          [ -n "$stylesheet" ] || { echo "::error::missing or empty content-hashed stylesheet in website/dist"; exit 1; }
           # .nojekyll is meaningful precisely by existing; it is always empty.
           test -f website/dist/.nojekyll || { echo "::error::missing website/dist/.nojekyll"; exit 1; }
           grep -qx 'www.pgdmn.com' website/dist/CNAME || { echo "::error::CNAME is not www.pgdmn.com"; exit 1; }

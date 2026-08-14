@@ -18,6 +18,7 @@ use crate::pages::home::HomePage;
 use crate::pages::not_found::NotFoundPage;
 use crate::pages::why::WhyPage;
 use crate::routes;
+use crate::stylesheet;
 
 /// Every route is rendered once at build time and written to disk. Nothing is
 /// rendered per request, so no route may depend on request state.
@@ -57,7 +58,7 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <Stylesheet id="leptos" href="/style.css"/>
+        <Stylesheet id="leptos" href=stylesheet::href()/>
         <Title text="pgdmn · DMN for PostgreSQL"/>
         <Router>
             <SkipLink/>
