@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DMN viewer—pgdmn</title>
+    <!--
+      This is the one page on the site that runs JavaScript. Everything else is
+      prerendered static HTML with no scripts (see WEB-001). This page exists to
+      make one point: the models pgdmn evaluates are standard DMN files that open
+      in ordinary DMN tooling—here, bpmn.io's dmn-js, loaded from a CDN.
+    -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/diagram-js.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-js-shared.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-js-drd.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-js-decision-table.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-js-decision-table-controls.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-js-literal-expression.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/assets/dmn-font/css/dmn.css"
+    />
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+      /* Header takes what it needs; the canvas fills the rest of the viewport
+         so a DRD graph has real vertical space to scale into. The page itself
+         never scrolls—any overflow is the canvas's own. */
+      body {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #1a1a2e;
+      }
+      header {
+        flex: none;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.5rem 1rem;
+        padding: 0.6rem 1rem;
+        border-bottom: 1px solid #dde1e6;
+      }
+      header strong {
+        font-size: 1.05rem;
+      }
+      header code {
+        font-family: ui-monospace, Menlo, monospace;
+      }
+      header .spacer {
+        margin-left: auto;
+      }
+      header a {
+        color: #336791;
+      }
+      /* Fills the viewport below the header. A decision table renders at its
+         own content height near the top; a DRD is scaled to fill this space
+         (see the import handler). Overflow is the canvas's, not the page's. */
+      #canvas {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+      }
+      .msg {
+        padding: 2rem;
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>DMN viewer</strong>
+      <code id="name"></code>
+      <span class="spacer"></span>
+      <a id="download" download>Download the model</a>
+      <a href="/articles/">← Back to pgdmn</a>
+    </header>
+    <div id="canvas"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/dmn-js@17.9.0/dist/dmn-navigated-viewer.production.min.js"></script>
+    <script>
+      (function () {
+        var canvas = document.getElementById("canvas");
+        var model = new URLSearchParams(location.search).get("model") || "";
+
+        // Only ever load a bare .dmn filename from our own examples directory.
+        if (!/^[A-Za-z0-9._-]+\.dmn$/.test(model)) {
+          canvas.innerHTML = '<p class="msg">No valid model requested.</p>';
+          return;
+        }
+        var url = "/examples/" + model;
+        document.getElementById("name").textContent = model;
+        document.getElementById("download").href = url;
+
+        var viewer = new DmnJS({ container: "#canvas" });
+
+        // Always fetch the current model, never a stale cached copy.
+        fetch(url, { cache: "no-store" })
+          .then(function (response) {
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            return response.text();
+          })
+          .then(function (xml) {
+            return viewer.importXML(xml);
+          })
+          .then(function () {
+            // A decision table sizes to its own content; a DRD graph should
+            // fill the canvas, so scale it once the canvas has its final size.
+            var view =
+              typeof viewer.getActiveView === "function"
+                ? viewer.getActiveView()
+                : null;
+            if (view && view.type === "drd") {
+              var active = viewer.getActiveViewer();
+              requestAnimationFrame(function () {
+                try {
+                  active.get("canvas").zoom("fit-viewport", "auto");
+                } catch (e) {}
+              });
+            }
+          })
+          .catch(function (err) {
+            canvas.innerHTML =
+              '<p class="msg">Could not open <code>' +
+              model +
+              "</code> (" +
+              err.message +
+              ").</p>";
+          });
+      })();
+    </script>
+  </body>
+</html>

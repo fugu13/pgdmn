@@ -14,7 +14,7 @@ acceptable or the repository should be published with fresh history.
 
 Add SECURITY.md (report via GitHub private security advisories; trust
 model: DMN XML and FEEL expressions are untrusted SQL input evaluated
-in-process; no network stack linked — external evaluation compiled out;
+in-process; no network stack linked—external evaluation compiled out;
 vendored-engine issues coordinated with upstream). Enable private
 vulnerability reporting when the repo goes public.
 
@@ -39,16 +39,18 @@ also reconcile the *git patch layer* (a separate check from the
 CHECKSUMS drift check) against it, and disable squash-merge for vendor
 PRs so patch-layer separability survives GitHub merges.
 
-### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (CODEOWNERS routing added; enforcement, CONTRIBUTING.md, and the Copilot instruction still open)
+### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (CODEOWNERS routing added; CONTRIBUTING.md exists but lacks vendor/ rules; enforcement and the Copilot instruction still open)
 
 `.github/CODEOWNERS` now routes `vendor/**` and `vendor/CHECKSUMS` to
-@fugu13. Branch-protection enforcement (`require_code_owner_reviews`,
-verified path-scoped and admin-bypassable — no self-approval deadlock)
-needs an explicit `gh api` call the maintainer runs themselves; it was
-not applied automatically. Still open: document the vendor/
-contribution rules where outsiders will look (never edit vendor/ in
-feature PRs; one commit per change; PGDMN: markers; no reformatting)
-in CONTRIBUTING.md, and add
+@fugu13. `CONTRIBUTING.md` now exists (added independently) with
+build/test/PR conventions, but has no vendor/-specific section yet.
+Branch-protection enforcement (`require_code_owner_reviews`, verified
+path-scoped and admin-bypassable — no self-approval deadlock) needs an
+explicit `gh api` call the maintainer runs themselves; it was not
+applied automatically. Still open: add the vendor/ contribution rules
+where outsiders will look (never edit vendor/ in feature PRs; one
+commit per change; PGDMN: markers; no reformatting) to
+`CONTRIBUTING.md`, and add
 `.github/instructions/vendor.instructions.md` so Copilot review stops
 proposing stylistic rewrites of vendored code.
 
@@ -56,7 +58,7 @@ proposing stylistic rewrites of vendored code.
 
 vendor-inspect step 4 needs a committed reference (the detailed
 measurement report is a private session artifact). Commit a per-scenario baseline table
-(median, machine, toolchain, date — e.g. profiling/baselines/) and
+(median, machine, toolchain, date—e.g. profiling/baselines/) and
 point the prompt at it, so someone other than the original author can
 run the regression gate.
 
@@ -71,20 +73,22 @@ the personal content-preference rule in CLAUDE.md's Behaviors section
 should ship in a public repo, and add a DMN trademark acknowledgment
 (OMG) to the README if counsel thinks it worthwhile.
 
-### PUBLIC-009: Evaluate whether pgdmn should be a trusted extension
+### PUBLIC-009: PGXN readiness—packaging, META.json, and pgrx precedent
 
-`pgdmn.control` now sets `superuser = true` explicitly (matches
-Postgres's documented default; every install-script command is `CREATE
-FUNCTION ... LANGUAGE c`, which requires superuser regardless of this
-flag). Separately, and only after a deliberate security review, decide
-whether to also set `trusted = true`. Postgres runs a trusted
-extension's install script *as* superuser even when invoked by a
-non-superuser, so `trusted = true` would let any role with `CREATE`
-privilege on the database install this natively-compiled, unsandboxed
-shared library — a real privilege-escalation surface, not a follow-on
-to the superuser fix. Needs a pgvector-style audit (review every
-installed function/type for anything a non-superuser could turn into
-more access than they started with) before it's safe to flip.
+META.json already exists and targets PGXN's meta-spec (pgxn.org/meta/spec.txt),
+but has a FIXME placeholder maintainer contact and has never been validated
+against PGXN's actual distribution tooling (`pgxn-utils`/`pgxn_meta` validate,
+building a real PGXN zip bundle). The open question is packaging: PGXN's
+traditional distribution model assumes a PGXS-based `make && make install`
+build, which doesn't match how pgrx extensions are normally built
+(`cargo pgrx package`/`install`)—and this project's build is Docker-only by
+design (see CLAUDE.md's Decided section), in further tension with PGXN's
+assume-it-builds-from-source model. Before shipping: survey existing pgrx-based
+extensions that list on PGXN (if any) for how they bridge this—a Makefile
+wrapper that shells out to cargo-pgrx, prebuilt artifacts, or something else—and
+decide whether pgdmn follows suit or PGXN isn't the right distribution channel
+given the toolchain, with crates.io/GitHub releases as the alternative. Fix the
+FIXME contact and validate META.json either way.
 
 ### PUBLIC-010: Enable secret scanning and push protection right after going public
 
@@ -105,10 +109,25 @@ it.
 ### PUBLIC-012: Add PGXN badge to README once published
 
 Add a PGXN badge to the README's badge row once the extension is
-actually published there (see the PGXN Setup steps). A crates.io badge
-is a separate, lower-priority call — the current plan (RELEASEPLAN.md)
-is PGXN-only distribution, not crates.io, so a crates.io badge only
-makes sense if that plan changes; don't add one just to have one.
+actually published there (see the PGXN Setup steps in PUBLIC-009). A
+crates.io badge is a separate, lower-priority call — PGXN-only
+distribution is the current plan, not crates.io, so a crates.io badge
+only makes sense if that plan changes; don't add one just to have one.
+
+### PUBLIC-013: Evaluate whether pgdmn should be a trusted extension
+
+`pgdmn.control` now sets `superuser = true` explicitly (matches
+Postgres's documented default; every install-script command is `CREATE
+FUNCTION ... LANGUAGE c`, which requires superuser regardless of this
+flag). Separately, and only after a deliberate security review, decide
+whether to also set `trusted = true`. Postgres runs a trusted
+extension's install script *as* superuser even when invoked by a
+non-superuser, so `trusted = true` would let any role with `CREATE`
+privilege on the database install this natively-compiled, unsandboxed
+shared library — a real privilege-escalation surface, not a follow-on
+to the superuser fix. Needs a pgvector-style audit (review every
+installed function/type for anything a non-superuser could turn into
+more access than they started with) before it's safe to flip.
 
 ## Upstream
 
@@ -160,7 +179,7 @@ cache or a serialized precompiled-evaluator representation.
 
 The 0.3 opportunity hunt (N4) found that decision-table entries are
 overwhelmingly literals, yet build_in evaluates the right-hand side per
-call — one Box per comparison, two per range, a Vec per list — paid
+call—one Box per comparison, two per range, a Vec per list—paid
 rules x inputs x SQL-rows. A build-time AST walk detecting
 scope-independent right-hand sides could evaluate once into a cached
 Value and match by reference. Measure-first on a wide table of
@@ -198,7 +217,7 @@ walker must add the new variants (fails the build by design), H14/H19
 need manual rebases over heavily-restyled builders/bifs files, and the
 Docker toolchain must move from Rust 1.85 to ≥1.88 for let-chains
 (re-test the dev-profile LTO ICE while at it). Everything else rebases
-near-clean — decision_table.rs, model_definitions.rs, context.rs and
+near-clean—decision_table.rs, model_definitions.rs, context.rs and
 the model-evaluator files are functionally unchanged upstream.
 
 Executed 2026-07-14: pristine 0.3.0 vendored (13 crates, recognizer
@@ -236,13 +255,13 @@ Integrate axe-core into the website's test suite via Playwright: launch the SSR 
 
 ## Documentation
 
-### DOCS-001: Feature docs for major features
+### DOCS-001: Feature docs for major features (dropped)
 
-Create one file per major feature in `docs/`: the FEEL evaluation functions, the DMN model type and evaluation functions, and the website. Each file needs a one-sentence summary and a list of user actions the feature accomplishes, described from the user's needs rather than mechanically. No code blocks in `docs/` — use tables, prose, and mermaid diagrams.
+Dropped 2026-07-14 with the `docs/` directory. Explanation aimed at users belongs where users are—the website's Docs page and the walkthroughs in `website/posts/`—rather than in a parallel set of files inside the repo that only contributors would ever open. Conventions live in CLAUDE.md; findings and future work live here.
 
-### DOCS-002: UI behavioral descriptions for the website
+### DOCS-002: UI behavioral descriptions for the website (dropped)
 
-Add `docs/ux/{aspect}.md` behavioral descriptions covering the website's existing UI (navigation, page structure, code example presentation). Descriptions cover the full interaction lifecycle and must not reference implementation details.
+Dropped 2026-07-14 with the `docs/` directory, for the same reason. The behaviour of the site is described by the site.
 
 ## Accessibility
 
@@ -264,7 +283,7 @@ Compares the input and output definitions of a named invocable across a new mode
 
 - **BACKWARD (inputs):** The new invocable accepts all inputs the old one could. Adding optional inputs (with defaults) is allowed; removing or narrowing required inputs is not.
 - **FORWARD (inputs):** The old invocable could accept all inputs the new one can. Adding required inputs breaks forward compatibility; removing optional inputs is allowed.
-- **FULL (inputs):** Both backward and forward — only optional-with-default fields may be added or removed.
+- **FULL (inputs):** Both backward and forward—only optional-with-default fields may be added or removed.
 - **BACKWARD (outputs):** Consumers of the old outputs can still consume the new outputs. Removing output fields or widening types breaks backward output compatibility.
 - **FORWARD (outputs):** Consumers of the new outputs could consume the old outputs. Adding output fields or narrowing types breaks forward output compatibility.
 - **FULL (outputs):** Both directions for outputs.
@@ -273,52 +292,74 @@ Compares the input and output definitions of a named invocable across a new mode
 
 **Array input enables transitive checks:** By passing all historical model versions as the array, the caller gets a report covering compatibility against every prior version, not just the immediately previous one.
 
-**Decided (2026-07-14):** the type-compatibility relation is dsntk's own `FeelType::is_conformant` — the same relation `dmn_eval` applies at coercion time — not a pgdmn-invented widening lattice.
+**Decided (2026-07-14):** the type-compatibility relation is dsntk's own `FeelType::is_conformant`—the same relation `dmn_eval` applies at coercion time—not a pgdmn-invented widening lattice.
 
 Direction mapping: inputs are BACKWARD compatible iff the old input type conforms to the new one (everything the old invocable accepted is still accepted), FORWARD iff the new conforms to the old. Outputs are BACKWARD compatible iff the new output type conforms to the old one (new outputs remain readable by existing consumers), FORWARD mirrored. Exact equality reports `unchanged`; conformance in the required direction reports a compatible `type-changed`; neither reports incompatible.
 
-The mapping must be locked in with property tests (reflexivity, Any-as-top, Null-conforms-to-everything, context width subtyping in both directions). `is_conformant` is lenient about Null — a field becoming nullable never reads as a narrowing — which the report semantics must document.
+The mapping must be locked in with property tests (reflexivity, Any-as-top, Null-conforms-to-everything, context width subtyping in both directions). `is_conformant` is lenient about Null—a field becoming nullable never reads as a narrowing—which the report semantics must document.
 
-Scoping note: no typed-introspection columns get added to `dmn_invocables`/`dmn_info` ahead of this work — dsntk 0.3 added no model-introspection capability, and the typeRef resolver should be built once, here.
+Scoping note: no typed-introspection columns get added to `dmn_invocables`/`dmn_info` ahead of this work—dsntk 0.3 added no model-introspection capability, and the typeRef resolver should be built once, here.
 
 **Open design questions:**
 
 - Whether to support checking multiple invocables in one call or keep it single-invocable
 - How to handle invocables that exist in one model but not the other (report as incompatible vs. skip with warning)
 
-### FEAT-003: Syntax highlighting in code blocks
-
-Add syntax highlighting for SQL and DMN (XML) code examples on the website. The `SqlBlock` component should accept a language parameter to select the grammar.
-
-The client-side option (Prism.js or similar) is closed: WEB-001 ships zero JavaScript, and highlighting prose-level code samples does not justify reversing that. Highlight at build time in Rust — syntect is the obvious candidate — emitting styled markup into the prerendered HTML.
-
-### FEAT-004: Markdown-based blog infrastructure
-
-Build a blog system for the website that reads markdown files from a directory, renders them as pages, and generates an index with titles and dates.
-
-Must render at build time into the prerendered output (WEB-001), not per request: there is no server in production to read files at request time.
-
 ### FEAT-005: Mobile hamburger menu
 
 The site navigation needs a responsive hamburger menu for narrow viewports.
 
-The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which WEB-001 removed. Either implement it without script — a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert — or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
+The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which WEB-001 removed. Either implement it without script—a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert—or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
+
+### PERF-009: Tell people to let the planner parallelize
+
+Evaluating a decision is pure, per-row, self-contained work—the ideal parallel workload—and parallelism is worth more than every other change to the query put together. The functions are already `IMMUTABLE` and `PARALLEL SAFE`, so this needs no code change; it needs a reader who knows to check that their plan actually has a Gather in it.
+
+Measured with `make bench-shapes` (2026-07-14), same model and rows under different SQL, against a naive per-row baseline of 18 µs/row simple and 68 µs/row complex:
+
+| Query shape | Speedup |
+|---|---|
+| **Permit parallelism** | **3.8×** |
+| Deduplicate inputs, `MATERIALIZED` | 1.35–1.5× |
+| Deduplicate inputs, plain CTE | 1.00×—no effect |
+| Parallel *and* deduplicated | 1.3× |
+| Model from a table column vs. an inline literal | 1.0×—no penalty |
+
+Two findings worth writing down for users, on the Docs page and in the README.
+
+**The deduplication trap.** The obvious way to write "evaluate once per distinct input, then join the answers back" is a plain CTE, and it does *nothing*: the planner inlines the CTE and pulls `dmn_eval` back up above the join, so it evaluates once per output row exactly as before. It looks like an optimization and measures like the baseline. `WITH … AS MATERIALIZED` is what holds the evaluation down at the distinct-row count.
+
+**They do not compose.** A `MATERIALIZED` CTE is scanned serially, throwing the parallelism away. Given the choice, take the parallelism.
+
+### WEB-003: Respect prefers-color-scheme
+
+The site defines its palette once, in light colours, and never consults `prefers-color-scheme`. A visitor whose system is set to dark gets a bright white page regardless. CLAUDE.md already forbids a dark-mode *toggle* on the grounds that the system preference is the right signal—but the site does not currently honour that signal either way.
+
+Add a `prefers-color-scheme: dark` block redefining the custom properties in `style/main.scss`. Verify the dark palette holds 4.5:1 contrast for text and 3:1 for interface elements and focus indicators, which the highlighted table rows and the muted secondary text are the most likely to fail.
+
+### WEB-004: A specificity budget for table-cell border overrides
+
+`td:has(mark)` in `style/main.scss` beats the plain `.post-content table td` border by nesting inside the same `table { }` block and relying on `:has()`'s specificity—reasoned about by hand, with a comment explaining why the ordering holds, no lint or test backing it up. Fine for one override; the next thing that needs to win against the base `td` border will likely repeat the same manual reasoning. If a third such override shows up, consider having the base `td` rule read a CSS custom property (e.g. `border-color: var(--td-border, var(--color-border))`) so overrides set a variable instead of re-fighting specificity.
+
+### WEB-005: Consolidate the code-block language table in highlight.rs/articles.rs
+
+`highlight::fenced`'s language match and `articles::code_block_label`'s match both enumerate the same fence languages (`html`, `xml`, `xslt`/`xsl`, `sh`/`bash`) in two separate places, growing one arm at a time as languages are added. Not urgent at four languages, but worth folding into one table (language → syntax lookup + accessible label) if a third or fourth language shows up.
 
 ### RANGE-002: Accept PG range types as inputs in the record-eval path
 
-Extend `pg_datum_to_feel` with arms for `NUMRANGEOID`, `INT4RANGEOID`, `INT8RANGEOID`, `DATERANGEOID`, `TSRANGEOID`: read via pgrx `Range<T>`, convert bounds with the existing scalar arms, and build `Value::Range` with `IntervalType::Closed`/`Opened`/`OpenedUndef` (infinite bound → `OpenedUndef`). No SQL signature changes — `feel_record_eval` and `dmn_record_eval` start accepting range-typed columns, the only inbound channel for binding a FEEL range variable (JSON cannot carry one). Decide the policy for PG `empty` ranges (error is more consistent with the mixed-interval precedent in convert.rs) and defer `TSTZRANGEOID` with the timezone question. Round-trip property tests (PG range → FEEL → `feel_eval_numrange` → PG range) pair with the existing numrange output path. Discrete-range canonicalization (`int4range '[1,4]'` arrives as `[1,5)`) is same-set but changes `.end`/`.end included` property values — document it.
+Extend `pg_datum_to_feel` with arms for `NUMRANGEOID`, `INT4RANGEOID`, `INT8RANGEOID`, `DATERANGEOID`, `TSRANGEOID`: read via pgrx `Range<T>`, convert bounds with the existing scalar arms, and build `Value::Range` with `IntervalType::Closed`/`Opened`/`OpenedUndef` (infinite bound → `OpenedUndef`). No SQL signature changes—`feel_record_eval` and `dmn_record_eval` start accepting range-typed columns, the only inbound channel for binding a FEEL range variable (JSON cannot carry one). Decide the policy for PG `empty` ranges (error is more consistent with the mixed-interval precedent in convert.rs) and defer `TSTZRANGEOID` with the timezone question. Round-trip property tests (PG range → FEEL → `feel_eval_numrange` → PG range) pair with the existing numrange output path. Discrete-range canonicalization (`int4range '[1,4]'` arrives as `[1,5)`) is same-set but changes `.end`/`.end included` property values—document it.
 
 ### RANGE-003: feel_eval_daterange and feel_eval_tsrange typed variants
 
-Stage 2 of the numrange work: map FEEL date and date-time ranges onto `daterange`/`tsrange` via pgrx `Range<Date>`/`Range<Timestamp>`, mirroring `feel_eval_numrange`. Note PG canonicalizes discrete `daterange` (`[a..b]` becomes `[a..b+1)`) — same set, different rendering; document alongside the implementation.
+Stage 2 of the numrange work: map FEEL date and date-time ranges onto `daterange`/`tsrange` via pgrx `Range<Date>`/`Range<Timestamp>`, mirroring `feel_eval_numrange`. Note PG canonicalizes discrete `daterange` (`[a..b]` becomes `[a..b+1)`)—same set, different rendering; document alongside the implementation.
 
-### UNARY-001: feel_unary_test — evaluate decision-table-style unary tests against a value
+### UNARY-001: feel_unary_test—evaluate decision-table-style unary tests against a value
 
 `feel_unary_test(tests text, value jsonb, context jsonb DEFAULT NULL) → boolean`: parse `tests` with `parse_unary_tests` (the exact grammar of a decision-table input entry, including `-`, `not(...)`, ranges, and comma lists), bind `value` as the FEEL `?` placeholder, build the `In` node exactly as dsntk's own decision-table evaluator does, and evaluate. Enables rules-stored-in-tables matching (`WHERE feel_unary_test(r.quantity_test, to_jsonb(42))`). Needs a `/spec` first: the null-result policy (error like `feel_eval_bool` vs. decision-table-style false) and the temporal-typing story (a JSONB string stays a FEEL string, so `< today()` needs context-passed dates or later typed overloads) are behavior decisions.
 
 ### NULLS-001: Surface explained FEEL nulls the JSONB paths discard
 
-dsntk 0.3 attaches explanations to many nulls (`null(position must not be zero)`) that `feel_eval`/`dmn_eval` currently flatten to bare JSON null (convert.rs maps `Null(_)` dropping the message). Candidate shapes: `feel_eval_detail`/`dmn_eval_detail` returning `(result jsonb, null_reason text)`, or emitting the explanation as a DEBUG-level notice inside the existing functions (zero new API). The explanation text is upstream-owned prose that rewords between releases — whatever ships must document that it is diagnostic, not a stable contract. Decide the shape before implementing.
+dsntk 0.3 attaches explanations to many nulls (`null(position must not be zero)`) that `feel_eval`/`dmn_eval` currently flatten to bare JSON null (convert.rs maps `Null(_)` dropping the message). Candidate shapes: `feel_eval_detail`/`dmn_eval_detail` returning `(result jsonb, null_reason text)`, or emitting the explanation as a DEBUG-level notice inside the existing functions (zero new API). The explanation text is upstream-owned prose that rewords between releases—whatever ships must document that it is diagnostic, not a stable contract. Decide the shape before implementing.
 
 ### WEB-002: Automated link checking for the website
 
@@ -328,9 +369,19 @@ This would have caught the trailing-slash problem WEB-001 fixed by hand (linking
 
 ### WEB-001: Prerender the website to static HTML (done)
 
-The website shipped a wasm hydration bundle (343 KB of wasm plus 19.5 KB of JS) to hydrate pages with no client-side interactivity at all — no signals, no server functions, no client state. The bundle bought nothing while forcing a `wasm-bindgen` crate/CLI version match on the build host and a server-capable host in production.
+The website shipped a wasm hydration bundle (343 KB of wasm plus 19.5 KB of JS) to hydrate pages with no client-side interactivity at all—no signals, no server functions, no client state. The bundle bought nothing while forcing a `wasm-bindgen` crate/CLI version match on the build host and a server-capable host in production.
 
-Done 2026-07-13. Dropped the `hydrate` feature, `wasm-bindgen`, `console_error_panic_hook`, the `cdylib` crate type, the `wasm-release` profile, and `cargo-leptos` itself. Every route is now `SsrMode::Static` and rendered to `website/dist` by a `prerender` binary, which also compiles Sass in-process via `grass` and emits `404.html` and `.nojekyll`. Specification in `docs/specifications/WEB-001-static-prerender.md`; decision recorded in CLAUDE.md.
+Done 2026-07-13. Dropped the `hydrate` feature, `wasm-bindgen`, `console_error_panic_hook`, the `cdylib` crate type, the `wasm-release` profile, and `cargo-leptos` itself. Every route is now `SsrMode::Static` and rendered to `website/dist` by a `prerender` binary, which also compiles Sass in-process via `grass` and emits `404.html` and `.nojekyll`. The decision is recorded in CLAUDE.md.
+
+### FEAT-003: Syntax highlighting in code blocks (done)
+
+Done 2026-07-14. SQL is highlighted at build time by syntect (`website/src/highlight.rs`), emitting CSS classes rather than inline colours—the palette lives in `style/main.scss`, in dark tones chosen to stay legible without colour. The client-side option was closed by WEB-001's no-JavaScript rule. Markdown code fences in blog posts are highlighted through the same path. DMN (XML) highlighting is not implemented: no XML is shown on the site.
+
+### FEAT-004: Markdown-based blog infrastructure (done)
+
+Done 2026-07-14. Posts are markdown files in `website/posts/`, embedded at compile time (`include_dir`) and rendered by `pulldown-cmark` during the prerender. A single `/blog/:slug` route enumerates its slugs from the files themselves via Leptos's `StaticRoute::prerender_params`, so adding a post is adding a file—no Rust change, no route to register. Front matter carries title, date, summary, and the example the post walks through. A malformed post fails the build, naming the file.
+
+The one convention the blog adds: a paragraph reading `Table: …` immediately above a markdown table becomes that table's caption, which is what lets the renderer give tables a caption, `scope`-d column headers, and a keyboard-reachable scroll wrapper that bare markdown would not have.
 
 ### FEAT-006: Website CI/CD deployment pipeline (done)
 
@@ -339,6 +390,10 @@ Set up automated builds and deployment for the website. Hosting is GitHub Pages,
 Done 2026-07-13. The `Website` workflow (`.github/workflows/website.yml`) lints, prerenders, asserts the output ships no scripts or wasm and that the deployable artifact is complete, then publishes `website/dist` to Pages on every push to `main`. The prerender emits `CNAME`, `404.html`, and `.nojekyll`.
 
 Going live still needs three manual steps, recorded in RELEASEPLAN.md: a paid plan for Pages from a private repo, the Route 53 A/AAAA/CNAME records, and enforcing HTTPS once the certificate is issued.
+
+### PERF-010: Fingerprint models instead of hashing the XML per call (done)
+
+Done 2026-07-15, delivered by the dsntk 0.3 vendoring merge rather than by dedicated work here. `cache.rs` now keys the evaluator cache on the model's 128-bit XML content hash, computed once when the model is loaded and stored on `DmnModel`, so `dmn_eval` no longer rehashes or memcmp's the whole XML per call to find its evaluator. The residual datum-side cost—the full XML is still CBOR-decoded from the datum on every row—is tracked separately as PERF-001 (zero-copy DmnModel datum layout). The finding that motivated deferring this stands: FEEL evaluation itself is the bottleneck (`dmn_record_eval` is only 5–9% faster than `dmn_eval`), so the serialization hops were never where the time went.
 
 ## CI
 
@@ -358,17 +413,23 @@ Today `ci.yml` rebuilds `pgdmn-test` with a `type=gha` buildx layer cache inject
 
 `scripts/doc_check.sh`, wired into `make doc-check` and the required CI `docs` job, verifies every `#[pg_extern]` function in `src/functions/*.rs` has a worked example in README.md and is mentioned on the website's Docs page. Scope is narrower than datasend's `scripts/doc_check.py`: no TODO/BUGHISTORY ID cross-referencing (pgdmn's doc set doesn't have the same ID-guide-table structure), and generic `docs/` structure invariants remain unimplemented if wanted later.
 
-### CI-005: Automated dependency license gate (done)
+### CI-006: Automated dependency license gate (done)
 
 `deny.toml` at the repo root (allowlist: MIT, Apache-2.0, Unicode-3.0, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, Unlicense, BSL-1.0, CC0-1.0) checked via `make license-check`, run once per cargo workspace (root pgdmn + vendored dsntk crates, website/, profiling/, since each has its own Cargo.lock). Wired into `make verify` (host-native, no Docker needed) and a new blocking `license` CI job on the required aggregate. `r-efi`'s `MIT OR Apache-2.0 OR LGPL-2.1-or-later` passes via the allowed MIT/Apache-2.0 arms; LGPL itself is deliberately not allowlisted, so a future crate offering only an LGPL license would still be rejected.
 
 Also fixed along the way: `website/Cargo.toml` was missing the empty `[workspace]` table that `profiling/Cargo.toml` already has, which broke plain `cargo`/`make website-lint`/`make website-build` whenever the checkout is nested inside another checkout of the same repo (e.g. an agent worktree under `.claude/worktrees/`); both `website/Cargo.toml` and `profiling/Cargo.toml` were also missing a `license` field.
 
+### CI-005: `pgdmn-test` buildx GHA cache is near the 10GB repo quota (partially done)
+
+`gh api repos/fugu13/pgdmn/actions/caches --paginate` showed the `type=gha` buildx layer cache (`DOCKER_BUILD_CACHE`, `mode=max`) plus the `target` cache sitting at ~9.9GB of GitHub's 10GB per-repo Actions cache quota. The dominant contributor turned out to be dead weight: every closed/merged PR's `refs/pull/<N>/merge`-scoped caches (buildx blobs + `target/`) stay in the store — unreachable forever, since that ref can never be restored again — until GitHub's LRU eviction reclaims them, which can evict a still-useful cache instead and force a full from-scratch image rebuild in a single job (fresh apt install, fresh `cargo install cargo-pgrx`, fresh full compile); that was a likely contributor to the `No space left on device` failures fixed by the `Free disk space` step in `ci.yml`. Three closed PRs (`refs/pull/42`, `44`, `45`) accounted for ~3.9GB by themselves; pruned manually via `gh cache delete --all --ref refs/pull/<N>/merge` (a dozen entries deletes in ~4s, cheap enough to automate), and `.github/workflows/cache-cleanup.yml` now runs the same deletion on every `pull_request: closed` event so this doesn't reaccumulate.
+
+What's still open: `refs/heads/main`'s own cache (buildx blobs regenerate on every push that touches `Cargo.lock`, since the Dockerfile `COPY`s it before `cargo fetch --locked`) isn't pruned by anything — old main-branch blob generations just sit until eviction. `mode=min` would not help here regardless (this Dockerfile is single-stage, so every layer already ends up in the final image). CI-001 (publish the image to GHCR instead of layer-caching through Actions cache) would sidestep the quota entirely and is the more thorough fix if main's cache growth becomes a problem again.
+
 ## Dependencies
 
 ### DEPS-001: Drop the HTTP/TLS stack dsntk 0.3 embeds in the extension (done in vendor; upstream PR pending)
 
-dsntk-feel-evaluator 0.3.0 hard-depends on reqwest 0.13 with the rustls/aws-lc provider, used only by its `evaluator_java.rs` — a blocking HTTP client that calls a local Java RPC server (127.0.0.1:22023) when a model invokes an "external Java function". pgdmn never wants that inside a PostgreSQL backend, but feature unification is additive so it cannot be opted out downstream; the extension `.so` now statically links reqwest, rustls, and the AWS-LC C library, and the Docker image needs cmake to build aws-lc-sys. The fix is upstream (fits the minimal-upstreamable-patch working agreement): land a small PR on DecisionToolkit/dsntk putting `evaluator_java`/`evaluator_pmml` and the reqwest dependency behind an off-by-default cargo feature (e.g. `external-functions`) that returns an explained null when disabled; 0.2's `default-features = false` reqwest with a ring provider is the fallback shape. pgdmn then consumes dsntk-feel-evaluator with the feature off, removing the HTTP/TLS stack from the backend entirely and demoting the `src/guard.rs` boundary rejection from load-bearing to belt-and-suspenders (the guard is inherently partial for DMN models — see the module docs in `src/guard.rs`). Once merged and adopted, remove cmake from the Dockerfile (comment there points here). No local `[patch]`/fork in the interim.
+dsntk-feel-evaluator 0.3.0 hard-depends on reqwest 0.13 with the rustls/aws-lc provider, used only by its `evaluator_java.rs`—a blocking HTTP client that calls a local Java RPC server (127.0.0.1:22023) when a model invokes an "external Java function". pgdmn never wants that inside a PostgreSQL backend, but feature unification is additive so it cannot be opted out downstream; the extension `.so` now statically links reqwest, rustls, and the AWS-LC C library, and the Docker image needs cmake to build aws-lc-sys. The fix is upstream (fits the minimal-upstreamable-patch working agreement): land a small PR on DecisionToolkit/dsntk putting `evaluator_java`/`evaluator_pmml` and the reqwest dependency behind an off-by-default cargo feature (e.g. `external-functions`) that returns an explained null when disabled; 0.2's `default-features = false` reqwest with a ring provider is the fallback shape. pgdmn then consumes dsntk-feel-evaluator with the feature off, removing the HTTP/TLS stack from the backend entirely and demoting the `src/guard.rs` boundary rejection from load-bearing to belt-and-suspenders (the guard is inherently partial for DMN models—see the module docs in `src/guard.rs`). Once merged and adopted, remove cmake from the Dockerfile (comment there points here). No local `[patch]`/fork in the interim.
 
 Resolved in the vendored copy (the vendoring decision superseded the
 no-fork constraint): `vendor/dsntk-feel-evaluator` now has an
@@ -382,11 +443,11 @@ literal-expression gap is now closed at the build level.
 
 ### DEPS-002: Upstream fix for non-finite FeelNumber Display panic (done in vendor; upstream PR pending)
 
-dsntk-feel-number's `Display` unwraps on the assumption that `bid128_to_string` output contains `'E'`; ±Inf/NaN — reachable because `Mul`/`Add` results are not finiteness-guarded, unlike `pow`/`from_str` — panic instead of printing. pgdmn guards its direct number conversions (BUG-004), but a non-finite number inside a `Value::Range` endpoint still panics via the Display catch-all in `feel_to_json`, and every other dsntk consumer stays exposed. Propose upstream either guarding arithmetic like `pow` does (overflow → FEEL null) or making `Display` total (print `+Inf`/`-Inf`/`NaN`). Minimal upstreamable patch per the working agreement.
+dsntk-feel-number's `Display` unwraps on the assumption that `bid128_to_string` output contains `'E'`; ±Inf/NaN—reachable because `Mul`/`Add` results are not finiteness-guarded, unlike `pow`/`from_str`—panic instead of printing. pgdmn guards its direct number conversions (BUG-004), but a non-finite number inside a `Value::Range` endpoint still panics via the Display catch-all in `feel_to_json`, and every other dsntk consumer stays exposed. Propose upstream either guarding arithmetic like `pow` does (overflow → FEEL null) or making `Display` total (print `+Inf`/`-Inf`/`NaN`). Minimal upstreamable patch per the working agreement.
 
 Fixed in the vendored copy: `Display` is now total (non-finite values
 print the Intel library's textual form instead of panicking on a missing
-exponent). pgdmn's BUG-004 SQL-error guards stay in place — the SQL
+exponent). pgdmn's BUG-004 SQL-error guards stay in place—the SQL
 boundary still rejects non-finite results with a clear error.
 
 ### ADOPT-001: Migrate to pgrx 0.18
@@ -405,7 +466,7 @@ Add og:title, og:description, og:image, and Twitter card meta tags to the websit
 
 ### CHORE-004: Build the Docker image as the non-root user from the start (done)
 
-The base image installed the toolchain, fetched crates, and (formerly) initialized pgrx as root, while tests must run as the non-root `pgdmn` user — the mismatch caused BUG-001 and BUG-002 and was patched with a `chmod`, a `chown`, and a second `cargo pgrx init` in a separate `test` stage. The Dockerfile now creates `pgdmn` first and runs `cargo install cargo-pgrx`, `rustup component add`, `cargo fetch --locked`, and `cargo pgrx init` as that user (with `CARGO_HOME` under its home), making ownership correct by construction in a single stage.
+The base image installed the toolchain, fetched crates, and (formerly) initialized pgrx as root, while tests must run as the non-root `pgdmn` user—the mismatch caused BUG-001 and BUG-002 and was patched with a `chmod`, a `chown`, and a second `cargo pgrx init` in a separate `test` stage. The Dockerfile now creates `pgdmn` first and runs `cargo install cargo-pgrx`, `rustup component add`, `cargo fetch --locked`, and `cargo pgrx init` as that user (with `CARGO_HOME` under its home), making ownership correct by construction in a single stage.
 
 ### FEAT-001: `dmn_create_input_type` helper
 

@@ -9,7 +9,7 @@
 //! Coverage: the FEEL AST walk is complete for the `feel_*` functions. For DMN
 //! models the walk covers business knowledge model logic and every boxed
 //! expression reachable from a decision, including nested function
-//! definitions. What it cannot see is FEEL *text* — an external definition
+//! definitions. What it cannot see is FEEL *text*—an external definition
 //! written inline in a literal expression or decision-table entry is parsed
 //! and compiled inside dsntk at evaluator-build time. That residual gap closes
 //! with the upstream feature gate tracked as DEPS-001 in TODO.md.

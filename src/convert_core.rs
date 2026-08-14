@@ -18,7 +18,7 @@ pub fn json_to_feel(json: &serde_json::Value) -> Value {
         serde_json::Value::Number(n) => {
             // Integer fast path: serde_json already holds i64/u64 for integer
             // JSON numbers, and FeelNumber::from(i64/u64) is one exact FFI
-            // conversion — no String, CString, or per-character decimal parse.
+            // conversion—no String, CString, or per-character decimal parse.
             if let Some(i) = n.as_i64() {
                 Value::Number(FeelNumber::from(i))
             } else if let Some(u) = n.as_u64() {
@@ -50,7 +50,7 @@ pub fn json_to_feel(json: &serde_json::Value) -> Value {
 }
 
 /// Whether a FEEL number is finite. dsntk arithmetic can overflow decimal128
-/// to ±Inf/NaN, whose Display panics inside dsntk (BUG-004) — callers must
+/// to ±Inf/NaN, whose Display panics inside dsntk (BUG-004)—callers must
 /// check before stringifying. NaN compares false to everything, so it fails
 /// the range check too.
 pub fn feel_number_is_finite(n: &FeelNumber) -> bool {
@@ -98,7 +98,7 @@ pub fn try_feel_to_json(value: &Value) -> Result<serde_json::Value, String> {
 /// single exact FFI conversion; the `is_integer` guard is required because
 /// `i64::try_from(&FeelNumber)` truncates fractional values instead of
 /// failing. Everything else renders as a decimal string: f64 when parseable
-/// (non-integers, and integers wider than i64 — the latter lossy, see
+/// (non-integers, and integers wider than i64—the latter lossy, see
 /// CONVERT-001), otherwise a JSON string. The rendered form of those values
 /// never parses as i64, so no i64 attempt is made on the string path.
 fn feel_number_to_json(n: &FeelNumber) -> Result<serde_json::Value, String> {

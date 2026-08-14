@@ -2,7 +2,9 @@
 /profiling/target
 *.swp
 *.swo
+.DS_Store
 benchmark_results.txt
+benchmark_shapes.txt
 /target-host
 /website/dist
 

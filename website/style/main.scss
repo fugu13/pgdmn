@@ -9,6 +9,16 @@
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
   --max-width: 64rem;
+
+  // Syntax highlighting. Deliberately dark tones: each is chosen to clear 4.5:1
+  // against the code background, so the colour is decoration and the code is
+  // still readable without it.
+  --hl-comment: #57606a;
+  --hl-keyword: #a40e26;
+  --hl-type: #0b6b5e;
+  --hl-string: #0a3069;
+  --hl-number: #0550ae;
+  --hl-name: #6639ba;
 }
 
 *,
@@ -92,8 +102,16 @@ main {
   flex: 1;
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: 1rem 1.5rem 2rem;
   width: 100%;
+}
+
+// Anything focusable gets a focus ring you can actually see. A colour change
+// alone is not a focus indicator.
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 // Footer
@@ -105,13 +123,10 @@ main {
   font-size: 0.875rem;
 
   a {
+    // Underlined at rest, not only on hover: these sit inside a sentence, and
+    // colour alone is not allowed to be the thing that marks them as links.
     color: var(--color-primary);
-    text-decoration: none;
-
-    &:hover,
-    &:focus {
-      text-decoration: underline;
-    }
+    text-decoration: underline;
   }
 }
 
@@ -137,14 +152,21 @@ ul, ol {
   margin-bottom: 1rem;
 }
 
-// SQL code block
-.sql-block {
+// SQL code block. It scrolls sideways, so it is focusable; anything focusable
+// needs a focus indicator you can actually see.
+.sql-block,
+.code-block {
   background: var(--color-code-bg);
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   padding: 1rem 1.25rem;
   overflow-x: auto;
   margin: 1rem 0;
+
+  &:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+  }
 
   code {
     font-family: var(--font-mono);
@@ -154,10 +176,47 @@ ul, ol {
   }
 }
 
+// Tokens emitted by the build-time highlighter. syntect names a class per scope
+// atom, so these are the atoms worth colouring; anything else inherits the body
+// colour, which is the readable default rather than a gap.
+.hl-comment,
+.hl-punctuation.hl-definition.hl-comment {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+
+.hl-keyword,
+.hl-storage {
+  color: var(--hl-keyword);
+}
+
+// Type names. In SQL blocks syntect tags them `hl-storage hl-type`; in a
+// function signature the dedicated highlighter tags them `hl-type` alone. Both
+// land here, so a type is one colour everywhere on the site.
+.hl-type,
+.hl-storage.hl-type {
+  color: var(--hl-type);
+}
+
+.hl-string,
+.hl-quoted {
+  color: var(--hl-string);
+}
+
+.hl-constant.hl-numeric,
+.hl-constant.hl-language {
+  color: var(--hl-number);
+}
+
+.hl-support,
+.hl-entity.hl-name {
+  color: var(--hl-name);
+}
+
 // Hero section
 .hero {
   text-align: center;
-  padding: 3rem 0 2rem;
+  padding: 1rem 0 1.25rem;
 
   h1 {
     font-size: 2.5rem;
@@ -166,32 +225,323 @@ ul, ol {
   .tagline {
     font-size: 1.25rem;
     color: var(--color-muted);
-    margin-bottom: 2rem;
+    margin-bottom: 0;
   }
 }
 
-// Card grid (examples page)
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-  gap: 1.5rem;
-  margin-top: 1.5rem;
+// Opening paragraph of a page
+.lede {
+  font-size: 1.15rem;
+  color: var(--color-muted);
+  margin-bottom: 1.5rem;
 }
 
-.card {
+// An aside—a "Note:" line set slightly apart from the surrounding prose.
+.note {
+  font-size: 0.95rem;
+  color: var(--color-muted);
+  border-left: 3px solid var(--color-border);
+  padding-left: 0.75rem;
+}
+
+// What is on this page, and how to jump to it.
+.quicklinks {
+  margin: 1rem 0 2.5rem;
+
+  ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+  }
+
+  // Inline flow, not flex: the description has to wrap mid-sentence and carry on
+  // beside the name, rather than dropping to its own line the moment it is a
+  // character too long.
+  li {
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  li:last-child {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  a {
+    font-weight: 600;
+    white-space: nowrap;
+    margin-right: 0.5rem;
+  }
+
+  span {
+    color: var(--color-muted);
+    font-size: 0.95rem;
+  }
+}
+
+// The two files an example needs, side by side above its SQL.
+.download-list {
+  list-style: none;
+  padding-left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+
+.download {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
-  padding: 1.25rem;
 
-  h3 {
-    margin-bottom: 0.5rem;
-    font-size: 1.1rem;
+  a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+}
+
+.file-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--color-muted);
+}
+
+// "Read the walkthrough"—the way out of an example and into its blog post.
+.more {
+  margin-top: 0.75rem;
+  margin-bottom: 2.5rem;
+  font-weight: 600;
+}
+
+// Blog index
+.post-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.post-summary {
+  border-top: 1px solid var(--color-border);
+  padding: 1.25rem 0;
+
+  h2 {
+    font-size: 1.3rem;
+    margin-bottom: 0.35rem;
+
+    a {
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
   }
 
   p {
     color: var(--color-muted);
-    font-size: 0.95rem;
+    margin-bottom: 0;
+  }
+}
+
+// A post
+.post-kind {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 0.25rem;
+}
+
+.post-nav {
+  border-top: 1px solid var(--color-border);
+  padding-top: 1rem;
+  margin-top: 2.5rem;
+  font-weight: 600;
+}
+
+.post-date {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+// Rendered markdown. Tables arrive already wrapped in .table-scroll and given a
+// caption, so they inherit the table styling above.
+.post-content {
+  h2 {
+    margin-top: 2rem;
+  }
+
+  h3 {
+    margin-top: 1.5rem;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--color-code-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+    padding: 0.05rem 0.3rem;
+  }
+
+  // Lightly-styled links to the display assets (view.xml, render.xslt).
+  a[href^="/display/"] {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+    text-decoration: none;
+    white-space: nowrap;
+
+    &:hover {
+      border-color: var(--color-primary);
+    }
+  }
+
+  blockquote {
+    border-left: 3px solid var(--color-border);
+    padding-left: 1rem;
+    color: var(--color-muted);
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.92rem;
+
+    caption {
+      text-align: left;
+      font-weight: 600;
+      padding-bottom: 0.5rem;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--color-border);
+      padding: 0.45rem 0.7rem;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      background: var(--color-code-bg);
+    }
+
+    // In a decision table, tint the output column's header the way a DMN tool
+    // sets outputs apart from inputs. The output is the last column.
+    table.decision-table th:last-child {
+      background: color-mix(in srgb, var(--color-primary) 14%, var(--color-code-bg));
+    }
+
+    td {
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+    }
+
+    // Inside a table, tint the whole cell and give it a border with some
+    // presence, so a marked row reads as "this row matters"—not as an
+    // accidental text selection sitting inside an otherwise plain row.
+    // Nested here (rather than a flat `td:has(mark)`) so its specificity
+    // beats the plain `td` border set above.
+    td:has(mark) {
+      background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+      border-top: 2px solid var(--color-primary);
+      border-bottom: 2px solid var(--color-primary);
+
+      mark {
+        background: none;
+        padding: 0;
+      }
+    }
+  }
+}
+
+// Text worth calling out in prose. Tinted to match the site palette rather
+// than the browser's default yellow; the surrounding text colour is kept so
+// contrast doesn't depend on the highlight.
+mark {
+  background: color-mix(in srgb, var(--color-primary) 20%, var(--color-surface));
+  color: inherit;
+  padding: 0 0.15em;
+}
+
+// Function reference (docs page)
+// A heading that links to itself. It looks like an ordinary heading; a "#"
+// affordance appears on hover or keyboard focus, and the whole heading is the
+// click target for copying a deep link.
+.anchored a {
+  color: inherit;
+  text-decoration: none;
+
+  &::after {
+    content: " #";
+    color: var(--color-primary);
+    opacity: 0;
+  }
+
+  &:hover::after,
+  &:focus::after {
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+.fn-list {
+  margin-bottom: 2rem;
+
+  dt {
+    font-family: var(--font-mono);
+    margin-top: 1.25rem;
+
+    code {
+      display: block;
+      background: var(--color-code-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 0.35rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.9rem;
+      // Wrap rather than scroll: a signature stays readable on a narrow screen,
+      // and the hanging indent keeps a wrapped argument list visually grouped.
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      padding-left: 1.75rem;
+      text-indent: -1rem;
+    }
+  }
+
+  dd {
+    margin: 0.5rem 0 0;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--color-border);
+    color: var(--color-muted);
+  }
+}
+
+// A wide table has to be scrollable, and a scrollable region has to be
+// reachable by keyboard—hence tabindex on the wrapper, and a focus ring here.
+.table-scroll {
+  overflow-x: auto;
+  margin: 1rem 0 1.5rem;
+
+  &:focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
   }
 }
 

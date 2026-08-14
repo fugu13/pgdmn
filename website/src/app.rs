@@ -1,15 +1,17 @@
 use leptos::prelude::*;
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
-    SsrMode, StaticSegment,
+    ParamSegment, SsrMode, StaticSegment,
     components::{Route, Router, Routes},
-    static_routes::StaticRoute,
+    static_routes::{StaticParamsMap, StaticRoute},
 };
 
+use crate::articles;
 use crate::components::footer::Footer;
 use crate::components::header::Header;
 use crate::components::skip_link::SkipLink;
-use crate::pages::blog::BlogPage;
+use crate::pages::article::ArticlePage;
+use crate::pages::articles::ArticlesPage;
 use crate::pages::docs::DocsPage;
 use crate::pages::examples::ExamplesPage;
 use crate::pages::home::HomePage;
@@ -21,6 +23,17 @@ use crate::routes;
 /// rendered per request, so no route may depend on request state.
 fn prerendered() -> SsrMode {
     SsrMode::Static(StaticRoute::new())
+}
+
+/// One route serves every article, and the slugs it prerenders come from the
+/// markdown files themselves—so adding an article is adding a file, and
+/// nothing here has to change.
+fn article_routes() -> SsrMode {
+    SsrMode::Static(StaticRoute::new().prerender_params(|| async {
+        let mut params = StaticParamsMap::new();
+        params.insert("slug", articles::slugs());
+        params
+    }))
 }
 
 pub fn shell() -> impl IntoView {
@@ -45,7 +58,7 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href="/style.css"/>
-        <Title text="pgdmn — DMN for PostgreSQL"/>
+        <Title text="pgdmn · DMN for PostgreSQL"/>
         <Router>
             <SkipLink/>
             <Header/>
@@ -59,7 +72,16 @@ pub fn App() -> impl IntoView {
                         view=ExamplesPage
                         ssr=prerendered()
                     />
-                    <Route path=StaticSegment(routes::BLOG) view=BlogPage ssr=prerendered()/>
+                    <Route
+                        path=StaticSegment(routes::ARTICLES)
+                        view=ArticlesPage
+                        ssr=prerendered()
+                    />
+                    <Route
+                        path=(StaticSegment(routes::ARTICLES), ParamSegment("slug"))
+                        view=ArticlePage
+                        ssr=article_routes()
+                    />
                     <Route
                         path=StaticSegment(routes::NOT_FOUND)
                         view=NotFoundPage

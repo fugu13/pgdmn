@@ -26,6 +26,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # ubuntu-latest ships several GB of toolchains this project never uses
+      # (.NET, Android SDK, GHC). The Docker image (PG17 + pgrx toolchain)
+      # plus a full opt-level-3 dev-profile workspace build (see Performance
+      # in CLAUDE.md) can exceed the runner's free disk without this —
+      # observed as "No space left on device" mid-compile.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/local/share/boost
+          df -h /
+
       # Creates a docker-container builder so `--cache-to type=gha` and
       # `--load` work; sets it as the default buildx builder that
       # `make test-image`'s `docker buildx build` will use.

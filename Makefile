@@ -1,4 +1,4 @@
-.PHONY: help test-image check build test bench lint fmt verify clean doc-check license-check website website-dev website-build website-serve website-lint website-fmt website-clean vendor-status vendor-diff vendor-test vendor-bench vendor-check vendor-upgrade vendor-inspect
+.PHONY: help test-image check build test bench bench-shapes lint fmt verify clean doc-check license-check website website-dev website-build website-serve website-lint website-fmt website-clean vendor-status vendor-diff vendor-test vendor-bench vendor-check vendor-upgrade vendor-inspect
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -33,6 +33,10 @@ test: test-image ## Run the pgrx test suite against PG17
 bench: test-image ## Run DMN eval benchmark and print results (gated by PGDMN_BENCH=1)
 	docker run --rm -e USER=pgdmn -e PGDMN_BENCH=1 -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test cargo pgrx test pg17 -- bench_dmn_eval_vs_pg_concat
 	@cat benchmark_results.txt 2>/dev/null
+
+bench-shapes: test-image ## Compare query shapes for the same DMN (gated by PGDMN_BENCH_SHAPES=1)
+	docker run --rm -e USER=pgdmn -e PGDMN_BENCH_SHAPES=1 -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test cargo pgrx test pg17 -- bench_query_shapes
+	@cat benchmark_shapes.txt 2>/dev/null
 
 lint: test-image vendor-check ## Run clippy (deny warnings), rustfmt check, and vendor integrity
 	$(DOCKER_RUN) sh -c 'cargo clippy --all-targets -- -D warnings && cargo fmt -- --check'
