@@ -49,7 +49,7 @@ verify: fmt lint vendor-check license-check ## Run after code changes: fmt + lin
 clean: ## Remove build artifacts
 	rm -rf target/
 
-doc-check: ## Verify README.md and the website Docs page cover every SQL-facing function (CI-004)
+doc-check: ## Verify README.md and the website Docs page cover every SQL-facing function
 	@scripts/doc_check.sh
 
 # license-check is host-native (no Docker/pgrx/PostgreSQL involved -- cargo-deny
