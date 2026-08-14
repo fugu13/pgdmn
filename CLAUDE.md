@@ -229,6 +229,7 @@ preserved, property-tested).
 | `CLAUDE.md` | Development conventions | When conventions change |
 | `README.md` | Project description, quick start, an example for **every** SQL function, doc index | Any SQL function change; any doc added/removed |
 | `TODO.md` | Tracked work items with stable IDs | During planning; when items complete |
+| `TODO-ARCHIVE.md` | Completed/dropped TODO items, kept for history under their original ID | When an item in `TODO.md` is finished or explicitly dropped |
 | `BUGHISTORY.md` | Resolved bugs with reoccurrence checks | Immediately when a bug is fixed |
 
 **This project has no `docs/` directory**—a deliberate departure from the global convention, decided 2026-07-14. Everything that would have lived there lives somewhere with a reader: user-facing explanation goes on the website (`website/`—the Docs page, and the walkthroughs in `website/posts/`), decisions go in this file's *Decided* section, and findings and future work go in `TODO.md`. Do not create `docs/`, `docs/ux/`, `docs/specifications/`, or `docs/plans/`.
@@ -236,7 +237,7 @@ preserved, property-tested).
 **Direction, release, and go-to-market notes live outside this repo.** This repo holds the extension and its site; the thinking about where it is going is kept separately.
 
 - **Documentation is part of the code change, not a follow-up.**
-- TODO items: stable IDs with domain-specific prefixes (`TEST-`, `DOCS-`, `A11Y-`, `CHORE-`, …); avoid catch-all prefixes like `FEAT` for new items (existing `FEAT-*` IDs stay stable). Each item is a header plus paragraphs; completed items move to the end of their section.
+- TODO items: stable IDs with domain-specific prefixes (`TEST-`, `PERF-`, `WEB-`, `CHORE-`, …); avoid catch-all prefixes like `FEAT` for new items (existing `FEAT-*` IDs stay stable). Each item is a header plus paragraphs; when an item is finished or explicitly dropped, move it (same ID, same header) to `TODO-ARCHIVE.md` rather than leaving it in `TODO.md` or deleting it outright.
 - BUGHISTORY entries: symptom, root cause, fix, files, reoccurrence checklist. After any change, verify no recorded bug is reintroduced.
 
 ## Git
