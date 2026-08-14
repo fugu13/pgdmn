@@ -297,6 +297,12 @@ pub fn satisfies_null(trace: bool, scope: &FeelScope, input_expression: &str, in
 
 /// Utility function for testing if parsed `expression` evaluates to [FeelDateTime]
 /// and the evaluated value is in the range (`date_time` .. `date_time + seconds`).
+// PGDMN: H23 — its only caller was the old `bif_now::_0001`, which asserted
+// `now()` against the live wall clock. `now()` is no longer a recognized
+// built-in (see dsntk-feel/src/bif.rs), so that test now asserts a fixed
+// "unresolved function" null instead and no longer needs this helper. Kept
+// rather than deleted for minimal vendor diff.
+#[expect(dead_code)] // PGDMN: H23 — see comment above
 pub fn te_date_time_local_after(trace: bool, scope: &FeelScope, expression: &str, date_time: FeelDateTime, seconds: u8) {
   let (year, month, day) = date_time.date().as_tuple();
   let (hour, min, sec, nano, _) = date_time.time().as_tuple();

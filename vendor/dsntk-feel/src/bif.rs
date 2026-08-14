@@ -55,7 +55,6 @@ const BIF_MODE: &str = "mode";
 const BIF_MODULO: &str = "modulo";
 const BIF_MONTH_OF_YEAR: &str = "month of year";
 const BIF_NOT: &str = "not";
-const BIF_NOW: &str = "now";
 const BIF_NUMBER: &str = "number";
 const BIF_ODD: &str = "odd";
 const BIF_OVERLAPS: &str = "overlaps";
@@ -86,12 +85,19 @@ const BIF_SUBSTRING_AFTER: &str = "substring after";
 const BIF_SUBSTRING_BEFORE: &str = "substring before";
 const BIF_SUM: &str = "sum";
 const BIF_TIME: &str = "time";
-const BIF_TODAY: &str = "today";
 const BIF_UNION: &str = "union";
 const BIF_UPPER_CASE: &str = "upper case";
 const BIF_WEEK_OF_YEAR: &str = "week of year";
 const BIF_YEARS_AND_MONTHS_DURATION: &str = "years and months duration";
 
+// PGDMN: H23 — `Now` and `Today` are intentionally absent from this enum.
+// Their implementations (`bif_now`/`bif_today` in dsntk-feel-evaluator,
+// `core::now`/`core::today`) read the live system clock on every call, which
+// falsifies the `IMMUTABLE` contract every pgdmn SQL-facing function
+// declares. Removing them here — the name-to-implementation mapping, not
+// just a caller-side guard — makes `now()`/`today()` unreachable as FEEL
+// function calls anywhere dsntk-feel-evaluator is used, so `IMMUTABLE` holds
+// without any pgdmn-side rejection logic. See vendor/PATCHES.md (H23).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Bif {
   Abs,
@@ -144,7 +150,6 @@ pub enum Bif {
   Modulo,
   MonthOfYear,
   Not,
-  Now,
   Number,
   Odd,
   Overlaps,
@@ -175,7 +180,6 @@ pub enum Bif {
   SubstringBefore,
   Sum,
   Time,
-  Today,
   Union,
   UpperCase,
   WeekOfYear,
@@ -237,7 +241,6 @@ impl FromStr for Bif {
       BIF_MODULO => Ok(Self::Modulo),
       BIF_MONTH_OF_YEAR => Ok(Self::MonthOfYear),
       BIF_NOT => Ok(Self::Not),
-      BIF_NOW => Ok(Self::Now),
       BIF_NUMBER => Ok(Self::Number),
       BIF_ODD => Ok(Self::Odd),
       BIF_OVERLAPS => Ok(Self::Overlaps),
@@ -268,7 +271,6 @@ impl FromStr for Bif {
       BIF_SUBSTRING_BEFORE => Ok(Self::SubstringBefore),
       BIF_SUM => Ok(Self::Sum),
       BIF_TIME => Ok(Self::Time),
-      BIF_TODAY => Ok(Self::Today),
       BIF_UNION => Ok(Self::Union),
       BIF_UPPER_CASE => Ok(Self::UpperCase),
       BIF_WEEK_OF_YEAR => Ok(Self::WeekOfYear),
@@ -346,7 +348,6 @@ pub fn is_built_in_function_name(name: impl AsRef<str>) -> bool {
       | BIF_MODULO
       | BIF_MONTH_OF_YEAR
       | BIF_NOT
-      | BIF_NOW
       | BIF_NUMBER
       | BIF_ODD
       | BIF_OVERLAPS
@@ -377,7 +378,6 @@ pub fn is_built_in_function_name(name: impl AsRef<str>) -> bool {
       | BIF_SUBSTRING_BEFORE
       | BIF_SUM
       | BIF_TIME
-      | BIF_TODAY
       | BIF_UNION
       | BIF_UPPER_CASE
       | BIF_WEEK_OF_YEAR
