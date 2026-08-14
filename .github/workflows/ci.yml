@@ -139,7 +139,12 @@ jobs:
 
       - uses: taiki-e/install-action@v2.85.5
         with:
-          tool: cargo-deny
+          # Pinned: cargo-deny's CLI has moved --config between the top-level
+          # and the `check` subcommand across versions (an unpinned install
+          # once resolved a version where `check --config` was rejected,
+          # while every version tested locally accepts it there) -- pin to
+          # what's actually verified rather than drift silently.
+          tool: cargo-deny@0.19.4
 
       - run: make license-check
 

@@ -62,9 +62,9 @@ doc-check: ## Verify README.md and the website Docs page cover every SQL-facing 
 # keeps a lint-style check from ever silently rewriting a Cargo.lock (see
 # BUG-001 on why this repo treats lockfile fidelity as load-bearing).
 license-check: ## Check dependency licenses across all three cargo workspaces (cargo-deny; host-native)
-	cargo deny --locked check -c deny.toml licenses
-	cd website && cargo deny --locked check -c ../deny.toml licenses
-	cd profiling && cargo deny --locked check -c ../deny.toml licenses
+	cargo deny --locked check --config deny.toml licenses
+	cd website && cargo deny --locked check --config ../deny.toml licenses
+	cd profiling && cargo deny --locked check --config ../deny.toml licenses
 
 # --- Vendored dsntk management ------------------------------------------
 # The git history under vendor/ is a pristine upstream base plus a minimal
