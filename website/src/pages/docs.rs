@@ -46,6 +46,7 @@ pub fn DocsPage() -> impl IntoView {
                 <code>"feel_eval_text"</code>", "
                 <code>"feel_eval_date"</code>", "
                 <code>"feel_eval_timestamp"</code>", "
+                <code>"feel_eval_numrange"</code>", "
                 <code>"feel_eval_interval"</code>
             </li>
         </ul>
