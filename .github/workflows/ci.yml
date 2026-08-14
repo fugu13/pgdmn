@@ -103,13 +103,14 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Security-advisory scan of the dependency tree; kept OFF the required
-  # aggregate so an unfixable upstream advisory in the pgrx/dsntk tree never
-  # blocks unrelated PRs.
+  # Security-advisory scan of the dependency tree. Required and blocking: an
+  # advisory in the pgrx/dsntk tree should stop a merge, not just get noticed
+  # after the fact. If an unfixable upstream advisory ever blocks unrelated
+  # PRs, use `cargo audit --ignore RUSTSEC-...` (documented, reviewed) rather
+  # than reverting to continue-on-error.
   audit:
-    name: cargo-audit (advisories, non-blocking)
+    name: cargo-audit (advisories)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
 
@@ -164,8 +165,7 @@ jobs:
   ci:
     name: CI aggregate
     if: always()
-    # audit is deliberately excluded here because it is non-blocking.
-    needs: [extension, docs, license]
+    needs: [extension, docs, license, audit]
     runs-on: ubuntu-latest
     steps:
       # A single required status check that goes green only if every needed job
