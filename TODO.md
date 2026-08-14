@@ -182,11 +182,13 @@ Scoping note: no typed-introspection columns get added to `dmn_invocables`/`dmn_
 - Whether to support checking multiple invocables in one call or keep it single-invocable
 - How to handle invocables that exist in one model but not the other (report as incompatible vs. skip with warning)
 
-### WEB-006: Mobile hamburger menu
+### WEB-008: Tokenize the site's mobile breakpoint
 
-The site navigation needs a responsive hamburger menu for narrow viewports.
+`main.scss` centralizes every other reusable dimension as a `:root` custom property (`--max-width`, the `--color-*`/`--font-*` tokens), but the `@media (max-width: 40em)` query added for the mobile nav (WEB-006) hardcodes the literal instead of referencing a token. CSS custom properties can't be read inside a media feature query, so this needs a compile-time Sass `$variable`—not yet a pattern used anywhere in this file—defined once and referenced from every breakpoint. Worth doing once a second responsive rule needs the same breakpoint; premature with only one caller.
 
-The original framing of this item (focus trapping, an aria-expanded toggle button) assumed JavaScript, which the static-prerender decision (WEB-001, see CLAUDE.md) removed. Either implement it without script—a CSS-only disclosure driven by `:checked` or `:focus-within`, which needs no focus trap because nothing is rendered inert—or make the case that this feature alone justifies reintroducing a script bundle. Resolve that before designing the markup, because the two shapes differ.
+### WEB-009: Scope the generic `ul, ol` prose-list rule to content containers
+
+The sitewide `ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; }` rule (meant for prose lists in article/docs body content) is not scoped to content—its element-selector specificity beats the universal reset for `padding-left` on *any* `<ul>`/`<ol>` on the site, so `.site-nav`, `.quicklinks ul`, `.download-list`, and `.post-list` each carry their own `padding-left: 0` override to cancel it back out. Scoping the base rule to something like `main ul, main ol` would let all four overrides be dropped in one pass. Low urgency—the current per-component overrides are an established, working pattern, not a bug.
 
 ### FEAT-007: Accept PG range types as inputs in the record-eval path
 

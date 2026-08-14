@@ -84,15 +84,38 @@ body {
   display: flex;
   gap: 1.25rem;
   list-style: none;
+  padding-left: 0;
 
   a {
     color: var(--color-text);
     text-decoration: none;
     font-size: 0.95rem;
+    white-space: nowrap;
 
     &:hover,
     &:focus {
       color: var(--color-primary);
+    }
+  }
+}
+
+// Narrow viewports: let the nav wrap onto its own line(s) below the logo
+// instead of overflowing the header. Pure CSS — the site ships no JS. Each
+// item keeps its text on one line (white-space: nowrap above); underlining
+// them here — the same convention the footer uses for inline links — marks
+// a wrapped row as discrete links rather than run-on text, without
+// disguising them as buttons.
+@media (max-width: 40em) {
+  .site-header-inner {
+    flex-wrap: wrap;
+  }
+
+  .site-nav {
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+
+    a {
+      text-decoration: underline;
     }
   }
 }
