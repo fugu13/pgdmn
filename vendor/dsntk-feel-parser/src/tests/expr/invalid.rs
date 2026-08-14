@@ -94,3 +94,23 @@ fn _0011() {
     "#;
   accept(&scope!(), StartExpression, input, expected, false);
 }
+
+// PGDMN: H22 — the depth cap (500) guards against native stack overflow in every recursive
+// consumer of the AST built here (Debug/Clone/Drop, dsntk-feel-evaluator, ClosureBuilder,
+// pgdmn's own guard.rs). Chained unary minus adds exactly one level of nesting per `-`, so it
+// gives an exact, cheap way to sit right at (or one past) the cap; see vendor/PATCHES.md.
+
+#[test]
+fn _0012() {
+  // Exactly at the cap: parses normally, does not error.
+  let input = format!("{}1", "-".repeat(499));
+  let result = Parser::new(&scope!(), StartExpression, &input, false).parse();
+  assert!(result.is_ok(), "expected a successful parse at the depth cap, got: {result:?}");
+}
+
+#[test]
+fn _0013() {
+  // One level past the cap: a clean parse error, not a panic or stack overflow.
+  let input = format!("{}1", "-".repeat(500));
+  te(&input, "ParserError", "expression nested too deeply, exceeds maximum allowed depth of 500");
+}
