@@ -1,0 +1,49 @@
+# cargo-deny license policy, shared across this repo's three separate cargo
+# workspaces (root pgdmn + vendored dsntk crates, website/, profiling/).
+# Each workspace has its own Cargo.lock and is checked with its own
+# `cargo deny` invocation (`cargo deny` resolves the crate graph via `cargo
+# metadata` from the current directory, so one command can't span workspaces
+# that are `exclude`d from each other), but all three point at this one file
+# via `-c` so the license allowlist stays in exactly one place. See `make
+# license-check` in the Makefile.
+#
+# Only the `licenses` check is configured/run here. Security advisories are
+# already covered separately by `cargo audit` (non-blocking CI job); `bans`
+# and `sources` are out of scope for this gate and left at cargo-deny's
+# defaults, which are permissive enough not to fire (bans.multiple-versions
+# defaults to "warn", not "deny").
+#
+# Schema note: current cargo-deny (0.19-0.20) has no `unlicensed`/`copyleft`/
+# `allow-osi-fsf-free` toggles — those were removed in earlier releases.
+# `[licenses] allow` is now a plain allowlist and anything not listed (or not
+# satisfiable via an OR-expression against the list) is denied by default,
+# which is exactly the "deny everything else" behavior this gate wants.
+
+[licenses]
+confidence-threshold = 0.8
+allow = [
+    "MIT",
+    "Apache-2.0",
+    # Present via icu4x crates (idna/unicode-normalization dependents),
+    # always paired with MIT/Apache-2.0 in an AND-expression.
+    "Unicode-3.0",
+    # BSD-2-Clause and BSD-3-Clause: seen in a handful of transitive deps
+    # (e.g. subtle-family crates), usually OR'd with MIT/Apache-2.0 but
+    # listed explicitly so a future crate offering only the BSD variant
+    # still passes.
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unlicense",
+    # Boost Software License 1.0 (e.g. via icu4x's dependency graph).
+    "BSL-1.0",
+    # CC0-1.0 (public-domain-equivalent dedication): sole license of
+    # `base16`, pulled in via the website/profiling dependency graph.
+    "CC0-1.0",
+]
+# r-efi declares "MIT OR Apache-2.0 OR LGPL-2.1-or-later": an OR-expression
+# is satisfied by any one allowed license in it, so this passes via MIT/
+# Apache-2.0 without adding LGPL-2.1-or-later to the allow list above --
+# doing so would let a future crate that offers *only* an LGPL license
+# through, which is not the intent.
