@@ -8,8 +8,10 @@ hot path in-tree.
 
 - **Source:** published crates.io tarballs
   (`https://static.crates.io/crates/{name}/{name}-0.3.0.crate`), extracted
-  verbatim. Each tarball's sha256 was verified against the checksum recorded
-  in the pre-vendoring `Cargo.lock` (which pinned the registry versions).
+  verbatim. Each tarball's sha256 is recorded in `vendor/CHECKSUMS`, written
+  automatically by `make vendor-upgrade` (`scripts/vendor.sh`, `upgrade()`)
+  as it downloads the pristine tree; `make vendor-status` flags drift
+  between that manifest and the currently-vendored crate/version set.
 - **Wiring:** `[patch.crates-io]` entries in the root `Cargo.toml` redirect
   every dsntk crate to its `vendor/` path, so the whole dependency graph
   (including dsntk-internal cross-dependencies) resolves to these sources.
@@ -35,6 +37,9 @@ hot path in-tree.
   do not want in a PostgreSQL backend behind off-by-default cargo features
   (e.g. the external Java/PMML evaluators and their HTTP/TLS stack —
   DEPS-001). Gates are designed to be upstreamable.
+- **Review routing:** `.github/CODEOWNERS` maps `vendor/**` (and
+  `vendor/CHECKSUMS` explicitly) to the repo owner, so GitHub auto-requests
+  their review on any PR touching this directory.
 
 Vendored code is third-party: repo lint/style conventions do not apply to
 `vendor/`, and `vendor/rustfmt.toml` disables formatting so `make fmt` leaves

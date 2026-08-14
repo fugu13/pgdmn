@@ -17,6 +17,40 @@ status() {
         echo "patch layer size (excluding vendor README/rustfmt config):"
         git diff --shortstat "$pristine" -- vendor/ ':(exclude)vendor/README.md' ':(exclude)vendor/PATCHES.md' ':(exclude)vendor/rustfmt.toml' ':(exclude)vendor/LICENSE-*' ':(exclude)vendor/NOTICE' | sed 's/^/  /'
     fi
+    checksums_status "$version"
+}
+
+# Cheap drift check, not a re-verification against live tarballs: confirms
+# every crate in $CRATES has a vendor/CHECKSUMS entry recorded at the
+# currently-vendored version. Catches the manifest going stale (crate list
+# or version changed without re-running vendor-upgrade); does not re-hash
+# vendor/ or re-fetch upstream.
+checksums_status() {
+    version="$1"
+    if [ ! -f vendor/CHECKSUMS ]; then
+        echo "vendor/CHECKSUMS:       MISSING (run 'make vendor-upgrade VERSION=$version' to regenerate)"
+        return
+    fi
+    missing=""
+    mismatched=""
+    for c in $CRATES; do
+        line=$(grep "^$c " vendor/CHECKSUMS || true)
+        if [ -z "$line" ]; then
+            missing="$missing $c"
+            continue
+        fi
+        recorded_version=$(echo "$line" | awk '{print $2}')
+        if [ "$recorded_version" != "$version" ]; then
+            mismatched="$mismatched $c(recorded=$recorded_version)"
+        fi
+    done
+    if [ -z "$missing" ] && [ -z "$mismatched" ]; then
+        echo "vendor/CHECKSUMS:       OK (all crates recorded at $version)"
+    else
+        echo "vendor/CHECKSUMS:       DRIFT DETECTED"
+        [ -n "$missing" ] && echo "  missing entries for:$missing"
+        [ -n "$mismatched" ] && echo "  version mismatch:$mismatched"
+    fi
 }
 
 check() {
@@ -47,11 +81,13 @@ upgrade() {
     stage=$(mktemp -d)
     trap 'rm -rf "$stage"' EXIT
     echo "downloading dsntk $version crates to $stage"
+    : > "$stage/CHECKSUMS.new"
     for c in $CRATES; do
         url="https://static.crates.io/crates/$c/$c-$version.crate"
         curl -fsSL "$url" -o "$stage/$c.crate" || { echo "FAILED to download $c $version"; exit 1; }
         sha=$(shasum -a 256 "$stage/$c.crate" | cut -d' ' -f1)
         echo "  $c $version sha256=$sha"
+        echo "$c $version $sha" >> "$stage/CHECKSUMS.new"
         tar xzf "$stage/$c.crate" -C "$stage"
     done
     echo "swapping vendor/ to pristine $version (README/rustfmt.toml preserved)"
@@ -59,6 +95,15 @@ upgrade() {
         rm -rf "vendor/$c"
         cp -R "$stage/$c-$version" "vendor/$c"
     done
+    {
+        echo "# sha256 of each vendored dsntk crate's crates.io tarball, as fetched from"
+        echo "# https://static.crates.io/crates/<name>/<name>-<version>.crate at vendoring"
+        echo "# time. Written automatically by \`make vendor-upgrade VERSION=x.y.z\`"
+        echo "# (scripts/vendor.sh, upgrade())—do not hand-edit; re-run vendor-upgrade to"
+        echo "# regenerate. See vendor/README.md for how this fits the pristine-base +"
+        echo "# patch-layer model."
+        cat "$stage/CHECKSUMS.new"
+    } > vendor/CHECKSUMS
     git add vendor
     git commit -m "Vendor pristine dsntk $version
 
