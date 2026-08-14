@@ -79,6 +79,14 @@ to the superuser fix. Needs a pgvector-style audit (review every
 installed function/type for anything a non-superuser could turn into
 more access than they started with) before it's safe to flip.
 
+### PUBLIC-010: Enable secret scanning and push protection right after going public
+
+GitHub's native secret-scanning and push-protection are free for public
+repos and near-zero setup, but only apply once the repo is public — do
+this immediately after the visibility flip, not as an afterthought. A
+point-in-time preflight sweep finding no secrets today isn't a
+substitute for an ongoing control on every future push.
+
 ## Upstream
 
 ### UPSTREAM-001: Open the upstream PRs and link them (executes PERF-006)
