@@ -47,3 +47,19 @@ custom domain was explicitly set (`PUT .../pages` with
 (covers both `www.pgdmn.com` and `pgdmn.com`) and HTTPS enforcement
 was turned on. Verified live: both domains serve real content over
 HTTP and HTTPS, and the apex redirects (301) to `https://www.pgdmn.com`.
+
+### WEB-006: Mobile hamburger menu (done, different shape than titled)
+
+The site nav overflowed the header on narrow viewports. Resolved without
+a hamburger: `.site-nav` wraps onto additional lines below the logo
+(`flex-wrap` scoped to `@media (max-width: 40em)`), each item keeps its
+label on one line (`white-space: nowrap`), and wrapped items are
+underlined on mobile only—matching the footer's existing convention for
+inline links—so a multi-line nav still reads as discrete links rather
+than run-on prose. Considered and rejected: a CSS-only `:checked`-driven
+hamburger disclosure (weaker accessibility semantics than a plain link
+list—no live `aria-expanded`—for no real space savings, since the site
+only has six nav items). Follow-ups split out: WEB-008 (tokenize the
+`40em` breakpoint), WEB-009 (scope the generic `ul, ol` prose rule so
+`.site-nav` and its siblings don't each need a `padding-left: 0`
+override).
