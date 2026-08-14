@@ -149,7 +149,7 @@ jobs:
 
       - run: make license-check
 
-  # Enforces CI-004: README.md and the website Docs page must each cover every
+  # Enforces that README.md and the website Docs page must each cover every
   # #[pg_extern] function in src/functions/*.rs. Pure text analysis over the
   # checked-out source (scripts/doc_check.sh) -- no Docker/pgrx/PG needed, so
   # this runs directly on the runner rather than through the extension job's
