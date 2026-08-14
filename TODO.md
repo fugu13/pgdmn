@@ -95,6 +95,14 @@ homepage to www.pgdmn.com once the site is live — cosmetic, but worth
 doing at the same moment as the visibility flip rather than forgetting
 it.
 
+### PUBLIC-012: Add PGXN badge to README once published
+
+Add a PGXN badge to the README's badge row once the extension is
+actually published there (see the PGXN Setup steps). A crates.io badge
+is a separate, lower-priority call — the current plan (RELEASEPLAN.md)
+is PGXN-only distribution, not crates.io, so a crates.io badge only
+makes sense if that plan changes; don't add one just to have one.
+
 ## Upstream
 
 ### UPSTREAM-001: Open the upstream PRs and link them (executes PERF-006)
