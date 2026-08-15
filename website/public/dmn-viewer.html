@@ -4,6 +4,21 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DMN viewer—pgdmn</title>
+    <meta
+      name="description"
+      content="Open a pgdmn example model in standard DMN tooling, in the browser."
+    />
+    <!--
+      This page is a viewer for whatever `?model=` names, so on its own it has
+      no content worth indexing and nothing a share card could say. It is a
+      static asset rather than a Leptos route, so it also states its own icons
+      instead of inheriting the ones the prerendered pages get.
+    -->
+    <meta name="robots" content="noindex, follow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#336791" />
     <!--
       This is the one page on the site that runs JavaScript. Everything else is
       prerendered static HTML with no scripts (see WEB-001). This page exists to

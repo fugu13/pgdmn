@@ -13,6 +13,9 @@ use leptos_axum::generate_route_list_with_ssg;
 use pgdmn_website::app::shell;
 use pgdmn_website::articles;
 use pgdmn_website::routes;
+// The canonical host, shared with the pages: the CNAME written here and the
+// absolute URLs in every page's social metadata must name the same site.
+use pgdmn_website::site::DOMAIN;
 use pgdmn_website::stylesheet;
 
 type BoxError = Box<dyn std::error::Error>;
@@ -22,10 +25,6 @@ const DIST: &str = "dist";
 /// Assets copied verbatim into the site root.
 const PUBLIC: &str = "public";
 const STYLESHEET: &str = "style/main.scss";
-/// The canonical host. GitHub Pages reads this from the published output and
-/// redirects the apex (pgdmn.com) here. Pages are linked with absolute paths,
-/// so the site must be served from a domain root—not a `github.io` subpath.
-const DOMAIN: &str = "www.pgdmn.com";
 /// The one page that keeps its scripts: an interactive DMN viewer, copied
 /// verbatim from `public/`. See `strip_scripts`.
 const DMN_VIEWER: &str = "dmn-viewer.html";

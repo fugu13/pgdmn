@@ -1,8 +1,9 @@
 use leptos::prelude::*;
-use leptos_meta::Title;
 
+use crate::components::page_meta::PageMeta;
 use crate::components::sql_block::SqlBlock;
 use crate::highlight;
+use crate::routes;
 
 /// One function: its full signature, then what it does.
 ///
@@ -50,7 +51,12 @@ fn Shell(#[prop(into)] label: String, #[prop(into)] code: String) -> impl IntoVi
 #[component]
 pub fn DocsPage() -> impl IntoView {
     view! {
-        <Title text="Documentation · pgdmn"/>
+        <PageMeta
+            title="Documentation · pgdmn"
+            card_title="pgdmn documentation"
+            description="Install instructions, and every function pgdmn installs, with its arguments: DMN evaluation, introspection, and FEEL."
+            path=format!("/{}/", routes::DOCS)
+        />
         <h1 id="documentation">"Documentation"</h1>
         <p class="lede">
             "Install instructions, and every function pgdmn installs, with its arguments."

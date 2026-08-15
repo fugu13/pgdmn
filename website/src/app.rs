@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{MetaTags, Stylesheet, provide_meta_context};
 use leptos_router::{
     ParamSegment, SsrMode, StaticSegment,
     components::{Route, Router, Routes},
@@ -44,6 +44,14 @@ pub fn shell() -> impl IntoView {
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                // Identical on every page, so they are written here rather
+                // than registered per route. The SVG is what modern browsers
+                // use; the .ico is the fallback for the ones that still ask
+                // for /favicon.ico by name.
+                <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+                <link rel="alternate icon" href="/favicon.ico" sizes="32x32"/>
+                <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+                <meta name="theme-color" content="#336791"/>
                 <MetaTags/>
             </head>
             <body>
@@ -59,7 +67,6 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href=stylesheet::href()/>
-        <Title text="pgdmn · DMN for PostgreSQL"/>
         <Router>
             <SkipLink/>
             <Header/>

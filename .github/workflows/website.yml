@@ -40,6 +40,11 @@ jobs:
 
       - run: make website-lint
 
+      # Markdown parsing, front matter, and the metadata limits the pages are
+      # written against: cheap, and they fail before a build that would look
+      # fine and read wrong.
+      - run: make website-test
+
       - run: make website-build
 
       # The content pages ship no JavaScript (WEB-001). Leptos emits inline
@@ -56,6 +61,32 @@ jobs:
             exit 1
           fi
           echo "content pages are script-free (dmn-viewer.html excepted)"
+
+      # A missing tag costs nothing at build time and everything at the moment
+      # someone pastes a link, where it is invisible until a human notices a
+      # bare URL. dist/ is on disk, so check it here instead (WEB-007).
+      # dmn-viewer.html is exempt: it renders whatever `?model=` names, so it
+      # is deliberately noindex with no card of its own.
+      - name: Assert every page carries its social metadata
+        run: |
+          status=0
+          while IFS= read -r page; do
+            case "$page" in */dmn-viewer.html) continue ;; esac
+            for tag in 'name="description"' 'property="og:title"' \
+                       'property="og:description"' 'property="og:image"' \
+                       'name="twitter:card"' 'rel="canonical"'; do
+              grep -qF "$tag" "$page" || { echo "::error file=$page::missing $tag"; status=1; }
+            done
+            # Relative URLs are silently dropped by crawlers, so the card and
+            # canonical have to be absolute.
+            grep -qF 'content="https://www.pgdmn.com/share-card.png"' "$page" \
+              || { echo "::error file=$page::og:image is not the absolute card URL"; status=1; }
+          done < <(find website/dist -name '*.html')
+          for asset in share-card.png favicon.svg favicon.ico apple-touch-icon.png; do
+            test -s "website/dist/$asset" || { echo "::error::missing website/dist/$asset"; status=1; }
+          done
+          [ "$status" -eq 0 ] || exit 1
+          echo "every page carries its social metadata, and the card and icons are present"
 
       - name: Assert the deployable artifact is complete
         run: |

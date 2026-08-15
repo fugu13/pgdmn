@@ -1,0 +1,110 @@
+<!--
+  Source for public/share-card.png — the 1200x630 image every social platform
+  shows when a pgdmn link is pasted. This file is never served: it is the
+  editable original the PNG is rendered from, kept in the repo so the card can
+  be changed by editing markup rather than by opening a binary in an image
+  editor. It lives outside public/ deliberately, so the prerender does not copy
+  it into the site.
+
+  To regenerate after editing, render it at exactly 1200x630 and overwrite
+  public/share-card.png. Any headless browser will do; with Playwright
+  installed that is:
+
+    npx playwright screenshot --viewport-size=1200,630 \
+      website/card/share-card.html website/public/share-card.png
+
+  Then check it at thumbnail size — a card is read at 220px more often than at
+  full size. The typography deliberately uses only fonts a bare Linux renderer
+  has (Liberation Sans, DejaVu Sans Mono), so the rendered PNG looks the same
+  wherever it is regenerated.
+
+  The decision table shown is illustrative: the columns and outcomes mirror the
+  loan-eligibility example without claiming to be it.
+-->
+<meta charset="utf-8">
+<title>pgdmn share card (1200x630)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; }
+  body {
+    font-family: "Liberation Sans", "DejaVu Sans", sans-serif;
+    background: #fafafa;
+    color: #1a1a2e;
+    padding: 66px 72px;
+    display: grid;
+    grid-template-columns: 1fr 470px;
+    gap: 56px;
+    align-items: center;
+    border-top: 14px solid #336791;
+  }
+  .wordmark {
+    font-size: 120px;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1;
+  }
+  .tagline {
+    font-size: 36px;
+    line-height: 1.34;
+    color: #33384a;
+    margin-top: 24px;
+  }
+  .tagline b { color: #336791; font-weight: 700; }
+  .domain {
+    margin-top: 34px;
+    font-size: 26px;
+    font-weight: 700;
+    color: #336791;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: "DejaVu Sans Mono", monospace;
+    font-size: 25px;
+    background: #ffffff;
+    box-shadow: 0 10px 30px rgba(26, 26, 46, 0.10);
+  }
+  th, td {
+    border: 2px solid #c8cfd8;
+    padding: 16px 18px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  thead th {
+    background: #336791;
+    color: #ffffff;
+    font-weight: 700;
+  }
+  .hit {
+    background: #1a1a2e;
+    color: #ffffff;
+    text-align: center;
+    width: 66px;
+  }
+  tbody td:last-child { color: #0b6b5e; font-weight: 700; }
+  tbody tr:nth-child(2) td:not(.hit) { background: #f3f6fa; }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: "Liberation Sans", sans-serif;
+    font-size: 24px;
+    color: #6b7280;
+    padding-bottom: 14px;
+  }
+</style>
+<div>
+  <div class="wordmark">pgdmn</div>
+  <div class="tagline">Run DMN decision tables inside <b>PostgreSQL</b>. No network hop, no external engine&mdash;just SQL.</div>
+  <div class="domain">www.pgdmn.com</div>
+</div>
+<table>
+  <caption>Eligibility</caption>
+  <thead>
+    <tr><th class="hit">U</th><th>Age</th><th>Income</th><th>Result</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="hit">1</td><td>&ge;18</td><td>&ge;50k</td><td>Approve</td></tr>
+    <tr><td class="hit">2</td><td>&ge;18</td><td>&lt;50k</td><td>Review</td></tr>
+    <tr><td class="hit">3</td><td>&lt;18</td><td>&ndash;</td><td>Decline</td></tr>
+  </tbody>
+</table>

@@ -1,4 +1,4 @@
-.PHONY: help test-image check build test bench bench-shapes lint fmt verify clean doc-check license-check website website-dev website-build website-serve website-lint website-fmt website-clean vendor-status vendor-diff vendor-test vendor-bench vendor-check vendor-upgrade vendor-inspect
+.PHONY: help test-image check build test bench bench-shapes lint fmt verify clean doc-check license-check website website-dev website-build website-serve website-test website-lint website-fmt website-clean vendor-status vendor-diff vendor-test vendor-bench vendor-check vendor-upgrade vendor-inspect
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -126,6 +126,9 @@ website-serve: ## Serve the prerendered site as a static host would
 
 website-dev: website-build ## Prerender, then serve; re-run to pick up changes
 	$(MAKE) website-serve
+
+website-test: ## Run the website's unit tests (markdown parsing, metadata, prerender)
+	$(WEBSITE_CARGO) test
 
 website-lint: ## Run clippy (deny warnings) and rustfmt check on the website
 	$(WEBSITE_CARGO) clippy --all-targets -- -D warnings

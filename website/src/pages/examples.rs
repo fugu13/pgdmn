@@ -1,7 +1,7 @@
 use leptos::prelude::*;
-use leptos_meta::Title;
 
 use crate::components::download::{Download, FileKind};
+use crate::components::page_meta::PageMeta;
 use crate::components::sql_block::SqlBlock;
 use crate::routes;
 
@@ -20,7 +20,12 @@ fn Walkthrough(#[prop(into)] slug: String, #[prop(into)] scenario: String) -> im
 #[component]
 pub fn ExamplesPage() -> impl IntoView {
     view! {
-        <Title text="Examples · pgdmn"/>
+        <PageMeta
+            title="Examples · pgdmn"
+            card_title="pgdmn examples"
+            description="Loan eligibility, order pricing, compliance checks, and ticket routing—models, datasets, and the SQL that runs them."
+            path=format!("/{}/", routes::EXAMPLES)
+        />
         <h1>"Examples"</h1>
 
         <nav class="quicklinks" aria-label="The examples on this page">

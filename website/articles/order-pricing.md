@@ -2,6 +2,7 @@
 title: Change pricing policies on the fly
 date: 2026-07-12
 summary: Store each pricing policy as a dated row, and let one query price every order under whichever version is in effect on the day—so starting a promotion is an INSERT with a future date, not a deploy.
+description: Store each pricing policy as a dated row, and let one query price every order under the version in effect—starting a promotion is an INSERT, not a deploy.
 files: order-pricing.dmn, order-pricing-promo.dmn, orders.csv
 example: pricing
 ---

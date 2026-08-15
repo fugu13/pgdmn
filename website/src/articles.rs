@@ -22,6 +22,11 @@ pub struct Article {
     pub date: String,
     /// Shown on the articles index.
     pub summary: String,
+    /// What a share card and a search result say about this article. Optional:
+    /// most summaries serve both purposes, but a summary written to sit under a
+    /// heading on the index can run longer than a crawler will show, and a
+    /// description truncated mid-sentence reads as neglect.
+    pub description: Option<String>,
     /// The anchor on the Examples page this article walks through, if any.
     pub example: Option<String>,
     /// The downloadable files this article uses (model and dataset filenames),
@@ -37,6 +42,13 @@ pub struct Article {
 pub fn all() -> &'static [Article] {
     static CACHE: OnceLock<Vec<Article>> = OnceLock::new();
     CACHE.get_or_init(|| load().unwrap_or_default())
+}
+
+impl Article {
+    /// The one sentence that represents this article away from the site.
+    pub fn card_description(&self) -> &str {
+        self.description.as_deref().unwrap_or(&self.summary)
+    }
 }
 
 pub fn by_slug(slug: &str) -> Option<&'static Article> {
@@ -98,6 +110,7 @@ fn parse(slug: &str, source: &str) -> Result<Article, String> {
         title: field("title")?,
         date: field("date")?,
         summary: field("summary")?,
+        description: field("description").ok(),
         example: field("example").ok(),
         files,
         body: to_html(body),
@@ -312,6 +325,45 @@ fn take_caption(before: &str) -> (&str, Option<&str>) {
 #[cfg(test)]
 mod tests {
     use super::{load, split_front_matter, tables_accessible, to_html};
+    use crate::site::DESCRIPTION_LIMIT;
+
+    /// A description that runs past what a crawler shows is truncated for the
+    /// reader mid-sentence, on the one surface where the article has to sell
+    /// itself. The fix is always a shorter sentence in the front matter, so
+    /// this fails the build rather than letting the platform do the cutting.
+    #[test]
+    fn every_article_description_survives_a_crawler_intact() {
+        for post in &load().unwrap() {
+            let description = post.card_description();
+            assert!(
+                description.len() <= DESCRIPTION_LIMIT,
+                "{}: description is {} characters, over the {DESCRIPTION_LIMIT} a crawler shows. \
+                 Add a shorter `description:` to its front matter.",
+                post.slug,
+                description.len(),
+            );
+        }
+    }
+
+    /// The index summary and the share-card description answer to different
+    /// readers; where a post writes both, the card gets the one written for it.
+    #[test]
+    fn description_front_matter_overrides_the_summary() {
+        let posts = load().unwrap();
+        let with_description = posts
+            .iter()
+            .find(|post| post.description.is_some())
+            .expect("at least one post sets `description`");
+        assert_eq!(
+            with_description.card_description(),
+            with_description.description.as_deref().unwrap()
+        );
+
+        let without = posts.iter().find(|post| post.description.is_none());
+        if let Some(post) = without {
+            assert_eq!(post.card_description(), post.summary);
+        }
+    }
 
     #[test]
     fn every_post_in_the_repo_parses() {

@@ -42,6 +42,7 @@ Two host-native exceptions (always with `cargo +stable-aarch64-apple-darwin`—t
 | `make website-build` | Prerender the site to `website/dist` (the deployable artifact) |
 | `make website-serve` | Serve `website/dist` the way a static host would |
 | `make website-dev` | Prerender, then serve; re-run to pick up changes |
+| `make website-test` | the website's unit tests (markdown, metadata limits, prerender) |
 | `make website-lint` | clippy + rustfmt check for the website |
 
 `make test-image` builds with `docker buildx build $(DOCKER_BUILD_CACHE) --load -t pgdmn-test .`. `DOCKER_BUILD_CACHE` is empty locally (plain buildx build using Docker's own cache); CI sets it to a GitHub Actions layer cache (`--cache-from`/`--cache-to type=gha`; the exact flags live in `ci.yml`) so the image (apt PostgreSQL 17 + `cargo install cargo-pgrx`) is reused across CI runs instead of rebuilt from scratch. Same `make` target either way—only the cache backend differs.
@@ -71,8 +72,12 @@ website/
     app.rs          — shell + Router; every route is SsrMode::Static
     bin/prerender.rs — renders all routes to dist/, compiles Sass, writes 404.html
     bin/serve.rs    — local preview of dist/ (not used in production)
+    site.rs           — canonical host, share-card constants, absolute-URL helper
     pages/, components/, routes.rs
+    components/page_meta.rs — the description/OpenGraph/Twitter set every page emits
   style/main.scss   — Sass styles (compiled by grass, in-process)
+  card/             — markup sources for share-card.png and the icons; never served
+  public/           — copied verbatim into the site root (card, icons, examples, viewer)
   dist/             — generated static site; the deployable artifact (gitignored)
 ```
 
@@ -217,6 +222,8 @@ preserved, property-tested).
 - **Accessibility is a default, not a feature.** WCAG 2.2 AA on every page. Semantic HTML before ARIA; one `<h1>` per page, no skipped heading levels; `<main>`, `<nav>`, and a skip link; visible focus indicators; 4.5:1 text contrast (3:1 large text/UI); keyboard reachability for every interactive element; every image has `alt`.
 - **URL as state:** the current view is reproducible from its URL.
 - **No JavaScript on the content pages.** Pages are prerendered to static HTML and ship zero JS; links and navigation work with scripting disabled because there is nothing to disable. Anything that would need client-side code has to justify reversing WEB-001 first. CI enforces this: the `Website` workflow fails if a script or wasm reference appears in the output. **The single exception is `public/dmn-viewer.html`**—a deliberate, isolated interactive page that loads dmn-js to render a model in standard DMN tooling. It is a static asset (not a Leptos route), keeps its `.html` name (`prerender.rs` exempts it from `clean_urls` and `strip_scripts`), the CI no-script check excludes it, and it loads dmn-js from a pinned jsDelivr CDN. Do not add a second scripted page without the same explicit exemptions and a good reason.
+- **Every page states its own social metadata.** A page is added with a `<PageMeta>` (title, description, site-absolute path, and `published` for articles), which emits the description, canonical link, OpenGraph and Twitter sets; the `Website` workflow fails if any generated page is missing them. Descriptions are one sentence within `site::DESCRIPTION_LIMIT` (160)—articles enforce it as a test, and an article whose index `summary` runs longer adds a shorter `description:` to its front matter. Absolute URLs go through `site::url`, never a hardcoded host: crawlers do not resolve relative ones.
+- **The share card and icons are markup, not binaries.** `card/share-card.html` and `card/icons.html` render `public/share-card.png` (1200×630) and the icon set with any headless browser—regeneration commands are in the files. Edit the markup and re-render; never hand-edit the PNGs. Judge a card change at 220px, the size a phone feed gives it, not at full size. Per-article cards would mean generating images during the prerender: a separate decision, not a small extension of this one.
 - **Deployment is automatic.** Pushing to `main` publishes `website/dist` to GitHub Pages at `www.pgdmn.com` via `.github/workflows/website.yml`. The site is served from a domain root because its links and stylesheet are absolute paths—a `github.io` subpath would break them.
 - **Anti-patterns—do not build:** modals, toasts, skeleton screens, infinite scroll, dark-mode toggles (respect `prefers-color-scheme`), custom cursors.
 - Styles in Sass (`style/main.scss`), flat colors, BEM-like modifier names.
@@ -232,7 +239,7 @@ preserved, property-tested).
 | `TODO-ARCHIVE.md` | Completed/dropped TODO items, kept for history under their original ID | When an item in `TODO.md` is finished or explicitly dropped |
 | `BUGHISTORY.md` | Resolved bugs with reoccurrence checks | Immediately when a bug is fixed |
 
-**This project has no `docs/` directory**—a deliberate departure from the global convention, decided 2026-07-14. Everything that would have lived there lives somewhere with a reader: user-facing explanation goes on the website (`website/`—the Docs page, and the walkthroughs in `website/posts/`), decisions go in this file's *Decided* section, and findings and future work go in `TODO.md`. Do not create `docs/`, `docs/ux/`, `docs/specifications/`, or `docs/plans/`.
+**This project has no `docs/` directory**—a deliberate departure from the global convention, decided 2026-07-14. Everything that would have lived there lives somewhere with a reader: user-facing explanation goes on the website (`website/`—the Docs page, and the walkthroughs in `website/articles/`), decisions go in this file's *Decided* section, and findings and future work go in `TODO.md`. Do not create `docs/`, `docs/ux/`, `docs/specifications/`, or `docs/plans/`.
 
 **Direction, release, and go-to-market notes live outside this repo.** This repo holds the extension and its site; the thinking about where it is going is kept separately.
 

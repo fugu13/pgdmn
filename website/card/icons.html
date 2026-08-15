@@ -1,0 +1,24 @@
+<!--
+  Renders public/favicon.svg for the two icons that have to be raster files.
+  The SVG is the only place the glyph is drawn; this page exists so it can be
+  photographed at a fixed size against a solid background.
+
+  The background matters: iOS masks apple-touch-icon.png with its own rounded
+  square, so a PNG with its own transparent corners would show a dark seam
+  inside Apple's mask. Filling the page with the icon's own blue makes the
+  corners full-bleed and lets iOS round it once.
+
+    npx playwright screenshot --viewport-size=180,180 \
+      website/card/icons.html website/public/apple-touch-icon.png
+
+  favicon.ico is the 32x32 legacy fallback, for browsers that request
+  /favicon.ico by name instead of reading the <link> tags. Render this page at
+  32x32 and wrap the PNG in an ICO container.
+-->
+<meta charset="utf-8">
+<title>pgdmn icon (render target)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #336791; }
+  img { display: block; width: 100%; height: 100%; }
+</style>
+<img src="../public/favicon.svg" alt="">

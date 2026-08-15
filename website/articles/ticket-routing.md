@@ -2,6 +2,7 @@
 title: Clarity in support ticket routing rules
 date: 2026-07-11
 summary: Routing rules as a DMN decision table behind a view: every ticket is classified in one place, and a table generated from the same model embeds in the wiki, so the docs never drift from the rules that actually run.
+description: Routing rules as a decision table behind a view, with a table generated from the same model for the wiki—so the docs never drift from the rules that run.
 files: ticket-routing.dmn, tickets.csv
 example: routing
 ---
