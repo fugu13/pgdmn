@@ -1,10 +1,17 @@
 use leptos::prelude::*;
-use leptos_meta::Title;
+
+use crate::components::page_meta::PageMeta;
+use crate::routes;
 
 #[component]
 pub fn WhyPage() -> impl IntoView {
     view! {
-        <Title text="Why pgdmn · pgdmn"/>
+        <PageMeta
+            title="Why pgdmn · pgdmn"
+            card_title="Why run decisions in your database?"
+            description="No network hop, transactional consistency, model versions you can audit, and thousands of decisions in one query."
+            path=format!("/{}/", routes::WHY)
+        />
         <h1>"Why run decisions in your database?"</h1>
 
         <h2>"No network hop"</h2>

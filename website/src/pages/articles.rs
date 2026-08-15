@@ -1,7 +1,7 @@
 use leptos::prelude::*;
-use leptos_meta::Title;
 
 use crate::articles;
+use crate::components::page_meta::PageMeta;
 use crate::routes;
 
 #[component]
@@ -9,7 +9,12 @@ pub fn ArticlesPage() -> impl IntoView {
     let articles = articles::all();
 
     view! {
-        <Title text="Articles · pgdmn"/>
+        <PageMeta
+            title="Articles · pgdmn"
+            card_title="pgdmn articles"
+            description="Walkthroughs of DMN decisions running inside PostgreSQL, each with a model, a dataset, and the queries."
+            path=format!("/{}/", routes::ARTICLES)
+        />
         <h1>"Articles"</h1>
 
         <ul class="post-list">

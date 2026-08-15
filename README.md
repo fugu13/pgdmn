@@ -381,7 +381,7 @@ at your option.
 - [TODO.md](TODO.md) - Tracked work items
 - [BUGHISTORY.md](BUGHISTORY.md) - Resolved bugs with reoccurrence checklists
 - [vendor/README.md](vendor/README.md) - Provenance and conventions for the vendored dsntk engine
-- [website/](website/) - The site: worked examples, a function reference, and walkthroughs in `website/posts/` (Leptos, prerendered to static HTML; `make website-build`, deployed to GitHub Pages at www.pgdmn.com on push to `main`)
+- [website/](website/) - The site: worked examples, a function reference, and walkthroughs in `website/articles/` (Leptos, prerendered to static HTML; `make website-build`, deployed to GitHub Pages at www.pgdmn.com on push to `main`)
 
 There is no `docs/` directory: explanation aimed at users lives on the website, decisions live in CLAUDE.md, and findings and future work live in TODO.md.
 

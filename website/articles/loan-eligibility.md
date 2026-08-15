@@ -2,6 +2,7 @@
 title: Loan eligibility, or, only define complex rules once
 date: 2026-07-13
 summary: Loan eligibility criteria are often very complex and strictly validated. In this simplified example, see how DMN expressing an exact set of rules that would be a bit tricky in SQL encapsulate that complexity, avoiding double implementation.
+description: Eligibility rules that read opaquely and break quietly in application code, written once as a DMN decision table and evaluated across a table of applicants.
 files: loan-eligibility.dmn, applicants.csv
 example: loan
 ---

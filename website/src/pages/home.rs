@@ -1,10 +1,16 @@
 use leptos::prelude::*;
 
+use crate::components::page_meta::PageMeta;
 use crate::components::sql_block::SqlBlock;
 
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! {
+        <PageMeta
+            title="pgdmn · DMN for PostgreSQL"
+            description="Run DMN decision tables inside PostgreSQL. No network hop, no external engine—just SQL."
+            path="/"
+        />
         <div class="hero">
             <h1>"pgdmn"</h1>
             <p class="tagline">

@@ -6,6 +6,51 @@ the active list. This practice starts now — the items pruned from `TODO.md`
 in the 2026-08-14 cleanup were deleted outright, not archived, and are not
 backfilled here.
 
+### WEB-007: OpenGraph and social meta tags, with a share card worth sharing (done)
+
+Every prerendered page now carries a description, the OpenGraph set
+(`og:site_name`, `og:locale`, `og:type`, `og:title`, `og:description`,
+`og:url`, `og:image` with dimensions and alt text), the Twitter
+`summary_large_image` set, and a canonical link. One `PageMeta` component
+(`website/src/components/page_meta.rs`) emits all of it; each page passes its
+own title, description and path, so a new page that forgets its metadata is
+visible as a missing component rather than as a bare unfurl in someone's chat
+client. Absolute URLs are built through `site::url`, backed by the same
+`DOMAIN` constant the prerender writes to `CNAME` — the constant moved into
+`website/src/site.rs` so the pages and the prerender cannot disagree about the
+host.
+
+The card is `website/public/share-card.png`, 1200x630, rendered from
+`website/card/share-card.html`: the wordmark and tagline beside a small
+decision table, which is the one image that says "DMN" at thumbnail size.
+Chosen over a plain typographic card (light and dark variants were rendered
+and compared in Slack, X, LinkedIn, Discord and iMessage mockups, and at the
+220px a phone feed gives a card). The markup source is committed next to the
+PNG so the card is edited as markup, not in an image editor; `card/` sits
+outside `public/` so the prerender does not publish the source. Icons landed
+with it: `favicon.svg` (a decision-table glyph, two columns rather than three
+because it is read at 16px), plus `favicon.ico` and `apple-touch-icon.png`
+rendered from that same SVG via `card/icons.html`.
+
+Per-page values rather than one sitewide description: Why, Docs, Examples and
+Articles each describe themselves, and articles use their front matter —
+`og:type=article`, `article:published_time` from `date`, and an optional
+`description:` key for the four posts whose index summary runs longer than a
+crawler will show (`Article::card_description` falls back to `summary`). A
+test fails the build if any article description exceeds
+`site::DESCRIPTION_LIMIT`, so the fix is a shorter sentence rather than a
+platform truncating mid-word. 404 is `noindex, follow`; `public/dmn-viewer.html`
+is `noindex` too and states its own icons, since it renders whatever `?model=`
+names and is a static asset rather than a Leptos route.
+
+Guarded in CI: the `Website` workflow now runs `make website-test` (new
+target — the website's unit tests had no runner before this) and fails if any
+generated page is missing its description, `og:title`, `og:description`,
+`og:image`, `twitter:card` or canonical, if the card URL is not absolute, or
+if any of the four image assets is missing from `dist/`. Deliberately left for
+later: per-article card images, which mean generating images at prerender time
+and are a much larger commitment than one sitewide card.
+
 ### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (done)
 
 `.github/CODEOWNERS` routes `vendor/**` and `vendor/CHECKSUMS` to

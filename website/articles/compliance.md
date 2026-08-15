@@ -2,6 +2,7 @@
 title: Standardize and clarify regulatory requirements
 date: 2026-07-10
 summary: Data-handling rules as a decision table, evaluated per row. What must we encrypt, what may not leave the EU—answered by a query rather than by a policy document nobody has read since the audit.
+description: Data-handling rules as a decision table, evaluated per row: what must be encrypted, what may not leave the EU—answered by a query, not a policy document.
 files: compliance.dmn, customers.csv
 example: compliance
 ---

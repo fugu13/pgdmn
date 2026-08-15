@@ -1,10 +1,11 @@
 use leptos::prelude::*;
-use leptos_meta::Title;
 use leptos_router::hooks::use_params_map;
 
 use crate::articles;
 use crate::components::download::{Download, FileKind};
+use crate::components::page_meta::PageMeta;
 use crate::pages::not_found::NotFoundPage;
+use crate::routes;
 
 /// One article, rendered from its markdown file.
 ///
@@ -31,7 +32,13 @@ pub fn ArticlePage() -> impl IntoView {
     let is_walkthrough = example.is_some();
 
     view! {
-        <Title text=format!("{} · pgdmn", article.title)/>
+        <PageMeta
+            title=format!("{} · pgdmn", article.title)
+            card_title=article.title.clone()
+            description=article.card_description().to_string()
+            path=routes::article(&article.slug)
+            published=article.date.clone()
+        />
         {is_walkthrough.then(|| view! { <p class="post-kind">"Walkthrough"</p> })}
         <h1>{article.title.clone()}</h1>
         <p class="post-date">

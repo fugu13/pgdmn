@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="pgdmn">
+  <!--
+    A decision table, which is what pgdmn evaluates: a header row and the rules
+    under it. Two columns rather than three, because this is read at 16 pixels
+    far more often than at any size where a third would still be a column
+    instead of a smudge.
+
+    This file is the source of every icon the site ships. favicon.ico and
+    apple-touch-icon.png are rendered from it; see card/icons.html.
+  -->
+  <rect width="64" height="64" rx="13" fill="#336791"/>
+  <g fill="#ffffff">
+    <rect x="12" y="16" width="40" height="9" rx="1.5"/>
+    <rect x="12" y="28" width="18.5" height="9" rx="1.5"/>
+    <rect x="33.5" y="28" width="18.5" height="9" rx="1.5"/>
+    <rect x="12" y="40" width="18.5" height="8" rx="1.5"/>
+    <rect x="33.5" y="40" width="18.5" height="8" rx="1.5"/>
+  </g>
+</svg>
