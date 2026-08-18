@@ -51,7 +51,7 @@ The website builds on the host rather than in Docker, but needs no host tools be
 
 The website's toolchain is pinned in `website/rust-toolchain.toml` (the extension's lives in the Dockerfile). CI installs no toolchain of its own and honours that pin, so clippy and rustfmt behave identically on a laptop and in CI. Do not pin a toolchain in the workflow instead—CI drifting ahead of developers is what broke the first run of the `Website` workflow.
 
-**Continuous integration:** `.github/workflows/ci.yml` (`CI`) runs `make test-image`, `make lint`, and `make test` on every pull request and push to `main`, gated by a required `CI aggregate` job (plus a non-blocking `cargo audit` job). `.github/workflows/website.yml` (`Website`) builds and deploys the site (see Website below). `.github/dependabot.yml` opens weekly dependency-update PRs for both Cargo workspaces, Docker, and GitHub Actions.
+**Continuous integration:** `.github/workflows/ci.yml` (`CI`) runs `make test-image`, `make lint`, and `make test` on every pull request and push to `main`, gated by a required `CI aggregate` job that also requires `cargo audit` (dependency security advisories) and `cargo deny` (license policy) to pass. An unfixable upstream advisory blocking unrelated PRs is addressed with a reviewed, documented `cargo audit --ignore RUSTSEC-...` in the workflow, not by weakening the gate. `.github/workflows/website.yml` (`Website`) builds and deploys the site (see Website below). `.github/dependabot.yml` opens weekly dependency-update PRs for both Cargo workspaces, Docker, and GitHub Actions.
 
 ## Architecture
 
