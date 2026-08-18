@@ -26,6 +26,8 @@ pub fn PageMeta(
     #[prop(optional, into)]
     card_title: Option<String>,
     /// One sentence, at most [`site::DESCRIPTION_LIMIT`] characters.
+    /// (`site::DESCRIPTION`, the home page's, deliberately runs longer—the
+    /// one documented exception.)
     #[prop(into)]
     description: String,
     /// This page's site-absolute path, with the trailing slash that addresses

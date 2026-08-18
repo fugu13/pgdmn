@@ -4,6 +4,10 @@ use crate::articles;
 use crate::components::page_meta::PageMeta;
 use crate::routes;
 
+/// This page's meta description, also quoted by the `llms.txt` overview.
+pub const DESCRIPTION: &str = "Walkthroughs of DMN decisions running inside PostgreSQL, \
+     each with a model, a dataset, and the queries.";
+
 #[component]
 pub fn ArticlesPage() -> impl IntoView {
     let articles = articles::all();
@@ -12,7 +16,7 @@ pub fn ArticlesPage() -> impl IntoView {
         <PageMeta
             title="Articles · pgdmn"
             card_title="pgdmn articles"
-            description="Walkthroughs of DMN decisions running inside PostgreSQL, each with a model, a dataset, and the queries."
+            description=DESCRIPTION
             path=routes::articles()
         />
         <h1>"Articles"</h1>

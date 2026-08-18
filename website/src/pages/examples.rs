@@ -5,6 +5,10 @@ use crate::components::page_meta::PageMeta;
 use crate::components::sql_block::SqlBlock;
 use crate::routes;
 
+/// This page's meta description, also quoted by the `llms.txt` overview.
+pub const DESCRIPTION: &str = "Loan eligibility, order pricing, compliance checks, and \
+     ticket routing—models, datasets, and the SQL that runs them.";
+
 /// The way out of an example and into its walkthrough.
 #[component]
 fn Walkthrough(#[prop(into)] slug: String, #[prop(into)] scenario: String) -> impl IntoView {
@@ -23,8 +27,8 @@ pub fn ExamplesPage() -> impl IntoView {
         <PageMeta
             title="Examples · pgdmn"
             card_title="pgdmn examples"
-            description="Loan eligibility, order pricing, compliance checks, and ticket routing—models, datasets, and the SQL that runs them."
-            path=format!("/{}/", routes::EXAMPLES)
+            description=DESCRIPTION
+            path=routes::page(routes::EXAMPLES)
         />
         <h1>"Examples"</h1>
 

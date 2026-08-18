@@ -1,7 +1,7 @@
-//! What tells a crawler the site's URL set: `sitemap.xml`, `robots.txt`, and
-//! the Atom feed.
+//! What tells a crawler the site's URL set: `sitemap.xml`, `robots.txt`, the
+//! Atom feed, and the `llms.txt` overview.
 //!
-//! All three are generated during the prerender and written next to the pages
+//! All four are generated during the prerender and written next to the pages
 //! they describe, so they can never drift from what is actually served.
 //!
 //! The sitemap carries only `<loc>` and, for articles, `<lastmod>`: Google
@@ -21,7 +21,7 @@ use crate::escape::element_text;
 use crate::routes;
 use crate::site;
 
-// Site-absolute paths; all three sit at the site root, so trimming the
+// Site-absolute paths; all of these sit at the site root, so trimming the
 // leading slash also gives the output filename under `dist/`.
 pub const SITEMAP: &str = "/sitemap.xml";
 pub const ROBOTS: &str = "/robots.txt";
@@ -29,6 +29,9 @@ pub const ROBOTS: &str = "/robots.txt";
 pub const FEED: &str = "/feed.xml";
 /// What a feed reader shows as the subscription's name.
 pub const FEED_TITLE: &str = "pgdmn articles";
+/// The llms.txt site overview (llmstxt.org): a markdown map of the site for
+/// language models that read pages as plain text.
+pub const LLMS: &str = "/llms.txt";
 
 /// The sitemap for the given pages, which the prerender pass collects from the
 /// generated output itself—a new route appears here without anyone remembering
@@ -111,9 +114,43 @@ pub fn feed(articles: &[Article]) -> String {
     xml
 }
 
+/// The llms.txt overview: the site description, each hand-written page with
+/// its own meta description, and every article with its summary.
+///
+/// Markdown, not XML, so nothing is escaped—front-matter prose passes through
+/// as written, which is exactly what a language model should read.
+pub fn llms(articles: &[Article]) -> String {
+    let mut text = format!(
+        "# {name}\n\n> {description}\n\n{overview}\n\n## Pages\n\n",
+        name = site::NAME,
+        description = site::DESCRIPTION,
+        overview = site::OVERVIEW,
+    );
+    for page in crate::pages::PAGES {
+        let _ = writeln!(
+            text,
+            "- [{label}]({url}): {description}",
+            label = page.label,
+            url = site::url(&routes::page(page.segment)),
+            description = page.description,
+        );
+    }
+    text.push_str("\n## Articles\n\n");
+    for article in articles {
+        let _ = writeln!(
+            text,
+            "- [{title}]({url}): {summary}",
+            title = article.title,
+            url = site::url(&routes::article(&article.slug)),
+            summary = article.card_description(),
+        );
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{FEED, SITEMAP, feed, robots, sitemap};
+    use super::{FEED, SITEMAP, feed, llms, robots, sitemap};
     use crate::articles::{self, Article};
 
     fn article(slug: &str, title: &str, date: &str, summary: &str) -> Article {
@@ -195,6 +232,42 @@ mod tests {
         let xml = feed(&posts);
         assert!(xml.contains("<title>Loans &amp; &lt;limits&gt;</title>"));
         assert!(xml.contains("<summary>On a &lt; b.</summary>"));
+    }
+
+    #[test]
+    fn llms_overview_maps_the_site_for_a_language_model() {
+        use crate::{pages, routes, site};
+
+        let posts = [article(
+            "loans",
+            "Loan rules",
+            "2026-07-01",
+            "Lending, once.",
+        )];
+        let text = llms(&posts);
+        let opening = format!(
+            "# {}\n\n> {}\n\n{}\n",
+            site::NAME,
+            site::DESCRIPTION,
+            site::OVERVIEW
+        );
+        assert!(text.starts_with(&opening));
+        // Every registered page appears, with its own meta description...
+        for page in pages::PAGES {
+            let line = format!(
+                "- [{}]({}): {}\n",
+                page.label,
+                site::url(&routes::page(page.segment)),
+                page.description,
+            );
+            assert!(text.contains(&line), "missing page line: {line}");
+        }
+        // ...and every article with its summary, at its absolute URL.
+        assert!(
+            text.contains(
+                "- [Loan rules](https://www.pgdmn.com/articles/loans/): Lending, once.\n"
+            )
+        );
     }
 
     /// The real articles, through the real generators: whatever is in

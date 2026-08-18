@@ -117,7 +117,8 @@ jobs:
 
       - name: Assert the deployable artifact is complete
         run: |
-          for f in index.html 404.html CNAME sitemap.xml robots.txt feed.xml; do
+          files="index.html 404.html CNAME sitemap.xml robots.txt feed.xml llms.txt"
+          for f in $files; do
             test -s "website/dist/$f" || { echo "::error::missing or empty website/dist/$f"; exit 1; }
           done
           grep -qF 'Sitemap: https://www.pgdmn.com/sitemap.xml' website/dist/robots.txt \
@@ -129,7 +130,7 @@ jobs:
           # .nojekyll is meaningful precisely by existing; it is always empty.
           test -f website/dist/.nojekyll || { echo "::error::missing website/dist/.nojekyll"; exit 1; }
           grep -qx 'www.pgdmn.com' website/dist/CNAME || { echo "::error::CNAME is not www.pgdmn.com"; exit 1; }
-          echo "index, 404, CNAME, sitemap, robots, feed, .nojekyll and stylesheet all present"
+          echo "$files, .nojekyll and stylesheet all present"
 
       - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main'

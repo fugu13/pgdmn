@@ -5,6 +5,10 @@ use crate::components::sql_block::SqlBlock;
 use crate::highlight;
 use crate::routes;
 
+/// This page's meta description, also quoted by the `llms.txt` overview.
+pub const DESCRIPTION: &str = "Install instructions, and every function pgdmn installs, \
+     with its arguments: DMN evaluation, introspection, and FEEL.";
+
 /// One function: its full signature, then what it does.
 ///
 /// A description list is the honest markup here—each signature is a term and
@@ -54,8 +58,8 @@ pub fn DocsPage() -> impl IntoView {
         <PageMeta
             title="Documentation · pgdmn"
             card_title="pgdmn documentation"
-            description="Install instructions, and every function pgdmn installs, with its arguments: DMN evaluation, introspection, and FEEL."
-            path=format!("/{}/", routes::DOCS)
+            description=DESCRIPTION
+            path=routes::page(routes::DOCS)
         />
         <h1 id="documentation">"Documentation"</h1>
         <p class="lede">

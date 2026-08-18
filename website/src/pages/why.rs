@@ -3,14 +3,18 @@ use leptos::prelude::*;
 use crate::components::page_meta::PageMeta;
 use crate::routes;
 
+/// This page's meta description, also quoted by the `llms.txt` overview.
+pub const DESCRIPTION: &str = "No network hop, transactional consistency, model versions \
+     you can audit, and thousands of decisions in one query.";
+
 #[component]
 pub fn WhyPage() -> impl IntoView {
     view! {
         <PageMeta
             title="Why pgdmn · pgdmn"
             card_title="Why run decisions in your database?"
-            description="No network hop, transactional consistency, model versions you can audit, and thousands of decisions in one query."
-            path=format!("/{}/", routes::WHY)
+            description=DESCRIPTION
+            path=routes::page(routes::WHY)
         />
         <h1>"Why run decisions in your database?"</h1>
 

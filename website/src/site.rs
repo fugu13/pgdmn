@@ -13,6 +13,21 @@ pub const DOMAIN: &str = "www.pgdmn.com";
 /// What social platforms name as the source of a shared link.
 pub const NAME: &str = "pgdmn";
 
+/// The site-wide description: the home page's meta description and JSON-LD,
+/// and the summary line in `llms.txt`.
+///
+/// Runs past [`DESCRIPTION_LIMIT`], a deliberate copy choice—crawlers
+/// truncate it, but the full pitch reads whole everywhere else it appears.
+pub const DESCRIPTION: &str = "Store and execute DMN decision tables inside PostgreSQL. \
+     Let business teams own business rules in the database you're already using. \
+     No network hop, no external engine, just SQL queries.";
+
+/// The paragraph-length expansion of [`DESCRIPTION`], leading the `llms.txt`
+/// overview: what pgdmn is, mechanically.
+pub const OVERVIEW: &str = "pgdmn is a PostgreSQL extension: DMN models load as a custom \
+     SQL type, and decisions and FEEL expressions evaluate per row in ordinary queries, \
+     JSONB in and out.";
+
 /// The share card: 1200×630, the size every platform crops toward.
 /// Regenerated from `card/share-card.html`; see that file for how.
 pub const CARD: &str = "/share-card.png";

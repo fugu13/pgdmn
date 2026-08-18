@@ -14,9 +14,10 @@ use pgdmn_website::app::shell;
 use pgdmn_website::articles;
 use pgdmn_website::discovery;
 use pgdmn_website::routes;
-// The canonical host, shared with the pages: the CNAME written here and the
-// absolute URLs in every page's social metadata must name the same site.
-use pgdmn_website::site::DOMAIN;
+// `site::DOMAIN` is the canonical host, shared with the pages: the CNAME
+// written here and the absolute URLs in every page's social metadata must
+// name the same site.
+use pgdmn_website::site::{self, DOMAIN};
 use pgdmn_website::stylesheet;
 
 type BoxError = Box<dyn std::error::Error>;
@@ -69,10 +70,18 @@ async fn main() -> Result<(), BoxError> {
     // disagree with what is served. The site-absolute constants double as
     // filenames under dist/.
     let pages = page_paths(Path::new(DIST))?;
+    let llms = discovery::llms(&articles);
+    // The llms.txt page list comes from the hand-curated `pages::PAGES`
+    // registry; this is what catches a route added to the router but not the
+    // registry, which would otherwise vanish from the overview silently.
+    if let Some(missing) = pages.iter().find(|page| !llms.contains(&site::url(page))) {
+        return Err(format!("llms.txt has no entry for {missing}; add it to pages::PAGES").into());
+    }
     for (path, contents) in [
         (discovery::SITEMAP, discovery::sitemap(&pages, &articles)),
         (discovery::ROBOTS, discovery::robots()),
         (discovery::FEED, discovery::feed(&articles)),
+        (discovery::LLMS, llms),
     ] {
         fs::write(Path::new(DIST).join(path.trim_start_matches('/')), contents)?;
     }
