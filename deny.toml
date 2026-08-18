@@ -8,10 +8,10 @@
 # license-check` in the Makefile.
 #
 # Only the `licenses` check is configured/run here. Security advisories are
-# already covered separately by `cargo audit` (non-blocking CI job); `bans`
-# and `sources` are out of scope for this gate and left at cargo-deny's
-# defaults, which are permissive enough not to fire (bans.multiple-versions
-# defaults to "warn", not "deny").
+# already covered separately by `cargo audit` (a required CI job in its own
+# right); `bans` and `sources` are out of scope for this gate and left at
+# cargo-deny's defaults, which are permissive enough not to fire
+# (bans.multiple-versions defaults to "warn", not "deny").
 #
 # Schema note: current cargo-deny (0.19-0.20) has no `unlicensed`/`copyleft`/
 # `allow-osi-fsf-free` toggles — those were removed in earlier releases.
