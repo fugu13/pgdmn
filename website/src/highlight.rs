@@ -6,6 +6,8 @@
 
 use std::sync::OnceLock;
 
+use crate::escape::element_text as escape;
+
 use syntect::html::{ClassStyle, ClassedHTMLGenerator};
 use syntect::parsing::{SyntaxDefinition, SyntaxSet};
 use syntect::util::LinesWithEndings;
@@ -79,12 +81,6 @@ fn patch_missing_keywords(html: &str) -> String {
         "CREATE EXTENSION",
         "<span class=\"hl-keyword\">CREATE EXTENSION</span>",
     )
-}
-
-fn escape(code: &str) -> String {
-    code.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
 }
 
 /// Words a signature colours as keywords, and as types. Kept small and explicit

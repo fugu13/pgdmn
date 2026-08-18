@@ -26,6 +26,13 @@ pub const CARD_HEIGHT: &str = "630";
 pub const CARD_ALT: &str = "pgdmn: run DMN decision tables inside PostgreSQL. \
      A decision table with an Age and Income column, deciding Approve, Review, or Decline.";
 
+/// Who writes the site, named where a feed or structured data wants an author.
+pub const AUTHOR: &str = "Russell Duhon";
+pub const AUTHOR_URL: &str = "https://www.russellduhon.com";
+
+/// The source repository, linked from the header and named in structured data.
+pub const REPOSITORY: &str = "https://github.com/fugu13/pgdmn";
+
 /// The longest description a crawler shows without truncating it.
 ///
 /// Search engines and social platforms both cut past this, and a sentence

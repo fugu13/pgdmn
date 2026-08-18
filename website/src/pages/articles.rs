@@ -13,7 +13,7 @@ pub fn ArticlesPage() -> impl IntoView {
             title="Articles · pgdmn"
             card_title="pgdmn articles"
             description="Walkthroughs of DMN decisions running inside PostgreSQL, each with a model, a dataset, and the queries."
-            path=format!("/{}/", routes::ARTICLES)
+            path=routes::articles()
         />
         <h1>"Articles"</h1>
 

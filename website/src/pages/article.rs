@@ -4,6 +4,7 @@ use leptos_router::hooks::use_params_map;
 use crate::articles;
 use crate::components::download::{Download, FileKind};
 use crate::components::page_meta::PageMeta;
+use crate::components::structured_data::{JsonLd, tech_article};
 use crate::pages::not_found::NotFoundPage;
 use crate::routes;
 
@@ -39,6 +40,7 @@ pub fn ArticlePage() -> impl IntoView {
             path=routes::article(&article.slug)
             published=article.date.clone()
         />
+        <JsonLd json=tech_article(article)/>
         {is_walkthrough.then(|| view! { <p class="post-kind">"Walkthrough"</p> })}
         <h1>{article.title.clone()}</h1>
         <p class="post-date">
@@ -68,7 +70,7 @@ pub fn ArticlePage() -> impl IntoView {
 
         <p class="post-nav">
             {example.map(|href| view! { <a href=href>"← The short version"</a>" · " })}
-            <a href="/articles/">"All articles"</a>
+            <a href=routes::articles()>"All articles"</a>
         </p>
     }
     .into_any()

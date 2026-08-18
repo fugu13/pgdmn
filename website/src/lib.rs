@@ -1,6 +1,8 @@
 pub mod app;
 pub mod articles;
 mod components;
+pub mod discovery;
+mod escape;
 pub mod highlight;
 mod pages;
 pub mod routes;

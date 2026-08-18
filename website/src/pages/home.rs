@@ -2,20 +2,21 @@ use leptos::prelude::*;
 
 use crate::components::page_meta::PageMeta;
 use crate::components::sql_block::SqlBlock;
+use crate::components::structured_data::{JsonLd, software_application};
+
+/// The one sentence the site leads with, told identically to a reader (the
+/// hero), a crawler (the meta description), and a machine (the JSON-LD).
+const TAGLINE: &str =
+    "Run DMN decision tables inside PostgreSQL. No network hop, no external engine—just SQL.";
 
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! {
-        <PageMeta
-            title="pgdmn · DMN for PostgreSQL"
-            description="Run DMN decision tables inside PostgreSQL. No network hop, no external engine—just SQL."
-            path="/"
-        />
+        <PageMeta title="pgdmn · DMN for PostgreSQL" description=TAGLINE path="/"/>
+        <JsonLd json=software_application(TAGLINE)/>
         <div class="hero">
             <h1>"pgdmn"</h1>
-            <p class="tagline">
-                "Run DMN decision tables inside PostgreSQL. No network hop, no external engine—just SQL."
-            </p>
+            <p class="tagline">{TAGLINE}</p>
         </div>
 
         <h2>"Quick start"</h2>

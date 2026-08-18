@@ -49,18 +49,21 @@ jobs:
 
       # The content pages ship no JavaScript (WEB-001). Leptos emits inline
       # hydration bookkeeping that the prerenderer strips; if a change ever
-      # reintroduces a script, fail here rather than quietly serving it. The one
-      # allowed exception is dmn-viewer.html—a deliberate, isolated interactive
-      # page that loads dmn-js to render a model in standard DMN tooling.
+      # reintroduces a script, fail here rather than quietly serving it. Two
+      # carve-outs: dmn-viewer.html—a deliberate, isolated interactive page
+      # that loads dmn-js to render a model in standard DMN tooling—and
+      # JSON-LD blocks (<script type="application/ld+json">), which are
+      # structured data for crawlers, not executable code. The lookahead
+      # matches the prerenderer's strip_scripts exemption exactly.
       - name: Assert the content pages ship no scripts or wasm
         run: |
-          offenders=$(grep -rlE '<script|\.wasm' website/dist/ | grep -v '/dmn-viewer\.html$' || true)
+          offenders=$(grep -rlP '<script(?![^>]*type="application/ld\+json")|\.wasm' website/dist/ | grep -v '/dmn-viewer\.html$' || true)
           if [ -n "$offenders" ]; then
             echo "::error::prerendered output contains scripts or wasm; see WEB-001"
             echo "$offenders"
             exit 1
           fi
-          echo "content pages are script-free (dmn-viewer.html excepted)"
+          echo "content pages are script-free (dmn-viewer.html and JSON-LD excepted)"
 
       # A missing tag costs nothing at build time and everything at the moment
       # someone pastes a link, where it is invisible until a human notices a
@@ -88,11 +91,37 @@ jobs:
           [ "$status" -eq 0 ] || exit 1
           echo "every page carries its social metadata, and the card and icons are present"
 
+      # The forward direction—every indexable page is listed—is the
+      # generator's own unit-tested invariant (page_paths walks dist/ to build
+      # the sitemap). What a crawler punishes is the reverse: a listed URL
+      # that does not resolve. The host comes from CNAME, which the
+      # prerenderer wrote from the same constant that built the sitemap URLs.
+      - name: Assert every sitemap URL resolves to a generated page
+        run: |
+          host="https://$(cat website/dist/CNAME)"
+          status=0
+          while IFS= read -r loc; do
+            rel="${loc#"${host}/"}"
+            if [ "$rel" = "$loc" ]; then
+              echo "::error::sitemap URL is not on ${host}: ${loc}"; status=1; continue
+            fi
+            test -f "website/dist/${rel}index.html" \
+              || { echo "::error::sitemap names a missing page: ${loc}"; status=1; }
+          done < <(grep -o '<loc>[^<]*</loc>' website/dist/sitemap.xml | sed -e 's|<loc>||' -e 's|</loc>||')
+          # A near-empty sitemap means the walk regressed; the site has five
+          # hand-written pages before any article.
+          count=$(grep -c '<loc>' website/dist/sitemap.xml)
+          [ "$count" -ge 5 ] || { echo "::error::sitemap lists only ${count} pages"; status=1; }
+          [ "$status" -eq 0 ] || exit 1
+          echo "sitemap.xml resolves: ${count} pages"
+
       - name: Assert the deployable artifact is complete
         run: |
-          for f in index.html 404.html CNAME; do
+          for f in index.html 404.html CNAME sitemap.xml robots.txt feed.xml; do
             test -s "website/dist/$f" || { echo "::error::missing or empty website/dist/$f"; exit 1; }
           done
+          grep -qF 'Sitemap: https://www.pgdmn.com/sitemap.xml' website/dist/robots.txt \
+            || { echo "::error::robots.txt does not name the sitemap"; exit 1; }
           # The stylesheet's filename is content-hashed (style.<hash>.css), so
           # its name isn't fixed like the files above.
           stylesheet=$(find website/dist -maxdepth 1 -name 'style.*.css' -size +0c)
@@ -100,7 +129,7 @@ jobs:
           # .nojekyll is meaningful precisely by existing; it is always empty.
           test -f website/dist/.nojekyll || { echo "::error::missing website/dist/.nojekyll"; exit 1; }
           grep -qx 'www.pgdmn.com' website/dist/CNAME || { echo "::error::CNAME is not www.pgdmn.com"; exit 1; }
-          echo "index, 404, CNAME, .nojekyll and stylesheet all present"
+          echo "index, 404, CNAME, sitemap, robots, feed, .nojekyll and stylesheet all present"
 
       - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main'
