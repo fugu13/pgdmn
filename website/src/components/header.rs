@@ -2,6 +2,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 
 use crate::routes;
+use crate::site;
 
 #[component]
 pub fn Header() -> impl IntoView {
@@ -23,7 +24,7 @@ pub fn Header() -> impl IntoView {
                         <li><A href=format!("/{}/", routes::ARTICLES)>"Articles"</A></li>
                         <li>
                             <a
-                                href="https://github.com/fugu13/pgdmn"
+                                href=site::REPOSITORY
                                 rel="noopener noreferrer"
                                 target="_blank"
                             >

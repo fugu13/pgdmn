@@ -1550,6 +1550,7 @@ dependencies = [
  "leptos_meta",
  "leptos_router",
  "pulldown-cmark",
+ "serde_json",
  "syntect",
  "tokio",
  "tower-http 0.7.0",

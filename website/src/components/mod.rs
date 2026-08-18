@@ -4,3 +4,4 @@ pub mod header;
 pub mod page_meta;
 pub mod skip_link;
 pub mod sql_block;
+pub mod structured_data;

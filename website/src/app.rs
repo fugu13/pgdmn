@@ -10,6 +10,7 @@ use crate::articles;
 use crate::components::footer::Footer;
 use crate::components::header::Header;
 use crate::components::skip_link::SkipLink;
+use crate::discovery;
 use crate::pages::article::ArticlePage;
 use crate::pages::articles::ArticlesPage;
 use crate::pages::docs::DocsPage;
@@ -51,6 +52,12 @@ pub fn shell() -> impl IntoView {
                 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
                 <link rel="alternate icon" href="/favicon.ico" sizes="32x32"/>
                 <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+                <link
+                    rel="alternate"
+                    type="application/atom+xml"
+                    title=discovery::FEED_TITLE
+                    href=discovery::FEED
+                />
                 <meta name="theme-color" content="#336791"/>
                 <MetaTags/>
             </head>

@@ -52,3 +52,6 @@ include_dir = "0.7"
 # the site ships no JavaScript, and the palette belongs in the stylesheet.
 # `default-fancy` keeps the regex engine pure Rust, with no C dependency.
 syntect = { version = "5.3", default-features = false, features = ["default-fancy"] }
+# JSON-LD structured data is built as data, not by string concatenation, so a
+# title with a quote in it can never produce an unparseable block.
+serde_json = "1"

@@ -12,6 +12,7 @@ use leptos::prelude::LeptosOptions;
 use leptos_axum::generate_route_list_with_ssg;
 use pgdmn_website::app::shell;
 use pgdmn_website::articles;
+use pgdmn_website::discovery;
 use pgdmn_website::routes;
 // The canonical host, shared with the pages: the CNAME written here and the
 // absolute URLs in every page's social metadata must name the same site.
@@ -63,6 +64,18 @@ async fn main() -> Result<(), BoxError> {
 
     clean_urls(Path::new(DIST))?;
     strip_scripts(Path::new(DIST))?;
+
+    // Crawler discovery, generated from the output itself so it can never
+    // disagree with what is served. The site-absolute constants double as
+    // filenames under dist/.
+    let pages = page_paths(Path::new(DIST))?;
+    for (path, contents) in [
+        (discovery::SITEMAP, discovery::sitemap(&pages, &articles)),
+        (discovery::ROBOTS, discovery::robots()),
+        (discovery::FEED, discovery::feed(&articles)),
+    ] {
+        fs::write(Path::new(DIST).join(path.trim_start_matches('/')), contents)?;
+    }
 
     // GitHub Pages runs the pages through Jekyll unless this file exists, which
     // silently drops anything whose name starts with an underscore.
@@ -158,12 +171,62 @@ fn clean_urls(directory: &Path) -> Result<(), BoxError> {
     Ok(())
 }
 
+/// The marker a page uses to ask crawlers to stay away, exactly as `PageMeta`
+/// (and the hand-written viewer) emit it.
+const NOINDEX: &str = r#"<meta name="robots" content="noindex"#;
+
+/// Every indexable page, as the site-absolute path of its directory.
+///
+/// Collected by walking `dist/` after [`clean_urls`], when every page sits at
+/// `<route>/index.html`—so the sitemap describes what is actually served, and
+/// a new route joins it without anyone remembering to add it. A page that
+/// declares itself [`NOINDEX`] has asked crawlers to stay away and is excluded
+/// on that declaration—today that is `404.html` and the DMN viewer (whose
+/// non-`index.html` names already skip them), but it holds for any future
+/// noindex route too.
+fn page_paths(dist: &Path) -> Result<Vec<String>, BoxError> {
+    fn walk(directory: &Path, dist: &Path, pages: &mut Vec<String>) -> Result<(), BoxError> {
+        for entry in fs::read_dir(directory)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                walk(&path, dist, pages)?;
+                continue;
+            }
+            if path.file_name().is_none_or(|name| name != "index.html")
+                || fs::read_to_string(&path)?.contains(NOINDEX)
+            {
+                continue;
+            }
+            let relative = path
+                .parent()
+                .and_then(|parent| parent.strip_prefix(dist).ok())
+                .and_then(Path::to_str)
+                .ok_or_else(|| format!("unexpected page path: {}", path.display()))?;
+            pages.push(if relative.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{relative}/")
+            });
+        }
+        Ok(())
+    }
+
+    let mut pages = Vec::new();
+    walk(dist, dist, &mut pages)?;
+    // Directory order is filesystem order; the sitemap is read by people too.
+    pages.sort();
+    Ok(pages)
+}
+
 /// The site ships no JavaScript. Leptos still emits inline hydration
 /// bookkeeping (`__RESOLVED_RESOURCES` and friends) even for static routes,
 /// which is inert with nothing to hydrate—so remove it and let "no scripts"
 /// be a property of the output rather than an aspiration.
 ///
 /// A page that genuinely needs a script would have to reverse WEB-001 first.
+/// JSON-LD blocks (`<script type="application/ld+json">`) are kept: they are
+/// data for crawlers, not executable code, and stripping them would undo the
+/// structured data the pages deliberately state.
 ///
 /// The one exception is [`DMN_VIEWER`]: a deliberate, isolated interactive page
 /// that loads dmn-js to show a model in standard DMN tooling. It is not a content
@@ -190,6 +253,9 @@ fn strip_scripts(directory: &Path) -> Result<(), BoxError> {
 fn without_script_elements(html: &str) -> String {
     const OPEN: &str = "<script";
     const CLOSE: &str = "</script>";
+    /// The carve-out: a block whose opening tag declares this type is data,
+    /// not code. The CI no-script check permits exactly the same attribute.
+    const JSON_LD: &str = r#"type="application/ld+json""#;
 
     let mut kept = String::with_capacity(html.len());
     let mut rest = html;
@@ -199,8 +265,15 @@ fn without_script_elements(html: &str) -> String {
             // Unterminated: keep it rather than silently truncating the page.
             break;
         };
-        kept.push_str(&rest[..start]);
-        rest = &rest[start + end + CLOSE.len()..];
+        let after = start + end + CLOSE.len();
+        // The opening tag runs to the first `>`; JSON-LD content cannot hide
+        // one earlier, because serialization escapes `<` and the payload's
+        // own `>`s only ever follow the real tag end.
+        let keeps_data_block = rest[start..]
+            .split_once('>')
+            .is_some_and(|(tag, _)| tag.contains(JSON_LD));
+        kept.push_str(&rest[..if keeps_data_block { after } else { start }]);
+        rest = &rest[after..];
     }
     kept.push_str(rest);
     kept
@@ -208,7 +281,7 @@ fn without_script_elements(html: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::without_script_elements;
+    use super::{page_paths, without_script_elements};
 
     #[test]
     fn removes_inline_script() {
@@ -232,5 +305,68 @@ mod tests {
     fn keeps_unterminated_script_rather_than_truncating() {
         let html = "<p>keep me</p><script>oops";
         assert_eq!(without_script_elements(html), html);
+    }
+
+    #[test]
+    fn keeps_json_ld_blocks_while_stripping_scripts_around_them() {
+        let html = "<script>code</script>\
+                    <script type=\"application/ld+json\">{\"@type\":\"TechArticle\"}</script>\
+                    <script nonce=\"x\">more</script>";
+        assert_eq!(
+            without_script_elements(html),
+            "<script type=\"application/ld+json\">{\"@type\":\"TechArticle\"}</script>"
+        );
+    }
+
+    #[test]
+    fn the_json_ld_carve_out_reads_the_whole_opening_tag() {
+        // The type attribute need not come first for the block to be data.
+        let html = "<p>a</p><script id=\"schema\" type=\"application/ld+json\">{}</script>";
+        assert_eq!(without_script_elements(html), html);
+    }
+
+    #[test]
+    fn a_script_merely_mentioning_json_ld_in_its_body_is_still_stripped() {
+        let html = "<script>let t = 'type=\"application/ld+json\"';</script><p>b</p>";
+        assert_eq!(without_script_elements(html), "<p>b</p>");
+    }
+
+    /// The whole page-set contract in one fixture: nested `index.html` files
+    /// become sorted site-absolute paths; anything else—other `.html` names,
+    /// assets, and any page declaring itself noindex—stays out of the sitemap.
+    #[test]
+    fn page_paths_finds_indexable_pages_and_only_those() {
+        use std::fs;
+
+        let dist = std::env::temp_dir().join(format!("pgdmn-page-paths-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dist);
+        for dir in ["why", "articles/loans"] {
+            fs::create_dir_all(dist.join(dir)).unwrap();
+        }
+        for (file, contents) in [
+            ("index.html", "<html>home</html>"),
+            ("why/index.html", "<html>why</html>"),
+            ("articles/loans/index.html", "<html>post</html>"),
+            (
+                "404.html",
+                "<meta name=\"robots\" content=\"noindex, follow\">",
+            ),
+            ("dmn-viewer.html", "<html>viewer</html>"),
+            ("style.css", "body{}"),
+        ] {
+            fs::write(dist.join(file), contents).unwrap();
+        }
+        // A future noindex route lands at <route>/index.html; its own
+        // declaration keeps it out, not its filename.
+        fs::create_dir_all(dist.join("draft")).unwrap();
+        fs::write(
+            dist.join("draft/index.html"),
+            "<meta name=\"robots\" content=\"noindex, follow\">",
+        )
+        .unwrap();
+
+        let pages = page_paths(&dist).unwrap();
+        let _ = fs::remove_dir_all(&dist);
+        assert_eq!(pages, ["/", "/articles/loans/", "/why/"]);
     }
 }

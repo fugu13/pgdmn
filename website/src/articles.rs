@@ -200,7 +200,7 @@ fn highlight_code_blocks<'a>(events: impl Iterator<Item = Event<'a>>) -> Vec<Eve
                         )
                     } else {
                         let body = crate::highlight::fenced(&lang, &code)
-                            .unwrap_or_else(|| escape_html(&code));
+                            .unwrap_or_else(|| crate::escape::element_text(&code));
                         format!(
                             "<pre class=\"code-block\" role=\"region\" aria-label=\"{}\" \
                              tabindex=\"0\"><code>{}</code></pre>",
@@ -226,22 +226,6 @@ fn code_block_label(lang: &str) -> &'static str {
         "sh" | "bash" | "shell" => "Shell",
         _ => "Code",
     }
-}
-
-/// Escape text for display inside a `<code>` element. Only `&`, `<`, and `>`
-/// can change meaning in element content; a literal `&quot;` in the source (as
-/// in the XSLT stylesheet) becomes `&amp;quot;` and renders back as `&quot;`.
-fn escape_html(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for ch in text.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            other => out.push(other),
-        }
-    }
-    out
 }
 
 /// Markdown tables come out bare. Give them back what the hand-written pages

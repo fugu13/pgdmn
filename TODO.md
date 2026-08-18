@@ -212,6 +212,14 @@ Nothing verifies that the site's internal links resolve. The prerendered output 
 
 This would have caught a trailing-slash problem fixed by hand early on (linking `/why` when the file is `why/index.html`), and it guards the class of breakage a static site is most prone to: a renamed route silently leaving dead links behind.
 
+### WEB-011: Derive the canonical host from CNAME in the remaining workflow checks
+
+The `Website` workflow's sitemap-resolution step reads the host from `website/dist/CNAME` (the artifact `site::DOMAIN` produced), but the older social-metadata check and the CNAME assertion still hardcode `www.pgdmn.com` as YAML literals. Converting them to read the CNAME the same way would leave exactly one intentional literal—the assertion that CNAME *is* the expected domain—so a domain change touches one Rust constant and one YAML line instead of several.
+
+### WEB-010: Register the site in Google Search Console
+
+The site now publishes `sitemap.xml` (named in `robots.txt`), but nothing has told Google it exists. Verify a Domain property for `pgdmn.com` in Search Console (DNS TXT record via Route 53—covers www and the apex in one property), submit `https://www.pgdmn.com/sitemap.xml`, and request indexing on the home page and the articles index. This is an owner action requiring the Google account and DNS access, not a code change; it is also the only visibility into crawl/indexing errors the site currently has none of.
+
 ## CI
 
 ### CI-001: Publish the extension test image to GHCR as a cache fallback
