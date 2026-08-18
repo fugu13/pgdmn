@@ -1,4 +1,4 @@
-.PHONY: help test-image check build test bench bench-shapes lint fmt verify clean doc-check license-check website website-dev website-build website-serve website-test website-lint website-fmt website-clean vendor-status vendor-diff vendor-test vendor-bench vendor-check vendor-upgrade vendor-inspect
+.PHONY: help test-image check build test bench bench-shapes lint fmt verify clean doc-check license-check website website-dev website-build website-serve website-test website-lint website-fmt website-clean website-blog website-draft vendor-status vendor-diff vendor-test vendor-bench vendor-check vendor-upgrade vendor-inspect
 
 DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-test
 
@@ -14,6 +14,10 @@ DOCKER_BUILD_CACHE ?=
 REPO_ROOT = $(shell cd "$$(git rev-parse --git-common-dir)/.." && pwd)
 WEBSITE_TARGET_DIR = $(REPO_ROOT)/website/target
 WEBSITE_CARGO = cd website && CARGO_TARGET_DIR=$(WEBSITE_TARGET_DIR) cargo
+
+# Keep WEBSITE_PORT matching the port hardcoded in website/src/bin/serve.rs (WEB-010).
+WEBSITE_PORT := 3000
+WEBSITE_URL := http://127.0.0.1:$(WEBSITE_PORT)
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "%-16s %s\n", $$1, $$2}'
@@ -138,5 +142,14 @@ website-fmt: ## Auto-format the website
 	$(WEBSITE_CARGO) fmt
 
 website: website-build ## Prerender, open the site in the browser, and serve it
-	open http://127.0.0.1:3000
+	open $(WEBSITE_URL)
 	$(MAKE) website-serve
+
+website-blog: ## Commit added/updated files under website/articles/ and website/public/ to a new branch, push it, then build and preview locally
+	scripts/blog-commit.sh
+	$(MAKE) website-build
+	( n=0; until curl -sf $(WEBSITE_URL) >/dev/null 2>&1 || [ $$n -ge 40 ]; do sleep 0.5; n=$$((n + 1)); done; open $(WEBSITE_URL) ) &
+	$(MAKE) website-serve
+
+website-draft: ## Scaffold website/articles/draft.md, a placeholder draft post
+	scripts/new-draft.sh

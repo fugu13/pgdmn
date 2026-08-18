@@ -3,7 +3,10 @@
 //!
 //! Nothing here runs at request time, because there are no requests—the site
 //! is static. Adding a post means adding a `.md` file; no Rust changes, and no
-//! route to register.
+//! route to register. A post whose front matter sets `draft: true` is dropped
+//! before it reaches [`all`]: no route, no home page listing, no share
+//! metadata—so it can be written and committed in stages without going live
+//! half-finished.
 
 use std::fmt::Write as _;
 use std::sync::OnceLock;
@@ -59,10 +62,10 @@ pub fn slugs() -> Vec<String> {
     all().iter().map(|post| post.slug.clone()).collect()
 }
 
-/// Parse every embedded markdown file. The error names the file, because the
-/// person who sees it is the person who just wrote the post.
+/// Parse every embedded markdown file, dropping drafts. The error names the
+/// file, because the person who sees it is the person who just wrote the post.
 pub fn load() -> Result<Vec<Article>, String> {
-    let mut posts = POSTS
+    let mut posts: Vec<Article> = POSTS
         .files()
         .filter(|file| file.path().extension().is_some_and(|ext| ext == "md"))
         .map(|file| {
@@ -77,14 +80,18 @@ pub fn load() -> Result<Vec<Article>, String> {
                 .ok_or_else(|| format!("post is not valid UTF-8: {name}"))?;
             parse(slug, source).map_err(|e| format!("{name}: {e}"))
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect::<Result<Vec<_>, String>>()?
+        .into_iter()
+        .flatten()
+        .collect();
 
     // Newest first. Dates are `YYYY-MM-DD`, so sorting the strings sorts the days.
     posts.sort_by(|a, b| b.date.cmp(&a.date));
     Ok(posts)
 }
 
-fn parse(slug: &str, source: &str) -> Result<Article, String> {
+/// Parses one post; `Ok(None)` means its front matter set `draft: true`.
+fn parse(slug: &str, source: &str) -> Result<Option<Article>, String> {
     let (front_matter, body) = split_front_matter(source)?;
 
     let field = |key: &str| -> Result<String, String> {
@@ -94,6 +101,10 @@ fn parse(slug: &str, source: &str) -> Result<Article, String> {
             .map(|(_, value)| value.clone())
             .ok_or_else(|| format!("front matter is missing `{key}`"))
     };
+
+    if field("draft").is_ok_and(|draft| draft == "true") {
+        return Ok(None);
+    }
 
     let files = field("files").map_or_else(
         |_| Vec::new(),
@@ -105,7 +116,7 @@ fn parse(slug: &str, source: &str) -> Result<Article, String> {
         },
     );
 
-    Ok(Article {
+    Ok(Some(Article {
         slug: slug.to_string(),
         title: field("title")?,
         date: field("date")?,
@@ -114,7 +125,7 @@ fn parse(slug: &str, source: &str) -> Result<Article, String> {
         example: field("example").ok(),
         files,
         body: to_html(body),
-    })
+    }))
 }
 
 /// The `key: value` pairs at the top of a post.
@@ -308,7 +319,7 @@ fn take_caption(before: &str) -> (&str, Option<&str>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{load, split_front_matter, tables_accessible, to_html};
+    use super::{load, parse, split_front_matter, tables_accessible, to_html};
     use crate::site::DESCRIPTION_LIMIT;
 
     /// A description that runs past what a crawler shows is truncated for the
@@ -347,6 +358,21 @@ mod tests {
         if let Some(post) = without {
             assert_eq!(post.card_description(), post.summary);
         }
+    }
+
+    #[test]
+    fn draft_front_matter_excludes_the_post() {
+        let source =
+            "---\ntitle: Draft\ndate: 2026-01-01\nsummary: not yet\ndraft: true\n---\n\nBody.\n";
+        let post = parse("draft", source).expect("front matter should parse");
+        assert!(post.is_none());
+    }
+
+    #[test]
+    fn missing_draft_field_defaults_to_published() {
+        let source = "---\ntitle: Published\ndate: 2026-01-01\nsummary: out now\n---\n\nBody.\n";
+        let post = parse("post", source).expect("front matter should parse");
+        assert!(post.is_some());
     }
 
     #[test]

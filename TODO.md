@@ -212,11 +212,15 @@ Nothing verifies that the site's internal links resolve. The prerendered output 
 
 This would have caught a trailing-slash problem fixed by hand early on (linking `/why` when the file is `why/index.html`), and it guards the class of breakage a static site is most prone to: a renamed route silently leaving dead links behind.
 
+### WEB-010: Website preview port is hardcoded in two places
+
+The root `Makefile`'s `WEBSITE_PORT` variable (used by the `website` and `website-blog` targets to build the preview URL) and the `127.0.0.1:3000` bind address in `website/src/bin/serve.rs` are two separate hardcoded copies of the same port number. Changing one without the other would make `make website`/`make website-blog` open the wrong URL silently. Consider threading the port through a single source of truth (e.g. an environment variable `serve` reads, with the Makefile setting it) if the port ever needs to change.
+
 ### WEB-011: Derive the canonical host from CNAME in the remaining workflow checks
 
 The `Website` workflow's sitemap-resolution step reads the host from `website/dist/CNAME` (the artifact `site::DOMAIN` produced), but the older social-metadata check and the CNAME assertion still hardcode `www.pgdmn.com` as YAML literals. Converting them to read the CNAME the same way would leave exactly one intentional literal—the assertion that CNAME *is* the expected domain—so a domain change touches one Rust constant and one YAML line instead of several.
 
-### WEB-010: Register the site in Google Search Console
+### WEB-012: Register the site in Google Search Console
 
 The site now publishes `sitemap.xml` (named in `robots.txt`), but nothing has told Google it exists. Verify a Domain property for `pgdmn.com` in Search Console (DNS TXT record via Route 53—covers www and the apex in one property), submit `https://www.pgdmn.com/sitemap.xml`, and request indexing on the home page and the articles index. This is an owner action requiring the Google account and DNS access, not a code change; it is also the only visibility into crawl/indexing errors the site currently has none of.
 
