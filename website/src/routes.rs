@@ -6,14 +6,18 @@ pub const ARTICLES: &str = "articles";
 /// Pages among them) serve for any path that does not exist.
 pub const NOT_FOUND: &str = "404";
 
-/// Path to the articles index, with the trailing slash that addresses its
-/// prerendered file directly rather than by way of a redirect.
-pub fn articles() -> String {
-    format!("/{ARTICLES}/")
+/// Site-absolute path of a top-level route, with the trailing slash that
+/// addresses its prerendered file directly rather than by way of a redirect.
+pub fn page(segment: &str) -> String {
+    format!("/{segment}/")
 }
 
-/// Path to an article, with the trailing slash that addresses its prerendered
-/// file directly rather than by way of a redirect.
+/// Path to the articles index.
+pub fn articles() -> String {
+    page(ARTICLES)
+}
+
+/// Path to an article, with the same trailing-slash rule as [`page`].
 pub fn article(slug: &str) -> String {
     format!("/{ARTICLES}/{slug}/")
 }

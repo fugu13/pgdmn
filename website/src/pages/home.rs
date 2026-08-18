@@ -3,20 +3,27 @@ use leptos::prelude::*;
 use crate::components::page_meta::PageMeta;
 use crate::components::sql_block::SqlBlock;
 use crate::components::structured_data::{JsonLd, software_application};
+use crate::site;
 
-/// The one sentence the site leads with, told identically to a reader (the
-/// hero), a crawler (the meta description), and a machine (the JSON-LD).
-const TAGLINE: &str =
-    "Run DMN decision tables inside PostgreSQL. No network hop, no external engine—just SQL.";
+/// The headline: the tab title pairs it with the site name, and the share
+/// card shows it alone (the card already names the site).
+const HEADLINE: &str = "DMN for PostgreSQL. Run business rules in your database.";
 
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! {
-        <PageMeta title="pgdmn · DMN for PostgreSQL" description=TAGLINE path="/"/>
-        <JsonLd json=software_application(TAGLINE)/>
+        <PageMeta
+            title=format!("{} · {HEADLINE}", site::NAME)
+            card_title=HEADLINE
+            description=site::DESCRIPTION
+            path="/"
+        />
+        <JsonLd json=software_application(site::DESCRIPTION)/>
         <div class="hero">
             <h1>"pgdmn"</h1>
-            <p class="tagline">{TAGLINE}</p>
+            <p class="tagline">
+                "Run DMN decision tables inside PostgreSQL. No network hop, no external engine—just SQL."
+            </p>
         </div>
 
         <h2>"Quick start"</h2>
