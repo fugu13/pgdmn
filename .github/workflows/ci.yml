@@ -118,13 +118,7 @@ jobs:
         with:
           tool: cargo-audit
 
-      # RUSTSEC-2026-0258 (h2 unbounded empty DATA frames, published
-      # 2026-08-17): h2 is pulled in transitively via reqwest/hyper, which
-      # dsntk-feel-evaluator only depends on behind its `external-functions`
-      # Cargo feature -- off by default (DEPS-001), so this code path never
-      # ships in pgdmn's built extension. Reviewed 2026-08-18; revisit (and
-      # drop this ignore) once hyper/reqwest pick up a fixed h2 upstream.
-      - run: cargo audit --ignore RUSTSEC-2026-0258
+      - run: cargo audit
 
   # Dependency license policy (cargo-deny, allowlist in deny.toml). Unlike the
   # audit job above, this is a policy gate on *future* PRs, not a scan for
