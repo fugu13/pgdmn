@@ -124,7 +124,7 @@ SELECT round(dmn_eval_numeric(
 Usable directly in a `WHERE` clause or a `CHECK` constraint.
 
 ```sql
-SELECT dmn_eval_bool(dmn_load('...'), 'Eligible', '{"Age": 30}'::jsonb);
+SELECT dmn_evaluate_bool(dmn_load('...'), 'Eligible', '{"Age": 30}'::jsonb);
 -- true
 ```
 
