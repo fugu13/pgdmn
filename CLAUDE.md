@@ -242,7 +242,8 @@ preserved, property-tested).
 
 ## Git
 
-- Main branch is `main` and is never modified directly—all work happens on branches in worktrees, merged via PR (`gh pr merge <number> --merge`).
+- Main branch is `main` and is never modified directly—all work happens on branches in worktrees, merged via PR (`fj pr merge <number>` on forge, `gh pr merge <number> --merge` on GitHub).
+- Two remotes: `forge` (fugu13/pgdmn on the private Forgejo over the tailnet, SSH) is the day-to-day remote, where PRs open and every code check runs through `.forgejo/workflows/ci.yml`; `origin` (GitHub) receives landmark pushes and keeps the website deploy (Pages) and the cache cleanup, which run only there (`.github/workflows/`). Keep the two CI files in step; each difference is commented in the forge copy.
 - Commit discipline, in order: `/simplify` (out-of-scope findings go to `TODO.md`), `make verify` (and `make website-lint` if the website changed), BUGHISTORY reoccurrence check, then commit with a HEREDOC message (`git commit -F - <<'EOF'`), never `$()` substitution.
 - Keep PRs focused; split optional enhancements into TODOs.
 - When Copilot review is definitively wrong, add a correction under `.github/instructions/` (scoped, with `applyTo` frontmatter) or `.github/copilot-instructions.md` (repo-wide). Ask the user first unless 100% certain.
