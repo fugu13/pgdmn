@@ -1,7 +1,7 @@
 name: CI
 
+# Runs only on push to main (the forge-hosted copy of this workflow, .forgejo/workflows/ci.yml, runs on every PR now) -- a health check on the mirrored main, not the primary CI gate.
 on:
-  pull_request:
   push:
     branches: [main]
 
