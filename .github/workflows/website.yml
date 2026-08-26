@@ -1,13 +1,11 @@
 name: Website
 
+# Push to main only -- PRs happen on forge now (see CLAUDE.md), which has
+# no Pages equivalent, so this stays GitHub-only but no longer needs a
+# pull_request trigger.
 on:
   push:
     branches: [main]
-    paths:
-      - 'website/**'
-      - 'Makefile'
-      - '.github/workflows/website.yml'
-  pull_request:
     paths:
       - 'website/**'
       - 'Makefile'
