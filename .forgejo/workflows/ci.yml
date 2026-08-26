@@ -1,0 +1,178 @@
+name: CI
+
+# The forge copy of .github/workflows/ci.yml. Day-to-day development and every
+# code check run on the private Forgejo (fugu13/pgdmn on the tailnet, the
+# `forge` remote); GitHub keeps the website deploy (Pages) and the cache
+# cleanup, which have no forge counterpart. When this directory exists,
+# Forgejo ignores .github/workflows. Every difference from the GitHub file is
+# commented at the step; keep the two in step otherwise.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Cancel a superseded PR run (the new push makes the old one moot), but let a
+# run on main finish rather than leaving results incomplete for a merged commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  extension:
+    name: Extension (lint + pgrx tests)
+    # A bare machine rather than a job container: `make test-image` bind-mounts
+    # the checkout into the test container, which needs a real host path. The
+    # machine is this job's alone (8 shared CPUs, 16 GB, a 30 GB scratch disk
+    # holding the Docker data root and the workspace), so nothing needs
+    # freeing first.
+    runs-on: ubuntu-latest-vm
+    env:
+      DOCKER_BUILD_CACHE: "--cache-from type=gha,scope=pgdmn-test --cache-to type=gha,mode=max,scope=pgdmn-test"
+    steps:
+      - uses: actions/checkout@v7
+
+      # Creates a docker-container builder so `--cache-to type=gha` and
+      # `--load` work; sets it as the default buildx builder that
+      # `make test-image`'s `docker buildx build` will use. The builder shares
+      # the machine's network: the platform's cache server is reachable over
+      # IPv6 only, which Docker's bridge network does not carry.
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: network=host
+
+      # Exposes ACTIONS_RUNTIME_TOKEN / ACTIONS_CACHE_URL into the environment
+      # so a raw `docker buildx build --cache-to type=gha` (invoked by the
+      # Makefile, not by build-push-action) can read/write the Actions cache
+      # (the platform's cache server speaks the same protocol).
+      - uses: crazy-max/ghaction-github-runtime@v4
+
+      # The container writes compiled artifacts to the bind-mounted `target/`;
+      # caching it keeps pgrx/dsntk from recompiling every run. The run_id in
+      # the key makes every run save a fresh entry (an exact-key hit would skip
+      # the save and discard this run's incremental progress); restore-keys
+      # falls back to the newest prior entry for the same Cargo.lock. The
+      # platform's cache is capped at 20 GB and evicts least-recently-read
+      # entries, so old entries age out on their own.
+      - uses: actions/cache@v6
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-v2-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-v2-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-cargo-target-v2-
+
+      # Two prep steps folded together: (1) drop any pgrx test cluster a restored
+      # cache might carry so Postgres always starts from a fresh mode-0700 data
+      # dir, and (2) hand the bind-mounted workspace to uid 1000 -- the image's
+      # `pgdmn` user, since pgrx/initdb refuse to run as root.
+      - name: Prepare the workspace for the container
+        run: |
+          sudo rm -rf target/test-pgdata
+          sudo chown -R 1000:1000 .
+
+      # One `make` invocation so the shared `test-image` prerequisite -- and the
+      # multi-GB `docker buildx --load` it performs -- runs once; separate
+      # `make lint` and `make test` calls would each rebuild and reload the
+      # image first. The build reuses the Actions layer cache set via
+      # DOCKER_BUILD_CACHE above.
+      - name: Build the test image, then lint and test
+        run: make lint test
+
+      # pgrx's throwaway Postgres cluster (target/test-pgdata) must never be
+      # cached: Postgres refuses to start unless the data dir is mode 0700, but
+      # the `a+rX` below -- needed so the runner can tar the uid-1000-owned tree
+      # -- would leave it 0755 and poison the next run. Delete it first, then
+      # make the remaining compiled artifacts readable for cache archival.
+      - name: Prune the PG test cluster and make target cache-readable
+        if: always()
+        run: |
+          sudo rm -rf target/test-pgdata
+          sudo chmod -R a+rX target || true
+
+      # Forgejo's fork of the action: the upstream one refuses non-GitHub hosts.
+      - name: Upload proptest regressions on failure
+        if: failure()
+        uses: https://code.forgejo.org/forgejo/upload-artifact@v4
+        with:
+          name: proptest-regressions
+          path: |
+            proptest-regressions/**
+            src/**/proptest-regressions/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Security-advisory scan of the dependency tree. Required and blocking: an
+  # advisory in the pgrx/dsntk tree should stop a merge, not just get noticed
+  # after the fact. If an unfixable upstream advisory ever blocks unrelated
+  # PRs, use `cargo audit --ignore RUSTSEC-...` (documented, reviewed) rather
+  # than reverting to continue-on-error.
+  audit:
+    name: cargo-audit (advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: taiki-e/install-action@v2.85.5
+        with:
+          tool: cargo-audit
+
+      - run: cargo audit
+
+  # Dependency license policy (cargo-deny, allowlist in deny.toml). Unlike the
+  # audit job above, this is a policy gate on *future* PRs, not a scan for
+  # externally-discovered vulnerabilities in code already merged -- there is
+  # no "unfixable upstream advisory" analog here, a rejected license is
+  # exactly the outcome the gate exists to produce, so it stays on the
+  # required aggregate. Pure manifest/lockfile analysis (`cargo metadata`
+  # under the hood) -- no Docker/pgrx/PG needed, so it runs directly on the
+  # runner. Three separate `cargo deny` invocations because the repo is three
+  # separate cargo workspaces (root pgdmn + vendored dsntk crates, website/,
+  # profiling/ -- see the root Cargo.toml's `exclude`), each with its own
+  # Cargo.lock; `make license-check` points all three at the one shared
+  # deny.toml.
+  license:
+    name: cargo-deny (license policy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: taiki-e/install-action@v2.85.5
+        with:
+          # Pinned: cargo-deny's CLI has moved --config between the top-level
+          # and the `check` subcommand across versions (an unpinned install
+          # once resolved a version where `check --config` was rejected,
+          # while every version tested locally accepts it there) -- pin to
+          # what's actually verified rather than drift silently.
+          tool: cargo-deny@0.19.4
+
+      - run: make license-check
+
+  # Enforces that README.md and the website Docs page must each cover every
+  # #[pg_extern] function in src/functions/*.rs. Pure text analysis over the
+  # checked-out source (scripts/doc_check.sh) -- no Docker/pgrx/PG needed, so
+  # this runs directly on the runner rather than through the extension job's
+  # container. Deliberately unconditional (no `paths:` filter -- see CI-003)
+  # so it always reports and never leaves the required aggregate pending.
+  docs:
+    name: Documentation coverage (README + website Docs page)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: make doc-check
+
+  ci:
+    name: CI aggregate
+    if: always()
+    needs: [extension, docs, license, audit]
+    runs-on: ubuntu-latest
+    steps:
+      # A single required status check that goes green only if every needed job
+      # succeeded. `skipped` is intentionally allowed so a future path-filtered
+      # `extension` (see CI-003) never blocks a docs-only PR.
+      - name: Fail if a required job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
