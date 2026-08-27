@@ -10,6 +10,13 @@ DOCKER_RUN = docker run --rm -e USER=pgdmn -v "$$(pwd)":/pgdmn -w /pgdmn pgdmn-t
 # is what supports these flags and `--load`.
 DOCKER_BUILD_CACHE ?=
 
+# `--progress=plain` on the build itself (below): the CI runner's docker exec
+# allocates a pty, so buildx's default `auto` progress mode detects a
+# terminal and picks the redraw-in-place TTY UI -- fine live, but the
+# runner's log capture can't erase lines, so it persists every redraw frame
+# as a new line, bloating a several-minute build into tens of thousands of
+# near-duplicate log lines. `plain` prints each step once as it completes.
+
 # Shared cargo target dir so worktrees reuse the main repo's build cache
 REPO_ROOT = $(shell cd "$$(git rev-parse --git-common-dir)/.." && pwd)
 WEBSITE_TARGET_DIR = $(REPO_ROOT)/website/target
@@ -19,7 +26,7 @@ help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "%-16s %s\n", $$1, $$2}'
 
 test-image: ## Build the Docker image (PG17 + pgrx toolchain, non-root pgdmn user)
-	docker buildx build $(DOCKER_BUILD_CACHE) --load -t pgdmn-test .
+	docker buildx build --progress=plain $(DOCKER_BUILD_CACHE) --load -t pgdmn-test .
 
 check: test-image ## Run cargo check (fast compilation check, no tests)
 	$(DOCKER_RUN) cargo check --all-targets
