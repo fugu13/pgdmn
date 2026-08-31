@@ -45,7 +45,7 @@ name = "dsntk_feel_grammar"
 path = "src/lib.rs"
 
 [dependencies.convert_case]
-version = "0.11.0"
+version = "0.12.0"
 
 [dependencies.regex]
 version = "1.12.3"
