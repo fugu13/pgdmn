@@ -44,7 +44,7 @@ Two host-native exceptions (always with `cargo +stable-aarch64-apple-darwin`—t
 | `make website-dev` | Prerender, then serve; re-run to pick up changes |
 | `make website-lint` | clippy + rustfmt check for the website |
 
-`make test-image` builds with `docker buildx build $(DOCKER_BUILD_CACHE) --load -t pgdmn-test .`. `DOCKER_BUILD_CACHE` is empty locally (plain buildx build using Docker's own cache); CI sets it to a GitHub Actions layer cache (`--cache-from`/`--cache-to type=gha`; the exact flags live in `ci.yml`) so the image (apt PostgreSQL 17 + `cargo install cargo-pgrx`) is reused across CI runs instead of rebuilt from scratch. Same `make` target either way—only the cache backend differs.
+`make test-image` builds with `docker buildx build --progress=plain $(DOCKER_BUILD_CACHE) --load -t pgdmn-test .`. `--progress=plain` avoids the redraw-based TTY progress UI, which a CI runner's pty allocation triggers even though its log capture can't erase lines—`auto` mode there bloats a several-minute build into tens of thousands of near-duplicate log lines. `DOCKER_BUILD_CACHE` is empty locally (plain buildx build using Docker's own cache); CI sets it to a GitHub Actions layer cache (`--cache-from`/`--cache-to type=gha`; the exact flags live in `ci.yml`) so the image (apt PostgreSQL 17 + `cargo install cargo-pgrx`) is reused across CI runs instead of rebuilt from scratch. Same `make` target either way—only the cache backend differs.
 
 The website builds on the host rather than in Docker, but needs no host tools beyond cargo: Sass is compiled in-process by the `grass` crate, and there is no wasm step. There is deliberately no hot-reload—it depended on `cargo-leptos`, which cannot survive the removal of the wasm target (see WEB-001).
 
