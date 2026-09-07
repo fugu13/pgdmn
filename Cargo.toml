@@ -37,11 +37,7 @@ keywords = ["dmn", "feel", "decision", "postgres", "pgrx"]
 categories = ["database"]
 
 [lib]
-crate-type = ["cdylib", "lib"]
-
-[[bin]]
-name = "pgrx_embed_pgdmn"
-path = "src/bin/pgrx_embed.rs"
+crate-type = ["cdylib"]
 
 [features]
 default = ["pg17"]
@@ -82,7 +78,7 @@ rapidhash = "1"
 lru = "0.18"
 
 [dev-dependencies]
-pgrx-tests = "0.16"
+pgrx-tests = "0.19"
 proptest = "1"
 
 # dsntk is vendored (see vendor/README.md) so the DMN/FEEL engine can be

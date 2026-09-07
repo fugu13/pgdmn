@@ -25,7 +25,7 @@ USER pgdmn
 WORKDIR /pgdmn
 
 # Install cargo-pgrx matching our dependency version
-RUN cargo install cargo-pgrx --version "~0.16" --locked
+RUN cargo install cargo-pgrx --version "~0.19" --locked
 
 # Lint and format tooling for `make lint` / `make fmt`
 RUN rustup component add clippy rustfmt

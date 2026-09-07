@@ -253,7 +253,3 @@ Example usage:
 SELECT dmn_create_input_type(dmn_load('<xml>'), 'Eligibility', 'eligibility_input');
 -- Creates: CREATE TYPE eligibility_input AS ("Age" numeric, "Income" numeric)
 ```
-
-### CHORE-006: Migrate to pgrx 0.18
-
-pgrx and pgrx-tests 0.16.1 → 0.18.0 is a breaking framework major that Dependabot cannot land on its own (rejected PRs #31/#32): the embed entrypoint moved — `::pgrx::pgrx_embed!()` in `src/bin/pgrx_embed.rs` no longer resolves (`cannot find pgrx_embed in pgrx`, `main function not found in crate pgrx_embed_pgdmn`), which is only the first surfaced breakage before the SQL-entity/schema-generation and datum-API changes across two minor cycles (0.16 → 0.17 → 0.18). Do this as a dedicated migration: bump both crates together (they are a matched pair and must move in lockstep), rebuild the test image (`make test-image`, Cargo.lock changed), and run the full `make test` suite plus the custom `DmnModel` InOutFuncs and `pgrx::datum::Interval` paths that are the most version-sensitive. Update the `pgrx_embed` gotcha in CLAUDE.md if the embed API shape changes. Not a triage-merge.
