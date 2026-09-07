@@ -116,7 +116,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: taiki-e/install-action@v2.85.5
+      - uses: taiki-e/install-action@v2.87.7
         with:
           tool: cargo-audit
 
@@ -140,7 +140,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: taiki-e/install-action@v2.85.5
+      - uses: taiki-e/install-action@v2.87.7
         with:
           # Pinned: cargo-deny's CLI has moved --config between the top-level
           # and the `check` subcommand across versions (an unpinned install
