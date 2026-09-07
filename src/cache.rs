@@ -13,25 +13,27 @@ use lru::LruCache;
 
 use crate::types::dmn_model::DmnModel;
 
-type RapidBuildHasher = std::hash::BuildHasherDefault<rapidhash::RapidInlineHasher>;
+type RapidBuildHasher = std::hash::BuildHasherDefault<rapidhash::fast::RapidHasher<'static>>;
 
-/// Second seed for the 128-bit content hash (the first pass uses
-/// `rapidhash::RAPID_SEED`). Any constant distinct from `RAPID_SEED` works;
-/// this is the 64-bit golden-ratio constant.
-const SECOND_SEED: u64 = 0x9e37_79b9_7f4a_7c15;
+/// Second secrets for the 128-bit content hash (the first pass uses
+/// `rapidhash::v3::DEFAULT_RAPID_SECRETS`). Any seed value distinct from the
+/// default's produces independent secrets; this seed is the 64-bit
+/// golden-ratio constant.
+const SECOND_SECRETS: rapidhash::v3::RapidSecrets =
+    rapidhash::v3::RapidSecrets::seed(0x9e37_79b9_7f4a_7c15);
 
-/// 128-bit content hash: two independently seeded 64-bit rapidhash passes.
+/// 128-bit content hash: two independently seeded 64-bit rapidhash v3 passes.
 ///
 /// Collision reasoning: rapidhash is a well-mixed 64-bit hash, and two passes
-/// with independent seeds behave as independent hash functions, so two
+/// with independent secrets behave as independent hash functions, so two
 /// distinct inputs collide in all 128 bits with probability ~2^-128 —
 /// negligible for any number of distinct models or context shapes a backend
 /// will ever see. This is why cache probes keyed on these digests skip byte
 /// comparison of the hashed content.
 pub const fn content_hash128(bytes: &[u8]) -> [u64; 2] {
     [
-        rapidhash::rapidhash_seeded(bytes, rapidhash::RAPID_SEED),
-        rapidhash::rapidhash_seeded(bytes, SECOND_SEED),
+        rapidhash::v3::rapidhash_v3_seeded(bytes, &rapidhash::v3::DEFAULT_RAPID_SECRETS),
+        rapidhash::v3::rapidhash_v3_seeded(bytes, &SECOND_SECRETS),
     ]
 }
 
