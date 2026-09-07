@@ -64,6 +64,23 @@ only has six nav items). Follow-ups split out: WEB-008 (tokenize the
 `.site-nav` and its siblings don't each need a `padding-left: 0`
 override).
 
+### CHORE-006: Migrate to pgrx 0.18 (done, landed on 0.19)
+
+pgrx and pgrx-tests moved together from 0.16.1 to 0.19.2 (a newer patch
+was current by the time this landed than the 0.18.0 the item was
+written against). The `pgrx_embed` binary pattern this item flagged as
+the first surfaced breakage is gone as of pgrx 0.18: `src/bin/pgrx_embed.rs`
+and its `[[bin]]` target are deleted, `crate-type` is `["cdylib"]` (was
+`["cdylib", "lib"]`)—pgrx now embeds SQL entity metadata directly in the
+compiled shared library and `cargo-pgrx` reads it from the `.pgrx`
+linker section instead of running a second compile pass. No manual
+`SqlTranslatable` impls existed to port (the custom `DmnModel` type uses
+the `PostgresType`/`InOutFuncs` derive path, which the migration guide
+confirms is unaffected). `Dockerfile`'s `cargo install cargo-pgrx
+--version` pin moved to `~0.19` to match. Full `make test` suite passes
+(130 tests), including the `DmnModel` `InOutFuncs` and
+`pgrx::datum::Interval` paths flagged as most version-sensitive.
+
 ### ADOPT-002: Migrate to rapidhash 4.x (done)
 
 rapidhash moved from 1.4.0 to 4.5.1. `RapidInlineHasher`, `rapidhash_seeded`,

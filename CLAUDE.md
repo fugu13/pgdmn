@@ -7,7 +7,7 @@ PostgreSQL extension that brings DMN (Decision Model and Notation) support to Po
 | Component | Choice |
 |---|---|
 | Language | Rust 2024 edition (extension and website) |
-| Extension framework | pgrx 0.16 |
+| Extension framework | pgrx 0.19 |
 | DMN/FEEL engine | dsntk 0.3 |
 | Target | PostgreSQL 17 |
 | Website | Leptos 0.8, prerendered to static HTML (`website/`) |
@@ -124,7 +124,7 @@ website/
 - `dsntk_model::NamedElement` and `DmnElement` traits must be imported for `.name()` / `.namespace()`
 - `parse_expression(scope, expr, trace)` takes 3 args
 - `pgrx::datum::Interval::new(months, days, micros)`—months first
-- `pgrx_embed` binary required: `[[bin]] name = "pgrx_embed_pgdmn"`
+- Since pgrx 0.18, SQL entity metadata embeds directly in the compiled shared library (`crate-type = ["cdylib"]`)—no `src/bin/pgrx_embed.rs`, no `[[bin]]` target, no second compile pass
 - `website/Cargo.toml` and `profiling/Cargo.toml` both need an empty `[workspace]` table (the root `Cargo.toml` excludes them via `exclude = ["profiling", "website"]`). Without it, Cargo's workspace-root search doesn't stop at the excluding manifest and walks further up looking for one—harmless from a normal checkout, but fails with "current package believes it's in a workspace when it's not" whenever the checkout is nested inside another checkout of the same repo, exactly the layout of an agent worktree under `.claude/worktrees/`.
 
 ## Performance
