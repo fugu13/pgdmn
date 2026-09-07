@@ -63,3 +63,22 @@ only has six nav items). Follow-ups split out: WEB-008 (tokenize the
 `40em` breakpoint), WEB-009 (scope the generic `ul, ol` prose rule so
 `.site-nav` and its siblings don't each need a `padding-left: 0`
 override).
+
+### ADOPT-002: Migrate to rapidhash 4.x (done)
+
+rapidhash moved from 1.4.0 to 4.5.1. `RapidInlineHasher`, `rapidhash_seeded`,
+and `RAPID_SEED` are gone from the crate root; the crate now organizes
+hashing under versioned algorithm modules (`v1`/`v2`/`v3`) plus in-memory
+`Hasher` types under `fast`/`quality`/`inner`. `src/cache.rs` moved to `v3`
+(the crate's own recommended algorithm for new code): `RapidBuildHasher` now
+wraps `rapidhash::fast::RapidHasher<'static>`, and `content_hash128` calls
+`rapidhash::v3::rapidhash_v3_seeded` against two independent
+`rapidhash::v3::RapidSecrets`—the default (`DEFAULT_RAPID_SECRETS`) for the
+first pass, a `RapidSecrets::seed(0x9e3779b97f4a7c15)` for the second. Both
+functions stayed `const fn`, so `content_hash128` is still callable in const
+context. The double-seeded 128-bit collision argument is unaffected by the
+algorithm change—it doesn't depend on which rapidhash version produces the
+64-bit passes, only on them behaving as independent well-mixed hashes—and
+the cache-key contract test (`pg_test_parser_scope_derivation_contract`)
+passes unchanged, along with the rest of the 130-test suite. The
+`[profile.dev.package.rapidhash]` opt-level-3 override was kept.
