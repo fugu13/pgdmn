@@ -236,12 +236,6 @@ Today `ci.yml` rebuilds `pgdmn-test` with a `type=gha` buildx layer cache inject
 
 What's still open: `refs/heads/main`'s own cache (buildx blobs regenerate on every push that touches `Cargo.lock`, since the Dockerfile `COPY`s it before `cargo fetch --locked`) isn't pruned by anything — old main-branch blob generations just sit until eviction. `mode=min` would not help here regardless (this Dockerfile is single-stage, so every layer already ends up in the final image). CI-001 (publish the image to GHCR instead of layer-caching through Actions cache) would sidestep the quota entirely and is the more thorough fix if main's cache growth becomes a problem again.
 
-## Dependencies
-
-### ADOPT-002: Migrate to rapidhash 4.x
-
-rapidhash 1.4.0 → 4.5.1 is a breaking API rename Dependabot cannot land on its own (rejected PR #30): `RapidInlineHasher`, `rapidhash_seeded`, and `RAPID_SEED` no longer exist in the crate, and all three are load-bearing in `src/cache.rs` — the 128-bit content hash is two independently seeded 64-bit passes (`rapidhash_seeded(bytes, RAPID_SEED)` and `rapidhash_seeded(bytes, SECOND_SEED)`), and its collision reasoning depends on the algorithm being well-mixed. Porting to 4.x means finding the renamed API, confirming an equivalent seeded 64-bit primitive exists, and re-validating the double-seeded 128-bit collision argument and the cache-key contract test before trusting cached ASTs — a stale/weaker hash means wrong answers, not errors. The algorithm change itself is safe for the caches (per-backend, never persisted, so no stored hashes to invalidate). Do this as a dedicated, tested change, not a triage-merge; keep the `[profile.dev.package.rapidhash]` opt-level-3 override.
-
 ## Chores
 
 ### FEAT-001: `dmn_create_input_type` helper
