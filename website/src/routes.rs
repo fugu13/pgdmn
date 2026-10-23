@@ -1,3 +1,8 @@
+/// The canonical host. GitHub Pages reads it from the `CNAME` file the
+/// prerender writes, and redirects the apex (pgdmn.com) and plain HTTP here.
+/// Every canonical, social, and sitemap URL is built on it.
+pub const HOST: &str = "www.pgdmn.com";
+
 pub const WHY: &str = "why";
 pub const DOCS: &str = "docs";
 pub const EXAMPLES: &str = "examples";
@@ -10,4 +15,19 @@ pub const NOT_FOUND: &str = "404";
 /// file directly rather than by way of a redirect.
 pub fn article(slug: &str) -> String {
     format!("/{ARTICLES}/{slug}/")
+}
+
+/// Path to a top-level page, with the trailing slash that addresses its
+/// prerendered `index.html` directly. The empty name is the home page.
+pub fn page(name: &str) -> String {
+    if name.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{name}/")
+    }
+}
+
+/// The absolute URL search engines and link previews should use for `path`.
+pub fn absolute(path: &str) -> String {
+    format!("https://{HOST}{path}")
 }

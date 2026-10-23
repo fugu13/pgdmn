@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{Link, MetaTags, Stylesheet, provide_meta_context};
 use leptos_router::{
     ParamSegment, SsrMode, StaticSegment,
     components::{Route, Router, Routes},
@@ -59,7 +59,7 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href=stylesheet::href()/>
-        <Title text="pgdmn · DMN for PostgreSQL"/>
+        <Link rel="icon" href="/favicon.svg" type_="image/svg+xml"/>
         <Router>
             <SkipLink/>
             <Header/>

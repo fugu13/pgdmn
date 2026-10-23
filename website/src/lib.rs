@@ -4,4 +4,5 @@ mod components;
 pub mod highlight;
 mod pages;
 pub mod routes;
+pub mod seo;
 pub mod stylesheet;

@@ -3,6 +3,7 @@
 //! There is no server in production: whatever this writes is exactly what gets
 //! served.
 
+use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -13,6 +14,7 @@ use leptos_axum::generate_route_list_with_ssg;
 use pgdmn_website::app::shell;
 use pgdmn_website::articles;
 use pgdmn_website::routes;
+use pgdmn_website::seo::{self, SitemapEntry};
 use pgdmn_website::stylesheet;
 
 type BoxError = Box<dyn std::error::Error>;
@@ -22,10 +24,6 @@ const DIST: &str = "dist";
 /// Assets copied verbatim into the site root.
 const PUBLIC: &str = "public";
 const STYLESHEET: &str = "style/main.scss";
-/// The canonical host. GitHub Pages reads this from the published output and
-/// redirects the apex (pgdmn.com) here. Pages are linked with absolute paths,
-/// so the site must be served from a domain root—not a `github.io` subpath.
-const DOMAIN: &str = "www.pgdmn.com";
 /// The one page that keeps its scripts: an interactive DMN viewer, copied
 /// verbatim from `public/`. See `strip_scripts`.
 const DMN_VIEWER: &str = "dmn-viewer.html";
@@ -68,7 +66,16 @@ async fn main() -> Result<(), BoxError> {
     // GitHub Pages runs the pages through Jekyll unless this file exists, which
     // silently drops anything whose name starts with an underscore.
     fs::write(Path::new(DIST).join(".nojekyll"), "")?;
-    fs::write(Path::new(DIST).join("CNAME"), format!("{DOMAIN}\n"))?;
+    // Pages are linked with absolute paths, so the site must be served from a
+    // domain root—not a `github.io` subpath.
+    fs::write(Path::new(DIST).join("CNAME"), format!("{}\n", routes::HOST))?;
+
+    // Built from what was just written, so every prerendered page is listed
+    // and nothing else is. Runs after `clean_urls`, which is what gives each
+    // page its `index.html`.
+    let entries = sitemap_entries(Path::new(DIST), &articles)?;
+    fs::write(Path::new(DIST).join("sitemap.xml"), seo::sitemap(&entries))?;
+    fs::write(Path::new(DIST).join("robots.txt"), seo::robots())?;
 
     println!("prerendered site written to {DIST}/");
     Ok(())
@@ -159,6 +166,53 @@ fn clean_urls(directory: &Path) -> Result<(), BoxError> {
     Ok(())
 }
 
+/// One entry per `index.html` under `dist`: the pages a reader can reach.
+/// `404.html` and the DMN viewer keep other names, so neither is listed.
+/// Articles carry their front-matter date as `lastmod`.
+fn sitemap_entries(
+    dist: &Path,
+    articles: &[articles::Article],
+) -> Result<Vec<SitemapEntry>, BoxError> {
+    let dates: HashMap<String, &str> = articles
+        .iter()
+        .map(|article| (routes::article(&article.slug), article.date.as_str()))
+        .collect();
+    Ok(page_paths(dist)?
+        .into_iter()
+        .map(|path| SitemapEntry {
+            lastmod: dates.get(&path).map(|date| (*date).to_string()),
+            path,
+        })
+        .collect())
+}
+
+/// The site-relative path of every `index.html` under `root`, sorted.
+fn page_paths(root: &Path) -> Result<Vec<String>, BoxError> {
+    fn walk(root: &Path, directory: &Path, paths: &mut Vec<String>) -> Result<(), BoxError> {
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                walk(root, &path, paths)?;
+            } else if entry.file_name() == "index.html" {
+                let relative = directory.strip_prefix(root)?;
+                let name = relative
+                    .components()
+                    .map(|part| part.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                paths.push(routes::page(&name));
+            }
+        }
+        Ok(())
+    }
+
+    let mut paths = Vec::new();
+    walk(root, root, &mut paths)?;
+    paths.sort();
+    Ok(paths)
+}
+
 /// The site ships no JavaScript. Leptos still emits inline hydration
 /// bookkeeping (`__RESOLVED_RESOURCES` and friends) even for static routes,
 /// which is inert with nothing to hydrate—so remove it and let "no scripts"
@@ -209,7 +263,25 @@ fn without_script_elements(html: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::without_script_elements;
+    use std::fs;
+
+    use super::{page_paths, without_script_elements};
+
+    #[test]
+    fn lists_index_pages_but_not_404_or_the_viewer() {
+        let root = std::env::temp_dir().join(format!("pgdmn-sitemap-{}", std::process::id()));
+        for dir in ["", "docs", "articles/a"] {
+            fs::create_dir_all(root.join(dir)).unwrap();
+            fs::write(root.join(dir).join("index.html"), "").unwrap();
+        }
+        fs::write(root.join("404.html"), "").unwrap();
+        fs::write(root.join("dmn-viewer.html"), "").unwrap();
+
+        let paths = page_paths(&root).unwrap();
+        fs::remove_dir_all(&root).unwrap();
+
+        assert_eq!(paths, ["/", "/articles/a/", "/docs/"]);
+    }
 
     #[test]
     fn removes_inline_script() {

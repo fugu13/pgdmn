@@ -218,7 +218,7 @@ fn code_block_label(lang: &str) -> &'static str {
 /// Escape text for display inside a `<code>` element. Only `&`, `<`, and `>`
 /// can change meaning in element content; a literal `&quot;` in the source (as
 /// in the XSLT stylesheet) becomes `&amp;quot;` and renders back as `&quot;`.
-fn escape_html(text: &str) -> String {
+pub(crate) fn escape_html(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for ch in text.chars() {
         match ch {

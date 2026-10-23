@@ -72,6 +72,7 @@ website/
     bin/prerender.rs — renders all routes to dist/, compiles Sass, writes 404.html
     bin/serve.rs    — local preview of dist/ (not used in production)
     pages/, components/, routes.rs
+    seo.rs          — sitemap.xml and robots.txt, built from the prerendered pages
   style/main.scss   — Sass styles (compiled by grass, in-process)
   dist/             — generated static site; the deployable artifact (gitignored)
 ```
@@ -217,6 +218,7 @@ preserved, property-tested).
 - **Accessibility is a default, not a feature.** WCAG 2.2 AA on every page. Semantic HTML before ARIA; one `<h1>` per page, no skipped heading levels; `<main>`, `<nav>`, and a skip link; visible focus indicators; 4.5:1 text contrast (3:1 large text/UI); keyboard reachability for every interactive element; every image has `alt`.
 - **URL as state:** the current view is reproducible from its URL.
 - **No JavaScript on the content pages.** Pages are prerendered to static HTML and ship zero JS; links and navigation work with scripting disabled because there is nothing to disable. Anything that would need client-side code has to justify reversing WEB-001 first. CI enforces this: the `Website` workflow fails if a script or wasm reference appears in the output. **The single exception is `public/dmn-viewer.html`**—a deliberate, isolated interactive page that loads dmn-js to render a model in standard DMN tooling. It is a static asset (not a Leptos route), keeps its `.html` name (`prerender.rs` exempts it from `clean_urls` and `strip_scripts`), the CI no-script check excludes it, and it loads dmn-js from a pinned jsDelivr CDN. Do not add a second scripted page without the same explicit exemptions and a good reason.
+- **Search metadata comes from one component.** Every indexable page renders `PageMeta` (`components/page_meta.rs`) with its title, a one-sentence description, and its trailing-slash path; that yields the meta description, the absolute canonical URL, and OpenGraph/Twitter tags. Articles pass their front-matter `summary` and `date`. The 404 page and `dmn-viewer.html` are `noindex`. `sitemap.xml` and `robots.txt` are written by the prerender from the pages it actually produced (every `index.html` under `dist/`), so a new route or article appears in the sitemap with no list to update.
 - **Deployment is automatic.** Pushing to `main` publishes `website/dist` to GitHub Pages at `www.pgdmn.com` via `.github/workflows/website.yml`. The site is served from a domain root because its links and stylesheet are absolute paths—a `github.io` subpath would break them.
 - **Anti-patterns—do not build:** modals, toasts, skeleton screens, infinite scroll, dark-mode toggles (respect `prefers-color-scheme`), custom cursors.
 - Styles in Sass (`style/main.scss`), flat colors, BEM-like modifier names.

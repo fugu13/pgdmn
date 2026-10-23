@@ -212,9 +212,13 @@ Nothing verifies that the site's internal links resolve. The prerendered output 
 
 This would have caught a trailing-slash problem fixed by hand early on (linking `/why` when the file is `why/index.html`), and it guards the class of breakage a static site is most prone to: a renamed route silently leaving dead links behind.
 
-### WEB-007: OpenGraph and social meta tags
+### WEB-007: OpenGraph share image
 
-Add og:title, og:description, og:image, and Twitter card meta tags to the website shell and per-page overrides via leptos_meta.
+Every page now carries og:title, og:description, og:url, og:type, and a `summary` Twitter card through `PageMeta`. What is still missing is `og:image`: link previews show no picture. It needs a designed raster image (PNG, 1200×630; the SVG favicon is not accepted by most preview renderers), published under `public/` and referenced by absolute URL. With an image, switch the Twitter card to `summary_large_image`.
+
+### WEB-010: JSON-LD structured data
+
+Search engines read `application/ld+json` blocks to show rich results: `SoftwareApplication` for the home page, `TechArticle` with `datePublished` for each article. A JSON-LD block is data, not executable script, but it is a `<script>` element, so `strip_scripts` in the prerender removes it and the `Website` workflow's no-script check rejects it. Adding it means exempting `type="application/ld+json"` in both places, explicitly, without loosening the WEB-001 rule for executable scripts.
 
 ## CI
 
@@ -237,6 +241,10 @@ Today `ci.yml` rebuilds `pgdmn-test` with a `type=gha` buildx layer cache inject
 What's still open: `refs/heads/main`'s own cache (buildx blobs regenerate on every push that touches `Cargo.lock`, since the Dockerfile `COPY`s it before `cargo fetch --locked`) isn't pruned by anything — old main-branch blob generations just sit until eviction. `mode=min` would not help here regardless (this Dockerfile is single-stage, so every layer already ends up in the final image). CI-001 (publish the image to GHCR instead of layer-caching through Actions cache) would sidestep the quota entirely and is the more thorough fix if main's cache growth becomes a problem again.
 
 ## Chores
+
+### REFACTOR-001: One HTML escape and one directory walk for the website build
+
+The website has three copies of the same `&`/`<`/`>` escape: `escape_html` in `articles.rs` (now also used by `seo.rs`), `escape` in `highlight.rs`, and an inline copy in `highlight::signature`. The prerender likewise has four hand-written recursive `fs::read_dir` walks (`copy_dir`, `clean_urls`, `strip_scripts`, `page_paths`). Fold each set into one helper. Purely internal; the prerendered output must not change.
 
 ### FEAT-001: `dmn_create_input_type` helper
 
