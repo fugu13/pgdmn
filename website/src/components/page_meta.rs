@@ -33,7 +33,7 @@ pub fn PageMeta(
         <Title text=title.clone()/>
         <Meta name="description" content=description.clone()/>
         <Link rel="canonical" href=url.clone()/>
-        <Meta property="og:site_name" content="pgdmn"/>
+        <Meta property="og:site_name" content=routes::SITE_NAME/>
         <Meta property="og:type" content=kind/>
         <Meta property="og:title" content=title/>
         <Meta property="og:description" content=description/>

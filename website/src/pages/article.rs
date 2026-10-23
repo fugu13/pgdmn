@@ -6,6 +6,7 @@ use crate::components::download::{Download, FileKind};
 use crate::components::page_meta::PageMeta;
 use crate::pages::not_found::NotFoundPage;
 use crate::routes;
+use crate::structured_data::{self, StructuredData};
 
 /// One article, rendered from its markdown file.
 ///
@@ -38,6 +39,7 @@ pub fn ArticlePage() -> impl IntoView {
             path=routes::article(&article.slug)
             published=article.date.clone()
         />
+        <StructuredData data=structured_data::article(article)/>
         {is_walkthrough.then(|| view! { <p class="post-kind">"Walkthrough"</p> })}
         <h1>{article.title.clone()}</h1>
         <p class="post-date">

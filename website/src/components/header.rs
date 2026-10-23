@@ -23,7 +23,7 @@ pub fn Header() -> impl IntoView {
                         <li><A href=routes::page(routes::ARTICLES)>"Articles"</A></li>
                         <li>
                             <a
-                                href="https://github.com/fugu13/pgdmn"
+                                href=routes::REPOSITORY
                                 rel="noopener noreferrer"
                                 target="_blank"
                             >

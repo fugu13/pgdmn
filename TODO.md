@@ -216,10 +216,6 @@ This would have caught a trailing-slash problem fixed by hand early on (linking 
 
 Every page now carries og:title, og:description, og:url, og:type, and a `summary` Twitter card through `PageMeta`. What is still missing is `og:image`: link previews show no picture. It needs a designed raster image (PNG, 1200×630; the SVG favicon is not accepted by most preview renderers), published under `public/` and referenced by absolute URL. With an image, switch the Twitter card to `summary_large_image`.
 
-### WEB-010: JSON-LD structured data
-
-Search engines read `application/ld+json` blocks to show rich results: `SoftwareApplication` for the home page, `TechArticle` with `datePublished` for each article. A JSON-LD block is data, not executable script, but it is a `<script>` element, so `strip_scripts` in the prerender removes it and the `Website` workflow's no-script check rejects it. Adding it means exempting `type="application/ld+json"` in both places, explicitly, without loosening the WEB-001 rule for executable scripts.
-
 ## CI
 
 ### CI-001: Publish the extension test image to GHCR as a cache fallback

@@ -5,4 +5,5 @@ pub mod highlight;
 mod pages;
 pub mod routes;
 pub mod seo;
+pub mod structured_data;
 pub mod stylesheet;

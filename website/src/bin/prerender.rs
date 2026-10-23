@@ -15,6 +15,7 @@ use pgdmn_website::app::shell;
 use pgdmn_website::articles;
 use pgdmn_website::routes;
 use pgdmn_website::seo::{self, SitemapEntry};
+use pgdmn_website::structured_data;
 use pgdmn_website::stylesheet;
 
 type BoxError = Box<dyn std::error::Error>;
@@ -213,16 +214,18 @@ fn page_paths(root: &Path) -> Result<Vec<String>, BoxError> {
     Ok(paths)
 }
 
-/// The site ships no JavaScript. Leptos still emits inline hydration
-/// bookkeeping (`__RESOLVED_RESOURCES` and friends) even for static routes,
-/// which is inert with nothing to hydrate—so remove it and let "no scripts"
-/// be a property of the output rather than an aspiration.
+/// Content pages must work and look right with scripting off, so they ship no
+/// executable script. Leptos still emits inline hydration bookkeeping
+/// (`__RESOLVED_RESOURCES` and friends) even for static routes, which is inert
+/// with nothing to hydrate—so remove it and let "no executable scripts" be a
+/// property of the output rather than an aspiration.
 ///
-/// A page that genuinely needs a script would have to reverse WEB-001 first.
+/// JSON-LD blocks (`<script type="application/ld+json">`) stay: browsers never
+/// execute them, so they change nothing about how a page works or looks.
 ///
-/// The one exception is [`DMN_VIEWER`]: a deliberate, isolated interactive page
-/// that loads dmn-js to show a model in standard DMN tooling. It is not a content
-/// page, and it keeps its scripts.
+/// The one page that keeps executable scripts is [`DMN_VIEWER`]: a deliberate,
+/// isolated interactive page that loads dmn-js to show a model in standard DMN
+/// tooling. It is not a content page.
 fn strip_scripts(directory: &Path) -> Result<(), BoxError> {
     for entry in fs::read_dir(directory)? {
         let path = entry?.path();
@@ -254,8 +257,15 @@ fn without_script_elements(html: &str) -> String {
             // Unterminated: keep it rather than silently truncating the page.
             break;
         };
-        kept.push_str(&rest[..start]);
-        rest = &rest[start + end + CLOSE.len()..];
+        let element_end = start + end + CLOSE.len();
+        let opening_tag = rest[start..].split('>').next().unwrap_or_default();
+        let keep_until = if opening_tag.contains(structured_data::TYPE_ATTRIBUTE) {
+            element_end
+        } else {
+            start
+        };
+        kept.push_str(&rest[..keep_until]);
+        rest = &rest[element_end..];
     }
     kept.push_str(rest);
     kept
@@ -293,6 +303,16 @@ mod tests {
     fn removes_every_script() {
         let html = "<a></a><script>one</script><b></b><script>two</script><c></c>";
         assert_eq!(without_script_elements(html), "<a></a><b></b><c></c>");
+    }
+
+    #[test]
+    fn keeps_json_ld_and_removes_the_rest() {
+        let html = "<head><script type=\"application/ld+json\">{\"a\":1}</script></head>\
+                    <body><script>run()</script></body>";
+        assert_eq!(
+            without_script_elements(html),
+            "<head><script type=\"application/ld+json\">{\"a\":1}</script></head><body></body>"
+        );
     }
 
     #[test]

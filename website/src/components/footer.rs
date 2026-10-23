@@ -1,5 +1,7 @@
 use leptos::prelude::*;
 
+use crate::routes;
+
 #[component]
 pub fn Footer() -> impl IntoView {
     view! {
@@ -7,7 +9,7 @@ pub fn Footer() -> impl IntoView {
             <p>
                 "pgdmn is dual-licensed under "
                 <a
-                    href="https://opensource.org/licenses/MIT"
+                    href=routes::MIT_LICENSE
                     rel="noopener noreferrer"
                     target="_blank"
                 >
@@ -15,7 +17,7 @@ pub fn Footer() -> impl IntoView {
                 </a>
                 " and "
                 <a
-                    href="https://www.apache.org/licenses/LICENSE-2.0"
+                    href=routes::APACHE_LICENSE
                     rel="noopener noreferrer"
                     target="_blank"
                 >
@@ -25,7 +27,7 @@ pub fn Footer() -> impl IntoView {
             </p>
             <p>
                 "my personal website is "
-                <a href="https://www.russellduhon.com" rel="noopener noreferrer" target="_blank">
+                <a href=routes::AUTHOR_URL rel="noopener noreferrer" target="_blank">
                     "www.russellduhon.com"
                 </a>
                 "."

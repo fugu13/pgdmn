@@ -52,3 +52,6 @@ include_dir = "0.7"
 # the site ships no JavaScript, and the palette belongs in the stylesheet.
 # `default-fancy` keeps the regex engine pure Rust, with no C dependency.
 syntect = { version = "5.3", default-features = false, features = ["default-fancy"] }
+# Builds the JSON-LD structured-data blocks. Already in the tree through
+# leptos, so it adds no new crate.
+serde_json = "1"
