@@ -3,8 +3,8 @@
 //! There is no server in production: whatever this writes is exactly what gets
 //! served.
 
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
@@ -14,7 +14,7 @@ use leptos_axum::generate_route_list_with_ssg;
 use pgdmn_website::app::shell;
 use pgdmn_website::articles;
 use pgdmn_website::routes;
-use pgdmn_website::seo::{self, SitemapEntry};
+use pgdmn_website::seo::{self, PageSummary, SitemapEntry};
 use pgdmn_website::structured_data;
 use pgdmn_website::stylesheet;
 
@@ -74,9 +74,16 @@ async fn main() -> Result<(), BoxError> {
     // Built from what was just written, so every prerendered page is listed
     // and nothing else is. Runs after `clean_urls`, which is what gives each
     // page its `index.html`.
-    let entries = sitemap_entries(Path::new(DIST), &articles)?;
+    let pages = page_summaries(Path::new(DIST), page_paths(Path::new(DIST))?)?;
+    let entries = sitemap_entries(&pages, &articles);
     fs::write(Path::new(DIST).join("sitemap.xml"), seo::sitemap(&entries))?;
     fs::write(Path::new(DIST).join("robots.txt"), seo::robots())?;
+    let article_paths: HashSet<String> = articles
+        .iter()
+        .map(|article| routes::article(&article.slug))
+        .collect();
+    let llms = seo::llms_txt(&pages, &article_paths).ok_or("the home page was not prerendered")?;
+    fs::write(Path::new(DIST).join("llms.txt"), llms)?;
 
     println!("prerendered site written to {DIST}/");
     Ok(())
@@ -167,27 +174,40 @@ fn clean_urls(directory: &Path) -> Result<(), BoxError> {
     Ok(())
 }
 
-/// One entry per `index.html` under `dist`: the pages a reader can reach.
-/// `404.html` and the DMN viewer keep other names, so neither is listed.
-/// Articles carry their front-matter date as `lastmod`.
-fn sitemap_entries(
-    dist: &Path,
-    articles: &[articles::Article],
-) -> Result<Vec<SitemapEntry>, BoxError> {
+/// One entry per page. Articles carry their front-matter date as `lastmod`.
+fn sitemap_entries(pages: &[PageSummary], articles: &[articles::Article]) -> Vec<SitemapEntry> {
     let dates: HashMap<String, &str> = articles
         .iter()
         .map(|article| (routes::article(&article.slug), article.date.as_str()))
         .collect();
-    Ok(page_paths(dist)?
-        .into_iter()
-        .map(|path| SitemapEntry {
-            lastmod: dates.get(&path).map(|date| (*date).to_string()),
-            path,
+    pages
+        .iter()
+        .map(|page| SitemapEntry {
+            lastmod: dates.get(&page.path).map(|date| (*date).to_string()),
+            path: page.path.clone(),
         })
-        .collect())
+        .collect()
 }
 
-/// The site-relative path of every `index.html` under `root`, sorted.
+/// Each page's title and description, read back from its prerendered HTML.
+/// A page without them fails the build: every indexable page renders
+/// `PageMeta`.
+fn page_summaries(dist: &Path, paths: Vec<String>) -> Result<Vec<PageSummary>, BoxError> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let file = dist.join(path.trim_start_matches('/')).join("index.html");
+            let html = fs::read_to_string(&file)?;
+            seo::page_summary(path, &html).ok_or_else(|| {
+                format!("{} has no title or meta description", file.display()).into()
+            })
+        })
+        .collect()
+}
+
+/// The site-relative path of every `index.html` under `root`, sorted: the
+/// pages a reader can reach. `404.html` and the DMN viewer keep other names,
+/// so neither is listed.
 fn page_paths(root: &Path) -> Result<Vec<String>, BoxError> {
     fn walk(root: &Path, directory: &Path, paths: &mut Vec<String>) -> Result<(), BoxError> {
         for entry in fs::read_dir(directory)? {

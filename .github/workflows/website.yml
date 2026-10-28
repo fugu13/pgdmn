@@ -61,7 +61,7 @@ jobs:
 
       - name: Assert the deployable artifact is complete
         run: |
-          for f in index.html 404.html CNAME robots.txt sitemap.xml favicon.svg; do
+          for f in index.html 404.html CNAME robots.txt sitemap.xml llms.txt favicon.svg; do
             test -s "website/dist/$f" || { echo "::error::missing or empty website/dist/$f"; exit 1; }
           done
           # The stylesheet's filename is content-hashed (style.<hash>.css), so
@@ -75,7 +75,8 @@ jobs:
           # one means the page walk broke, not that the site has no pages.
           grep -q '<loc>https://www.pgdmn.com/</loc>' website/dist/sitemap.xml || { echo "::error::sitemap.xml does not list the home page"; exit 1; }
           grep -q 'Sitemap: https://www.pgdmn.com/sitemap.xml' website/dist/robots.txt || { echo "::error::robots.txt does not name the sitemap"; exit 1; }
-          echo "index, 404, CNAME, robots, sitemap, favicon, .nojekyll and stylesheet all present"
+          grep -q '^- \[Documentation\](https://www.pgdmn.com/docs/): ' website/dist/llms.txt || { echo "::error::llms.txt does not list the Docs page"; exit 1; }
+          echo "index, 404, CNAME, robots, sitemap, llms.txt, favicon, .nojekyll and stylesheet all present"
 
       - uses: actions/upload-pages-artifact@v5
         if: github.ref == 'refs/heads/main'
