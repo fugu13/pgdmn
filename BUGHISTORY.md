@@ -92,3 +92,31 @@ Resolved bugs, recorded so they can be recognised if they reappear. Every entry 
 - [ ] No cache-archival or permission step runs `chmod` over `target/test-pgdata` (or the whole `target/` while the cluster is still present)
 - [ ] If the caching scheme changes so the cluster could be archived again, bump the `-vN-` key prefix to abandon poisoned entries
 - [ ] A warm CI run (one that restores the `target/` cache) is green, not just the first cold run
+
+## BUG-007: Extension CI breaks when a new cargo-pgrx release outruns Cargo.lock
+
+**Symptom:** The `Extension` CI job on `main` fails during `make test` after a fresh image build, with no source or lockfile change. The build reports that the `cargo-pgrx` binary and the `pgrx` crate versions differ.
+
+**Root cause:** `cargo-pgrx` must be the exact version of the `pgrx` crate in `Cargo.lock`. The Dockerfile installed it with `--version "~0.19"`, which resolves to the newest 0.19.x on crates.io at image build time. When cargo-pgrx 0.19.3 was published while `Cargo.lock` still pinned pgrx 0.19.2, every uncached image build installed the mismatched binary. Same class as BUG-006: a host tool pinned by nothing in the repo.
+
+**Fix:** The Dockerfile's first stage (`pgrx-version`) reads the `pgrx` version out of `Cargo.lock`, and the main stage installs `cargo-pgrx --version "=<that version>"`. The main stage copies only the one-line version file, so the install layer is rebuilt only when the pgrx version changes, not on every lockfile change. The stage fails the build if the lockfile holds zero or several `pgrx` versions.
+
+**Files:** `Dockerfile`
+
+**Reoccurrence check:**
+- [ ] The Dockerfile's `cargo install cargo-pgrx` uses an exact `=` version taken from `Cargo.lock`, never a range (`~`, `^`, or a bare minor)
+- [ ] No other place (CI workflow, Makefile, scripts) installs cargo-pgrx with a floating version
+
+## BUG-008: cache timing test fails on a throttled CI runner
+
+**Symptom:** `test_cache_speeds_up_repeated_eval` fails intermittently in CI with `Warm evaluation was unexpectedly slow next to the cold run`, for example cold=1.17ms and warm_avg=2.37ms in forge CI run 81. Reruns pass. It never fails locally.
+
+**Root cause:** The test timed one cold `dmn_eval` call against the average of 100 warm calls and asserted `warm_avg < cold * 2`. The whole measurement is a few milliseconds. On the shared-CPU Fly runner, after a 15-minute compile, CPU throttling can make the later calls slower than the first, with the cache working correctly. Commit `a9cdf8e` widened the margin once; the flake returned.
+
+**Fix:** Renamed to `test_cache_reuses_evaluator_on_repeated_eval` and replaced the timing with the test-only `dmn_evaluator_builds()` counter (TEST-003). The test asserts that the 100 calls after the first build nothing. It still fails if the cache reparses the model on every call, and machine speed cannot affect it.
+
+**Files:** `src/lib.rs`
+
+**Reoccurrence check:**
+- [ ] No non-benchmark test asserts on wall-clock durations (`Instant::now` appears only in `PGDMN_BENCH`/`PGDMN_BENCH_SHAPES`-gated benches)
+- [ ] Cache tests assert on `evaluator_builds()` counts, not timings
