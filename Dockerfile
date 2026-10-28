@@ -1,3 +1,12 @@
+# cargo-pgrx must be the exact pgrx version in Cargo.lock (BUG-007). This
+# stage reads that version out of the lockfile; the main stage copies only the
+# one-line result, so the cargo-pgrx install layer stays cached until the pgrx
+# version itself changes, not on every lockfile change.
+FROM rust:1.98-bookworm AS pgrx-version
+COPY Cargo.lock /
+RUN awk '$0 == "name = \"pgrx\"" { getline; gsub(/version = |"/, ""); print }' /Cargo.lock > /pgrx-version \
+    && test "$(wc -l < /pgrx-version)" -eq 1
+
 # dsntk 0.3 uses let-chains (stable since Rust 1.88)
 FROM rust:1.98-bookworm
 
@@ -24,8 +33,9 @@ ENV CARGO_HOME=/home/pgdmn/.cargo \
 USER pgdmn
 WORKDIR /pgdmn
 
-# Install cargo-pgrx matching our dependency version
-RUN cargo install cargo-pgrx --version "~0.19" --locked
+# Install cargo-pgrx at exactly the lockfile's pgrx version
+COPY --from=pgrx-version /pgrx-version /tmp/pgrx-version
+RUN cargo install cargo-pgrx --version "=$(cat /tmp/pgrx-version)" --locked
 
 # Lint and format tooling for `make lint` / `make fmt`
 RUN rustup component add clippy rustfmt

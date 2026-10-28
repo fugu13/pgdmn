@@ -952,42 +952,40 @@ mod tests {
         assert_eq!(result[1].1, "decision");
     }
 
+    /// DMN evaluator builds (cache misses) in this backend so far. Cache
+    /// tests compare these counts instead of wall-clock timings (TEST-003).
+    fn evaluator_builds() -> i64 {
+        Spi::get_one::<i64>("SELECT dmn_evaluator_builds()")
+            .expect("SPI failed")
+            .expect("builds count returned NULL")
+    }
+
     #[pg_test]
-    fn test_cache_speeds_up_repeated_eval() {
+    fn test_cache_reuses_evaluator_on_repeated_eval() {
         let escaped = SIMPLE_DMN.replace('\'', "''");
         let query = format!("SELECT dmn_eval(dmn_load('{escaped}'), 'Greeting')");
 
-        // Cold call: first evaluation parses XML and builds evaluator
-        let cold_start = std::time::Instant::now();
-        let cold_result = Spi::get_one::<pgrx::JsonB>(&query)
+        // Count evaluator builds instead of timing calls (TEST-003): a
+        // cold-vs-warm timing comparison failed on a throttled shared-CPU CI
+        // runner (cold 1.17ms, warm_avg 2.37ms) with the cache working.
+        // The first call builds the evaluator, unless an earlier test in
+        // this backend already cached the same model.
+        let first = Spi::get_one::<pgrx::JsonB>(&query)
             .expect("SPI failed")
-            .expect("dmn_eval returned NULL on cold run");
-        let cold_duration = cold_start.elapsed();
-        assert_eq!(cold_result.0, serde_json::json!("Hello, World!"));
+            .expect("dmn_eval returned NULL on first run");
+        assert_eq!(first.0, serde_json::json!("Hello, World!"));
+        let builds_after_first = evaluator_builds();
 
-        // Warm calls: subsequent evaluations use cached evaluator
-        let iterations = 100;
-        let warm_start = std::time::Instant::now();
-        for _ in 0..iterations {
+        // Every later call must reuse the cached evaluator, not reparse.
+        for _ in 0..100 {
             Spi::get_one::<pgrx::JsonB>(&query)
                 .expect("SPI failed")
-                .expect("dmn_eval returned NULL on warm run");
+                .expect("dmn_eval returned NULL on repeated run");
         }
-        let warm_duration = warm_start.elapsed();
-        let warm_avg = warm_duration / iterations;
-
-        // This whole operation is single-digit milliseconds, where CI
-        // scheduling jitter (especially on a shared vCPU) can swamp the
-        // actual caching signal -- a single cold sample compared against a
-        // tight multiplicative margin has been observed to flip (cold
-        // 1.19ms, warm_avg 1.62ms, ~37% "slower"). A genuinely broken cache
-        // (reparsing the model every call) still shows up clearly here: that
-        // failure mode is an order-of-magnitude regression, not a
-        // double-digit-percent one, so a 2x slowdown ceiling still catches
-        // it without chasing single-digit-millisecond noise.
-        assert!(
-            warm_avg < cold_duration * 2,
-            "Warm evaluation was unexpectedly slow next to the cold run (possible cache regression): cold={cold_duration:?}, warm_avg={warm_avg:?}"
+        assert_eq!(
+            evaluator_builds(),
+            builds_after_first,
+            "repeated evaluation of the same model rebuilt the evaluator"
         );
     }
 
@@ -2359,26 +2357,27 @@ mod tests {
         let query_a = format!("SELECT dmn_eval(dmn_load('{escaped_a}'), 'Greeting')");
         let query_b = format!("SELECT dmn_eval(dmn_load('{escaped_b}'), 'Greeting')");
 
-        // Deterministic cache observability (TEST-003): count evaluator
-        // builds instead of comparing wall-clock timings.
-        let builds = || {
-            Spi::get_one::<i64>("SELECT dmn_evaluator_builds()")
-                .expect("SPI failed")
-                .expect("builds count returned NULL")
-        };
-        let builds_start = builds();
+        let builds_start = evaluator_builds();
 
         // Load model A (cold—one build)
         let result_a = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL");
-        assert_eq!(builds(), builds_start + 1, "model A should build once");
+        assert_eq!(
+            evaluator_builds(),
+            builds_start + 1,
+            "model A should build once"
+        );
 
         // Load model B (cold—different XML, not cached)
         let result_b = Spi::get_one::<pgrx::JsonB>(&query_b)
             .expect("SPI failed")
             .expect("model B returned NULL");
-        assert_eq!(builds(), builds_start + 2, "model B should build once");
+        assert_eq!(
+            evaluator_builds(),
+            builds_start + 2,
+            "model B should build once"
+        );
 
         // Models produce different output—a false cache hit would fail here
         assert_eq!(result_a.0, serde_json::json!("Hello, World!"));
@@ -2392,7 +2391,11 @@ mod tests {
         let result_a_warm = Spi::get_one::<pgrx::JsonB>(&query_a)
             .expect("SPI failed")
             .expect("model A returned NULL on warm run");
-        assert_eq!(builds(), builds_start + 2, "warm model A must not rebuild");
+        assert_eq!(
+            evaluator_builds(),
+            builds_start + 2,
+            "warm model A must not rebuild"
+        );
 
         // Cached result matches original
         assert_eq!(result_a.0, result_a_warm.0);
