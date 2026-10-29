@@ -3,7 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DMN viewer—pgdmn</title>
+    <title>DMN viewer · pgdmn</title>
+    <!--
+      The diagram is drawn by script from a model named in the query string, so
+      the page has no indexable content of its own; the models it shows are
+      linked from the articles that explain them.
+    -->
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <!--
       This is the one page on the site that runs JavaScript. Everything else is
       prerendered static HTML with no scripts (see WEB-001). This page exists to

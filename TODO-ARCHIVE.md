@@ -6,6 +6,12 @@ the active list. This practice starts now — the items pruned from `TODO.md`
 in the 2026-08-14 cleanup were deleted outright, not archived, and are not
 backfilled here.
 
+### WEB-010: JSON-LD structured data (done)
+
+Search engines read `application/ld+json` blocks to show rich results: `SoftwareApplication` for the home page, `TechArticle` with `datePublished` for each article. A JSON-LD block is data, not executable script, but it is a `<script>` element, so `strip_scripts` in the prerender removes it and the `Website` workflow's no-script check rejects it. Adding it means exempting `type="application/ld+json"` in both places, explicitly, without loosening the WEB-001 rule for executable scripts.
+
+Done as described, with one change: the home page uses `SoftwareSourceCode` rather than `SoftwareApplication`, because every field `SoftwareApplication` needs for a rich result (price, rating, operating system) is something the site does not state. The no-script rule was reworded around its real goal, pages that work and look right with scripting off, and `strip_scripts` plus the `Website` workflow now let bare `application/ld+json` blocks through.
+
 ### PUBLIC-005: CONTRIBUTING.md, CODEOWNERS, and a Copilot vendor instruction (done)
 
 `.github/CODEOWNERS` routes `vendor/**` and `vendor/CHECKSUMS` to

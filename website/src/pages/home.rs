@@ -1,10 +1,23 @@
 use leptos::prelude::*;
 
+use crate::components::page_meta::PageMeta;
 use crate::components::sql_block::SqlBlock;
+use crate::routes;
+use crate::structured_data::{self, StructuredData};
+
+const DESCRIPTION: &str = "pgdmn is a PostgreSQL extension that evaluates DMN decision tables and \
+                           FEEL expressions in SQL, with no network hop and no external rules \
+                           engine.";
 
 #[component]
 pub fn HomePage() -> impl IntoView {
     view! {
+        <PageMeta
+            title="pgdmn · DMN for PostgreSQL"
+            description=DESCRIPTION
+            path=routes::page("")
+        />
+        <StructuredData data=structured_data::home(DESCRIPTION)/>
         <div class="hero">
             <h1>"pgdmn"</h1>
             <p class="tagline">

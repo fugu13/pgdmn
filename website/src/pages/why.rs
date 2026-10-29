@@ -1,10 +1,18 @@
 use leptos::prelude::*;
-use leptos_meta::Title;
+
+use crate::components::page_meta::PageMeta;
+use crate::routes;
 
 #[component]
 pub fn WhyPage() -> impl IntoView {
     view! {
-        <Title text="Why pgdmn · pgdmn"/>
+        <PageMeta
+            title="Why run decisions in your database? · pgdmn"
+            description="Evaluate DMN decisions where the data lives: no network hop to a rules \
+                         engine, results inside the same transaction, and models stored and \
+                         versioned as ordinary PostgreSQL values."
+            path=routes::page(routes::WHY)
+        />
         <h1>"Why run decisions in your database?"</h1>
 
         <h2>"No network hop"</h2>

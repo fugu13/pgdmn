@@ -190,6 +190,10 @@ Scoping note: no typed-introspection columns get added to `dmn_invocables`/`dmn_
 
 The sitewide `ul, ol { padding-left: 1.5rem; margin-bottom: 1rem; }` rule (meant for prose lists in article/docs body content) is not scoped to content—its element-selector specificity beats the universal reset for `padding-left` on *any* `<ul>`/`<ol>` on the site, so `.site-nav`, `.quicklinks ul`, `.download-list`, and `.post-list` each carry their own `padding-left: 0` override to cancel it back out. Scoping the base rule to something like `main ul, main ol` would let all four overrides be dropped in one pass. Low urgency—the current per-component overrides are an established, working pattern, not a bug.
 
+### WEB-011: Let `PageMeta` add the site-name title suffix
+
+`llms.txt` reads each page's title back from its HTML and strips a ` · pgdmn` suffix that every page types by hand. If `PageMeta` took the short title and appended the suffix itself (the home page's "pgdmn · DMN for PostgreSQL" is the one exception), the suffix would have a single source, and `page_summary` could stop guessing at it. Pair this with a unit test that renders `PageMeta` to a string and runs `seo::page_summary` on the output, so a change to the rendered markup fails a test instead of only the prerender.
+
 ### FEAT-007: Accept PG range types as inputs in the record-eval path
 
 Extend `pg_datum_to_feel` with arms for `NUMRANGEOID`, `INT4RANGEOID`, `INT8RANGEOID`, `DATERANGEOID`, `TSRANGEOID`: read via pgrx `Range<T>`, convert bounds with the existing scalar arms, and build `Value::Range` with `IntervalType::Closed`/`Opened`/`OpenedUndef` (infinite bound → `OpenedUndef`). No SQL signature changes—`feel_record_eval` and `dmn_record_eval` start accepting range-typed columns, the only inbound channel for binding a FEEL range variable (JSON cannot carry one). Decide the policy for PG `empty` ranges (error is more consistent with the mixed-interval precedent in convert.rs) and defer `TSTZRANGEOID` with the timezone question. Round-trip property tests (PG range → FEEL → `feel_eval_numrange` → PG range) pair with the existing numrange output path. Discrete-range canonicalization (`int4range '[1,4]'` arrives as `[1,5)`) is same-set but changes `.end`/`.end included` property values—document it.
@@ -212,9 +216,9 @@ Nothing verifies that the site's internal links resolve. The prerendered output 
 
 This would have caught a trailing-slash problem fixed by hand early on (linking `/why` when the file is `why/index.html`), and it guards the class of breakage a static site is most prone to: a renamed route silently leaving dead links behind.
 
-### WEB-007: OpenGraph and social meta tags
+### WEB-007: OpenGraph share image
 
-Add og:title, og:description, og:image, and Twitter card meta tags to the website shell and per-page overrides via leptos_meta.
+Every page now carries og:title, og:description, og:url, og:type, and a `summary` Twitter card through `PageMeta`. What is still missing is `og:image`: link previews show no picture. It needs a designed raster image (PNG, 1200×630; the SVG favicon is not accepted by most preview renderers), published under `public/` and referenced by absolute URL. With an image, switch the Twitter card to `summary_large_image`.
 
 ## CI
 
@@ -237,6 +241,10 @@ Today `ci.yml` rebuilds `pgdmn-test` with a `type=gha` buildx layer cache inject
 What's still open: `refs/heads/main`'s own cache (buildx blobs regenerate on every push that touches `Cargo.lock`, since the Dockerfile `COPY`s it before `cargo fetch --locked`) isn't pruned by anything — old main-branch blob generations just sit until eviction. `mode=min` would not help here regardless (this Dockerfile is single-stage, so every layer already ends up in the final image). CI-001 (publish the image to GHCR instead of layer-caching through Actions cache) would sidestep the quota entirely and is the more thorough fix if main's cache growth becomes a problem again.
 
 ## Chores
+
+### REFACTOR-001: One HTML escape and one directory walk for the website build
+
+The website has three copies of the same `&`/`<`/`>` escape: `escape_html` in `articles.rs` (now also used by `seo.rs`), `escape` in `highlight.rs`, and an inline copy in `highlight::signature`. The prerender likewise has four hand-written recursive `fs::read_dir` walks (`copy_dir`, `clean_urls`, `strip_scripts`, `page_paths`). Fold each set into one helper. Purely internal; the prerendered output must not change.
 
 ### FEAT-001: `dmn_create_input_type` helper
 

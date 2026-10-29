@@ -4,6 +4,7 @@
 //! served.
 
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
@@ -13,6 +14,8 @@ use leptos_axum::generate_route_list_with_ssg;
 use pgdmn_website::app::shell;
 use pgdmn_website::articles;
 use pgdmn_website::routes;
+use pgdmn_website::seo::{self, PageSummary, SitemapEntry};
+use pgdmn_website::structured_data;
 use pgdmn_website::stylesheet;
 
 type BoxError = Box<dyn std::error::Error>;
@@ -22,10 +25,6 @@ const DIST: &str = "dist";
 /// Assets copied verbatim into the site root.
 const PUBLIC: &str = "public";
 const STYLESHEET: &str = "style/main.scss";
-/// The canonical host. GitHub Pages reads this from the published output and
-/// redirects the apex (pgdmn.com) here. Pages are linked with absolute paths,
-/// so the site must be served from a domain root—not a `github.io` subpath.
-const DOMAIN: &str = "www.pgdmn.com";
 /// The one page that keeps its scripts: an interactive DMN viewer, copied
 /// verbatim from `public/`. See `strip_scripts`.
 const DMN_VIEWER: &str = "dmn-viewer.html";
@@ -68,7 +67,23 @@ async fn main() -> Result<(), BoxError> {
     // GitHub Pages runs the pages through Jekyll unless this file exists, which
     // silently drops anything whose name starts with an underscore.
     fs::write(Path::new(DIST).join(".nojekyll"), "")?;
-    fs::write(Path::new(DIST).join("CNAME"), format!("{DOMAIN}\n"))?;
+    // Pages are linked with absolute paths, so the site must be served from a
+    // domain root—not a `github.io` subpath.
+    fs::write(Path::new(DIST).join("CNAME"), format!("{}\n", routes::HOST))?;
+
+    // Built from what was just written, so every prerendered page is listed
+    // and nothing else is. Runs after `clean_urls`, which is what gives each
+    // page its `index.html`.
+    let pages = page_summaries(Path::new(DIST), page_paths(Path::new(DIST))?)?;
+    let entries = sitemap_entries(&pages, &articles);
+    fs::write(Path::new(DIST).join("sitemap.xml"), seo::sitemap(&entries))?;
+    fs::write(Path::new(DIST).join("robots.txt"), seo::robots())?;
+    let article_paths: HashSet<String> = articles
+        .iter()
+        .map(|article| routes::article(&article.slug))
+        .collect();
+    let llms = seo::llms_txt(&pages, &article_paths).ok_or("the home page was not prerendered")?;
+    fs::write(Path::new(DIST).join("llms.txt"), llms)?;
 
     println!("prerendered site written to {DIST}/");
     Ok(())
@@ -159,16 +174,78 @@ fn clean_urls(directory: &Path) -> Result<(), BoxError> {
     Ok(())
 }
 
-/// The site ships no JavaScript. Leptos still emits inline hydration
-/// bookkeeping (`__RESOLVED_RESOURCES` and friends) even for static routes,
-/// which is inert with nothing to hydrate—so remove it and let "no scripts"
-/// be a property of the output rather than an aspiration.
+/// One entry per page. Articles carry their front-matter date as `lastmod`.
+fn sitemap_entries(pages: &[PageSummary], articles: &[articles::Article]) -> Vec<SitemapEntry> {
+    let dates: HashMap<String, &str> = articles
+        .iter()
+        .map(|article| (routes::article(&article.slug), article.date.as_str()))
+        .collect();
+    pages
+        .iter()
+        .map(|page| SitemapEntry {
+            lastmod: dates.get(&page.path).map(|date| (*date).to_string()),
+            path: page.path.clone(),
+        })
+        .collect()
+}
+
+/// Each page's title and description, read back from its prerendered HTML.
+/// A page without them fails the build: every indexable page renders
+/// `PageMeta`.
+fn page_summaries(dist: &Path, paths: Vec<String>) -> Result<Vec<PageSummary>, BoxError> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let file = dist.join(path.trim_start_matches('/')).join("index.html");
+            let html = fs::read_to_string(&file)?;
+            seo::page_summary(path, &html).ok_or_else(|| {
+                format!("{} has no title or meta description", file.display()).into()
+            })
+        })
+        .collect()
+}
+
+/// The site-relative path of every `index.html` under `root`, sorted: the
+/// pages a reader can reach. `404.html` and the DMN viewer keep other names,
+/// so neither is listed.
+fn page_paths(root: &Path) -> Result<Vec<String>, BoxError> {
+    fn walk(root: &Path, directory: &Path, paths: &mut Vec<String>) -> Result<(), BoxError> {
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                walk(root, &path, paths)?;
+            } else if entry.file_name() == "index.html" {
+                let relative = directory.strip_prefix(root)?;
+                let name = relative
+                    .components()
+                    .map(|part| part.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                paths.push(routes::page(&name));
+            }
+        }
+        Ok(())
+    }
+
+    let mut paths = Vec::new();
+    walk(root, root, &mut paths)?;
+    paths.sort();
+    Ok(paths)
+}
+
+/// Content pages must work and look right with scripting off, so they ship no
+/// executable script. Leptos still emits inline hydration bookkeeping
+/// (`__RESOLVED_RESOURCES` and friends) even for static routes, which is inert
+/// with nothing to hydrate—so remove it and let "no executable scripts" be a
+/// property of the output rather than an aspiration.
 ///
-/// A page that genuinely needs a script would have to reverse WEB-001 first.
+/// JSON-LD blocks (`<script type="application/ld+json">`) stay: browsers never
+/// execute them, so they change nothing about how a page works or looks.
 ///
-/// The one exception is [`DMN_VIEWER`]: a deliberate, isolated interactive page
-/// that loads dmn-js to show a model in standard DMN tooling. It is not a content
-/// page, and it keeps its scripts.
+/// The one page that keeps executable scripts is [`DMN_VIEWER`]: a deliberate,
+/// isolated interactive page that loads dmn-js to show a model in standard DMN
+/// tooling. It is not a content page.
 fn strip_scripts(directory: &Path) -> Result<(), BoxError> {
     for entry in fs::read_dir(directory)? {
         let path = entry?.path();
@@ -200,8 +277,15 @@ fn without_script_elements(html: &str) -> String {
             // Unterminated: keep it rather than silently truncating the page.
             break;
         };
-        kept.push_str(&rest[..start]);
-        rest = &rest[start + end + CLOSE.len()..];
+        let element_end = start + end + CLOSE.len();
+        let opening_tag = rest[start..].split('>').next().unwrap_or_default();
+        let keep_until = if opening_tag.contains(structured_data::TYPE_ATTRIBUTE) {
+            element_end
+        } else {
+            start
+        };
+        kept.push_str(&rest[..keep_until]);
+        rest = &rest[element_end..];
     }
     kept.push_str(rest);
     kept
@@ -209,7 +293,25 @@ fn without_script_elements(html: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::without_script_elements;
+    use std::fs;
+
+    use super::{page_paths, without_script_elements};
+
+    #[test]
+    fn lists_index_pages_but_not_404_or_the_viewer() {
+        let root = std::env::temp_dir().join(format!("pgdmn-sitemap-{}", std::process::id()));
+        for dir in ["", "docs", "articles/a"] {
+            fs::create_dir_all(root.join(dir)).unwrap();
+            fs::write(root.join(dir).join("index.html"), "").unwrap();
+        }
+        fs::write(root.join("404.html"), "").unwrap();
+        fs::write(root.join("dmn-viewer.html"), "").unwrap();
+
+        let paths = page_paths(&root).unwrap();
+        fs::remove_dir_all(&root).unwrap();
+
+        assert_eq!(paths, ["/", "/articles/a/", "/docs/"]);
+    }
 
     #[test]
     fn removes_inline_script() {
@@ -221,6 +323,16 @@ mod tests {
     fn removes_every_script() {
         let html = "<a></a><script>one</script><b></b><script>two</script><c></c>";
         assert_eq!(without_script_elements(html), "<a></a><b></b><c></c>");
+    }
+
+    #[test]
+    fn keeps_json_ld_and_removes_the_rest() {
+        let html = "<head><script type=\"application/ld+json\">{\"a\":1}</script></head>\
+                    <body><script>run()</script></body>";
+        assert_eq!(
+            without_script_elements(html),
+            "<head><script type=\"application/ld+json\">{\"a\":1}</script></head><body></body>"
+        );
     }
 
     #[test]
