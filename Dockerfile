@@ -2,13 +2,13 @@
 # stage reads that version out of the lockfile; the main stage copies only the
 # one-line result, so the cargo-pgrx install layer stays cached until the pgrx
 # version itself changes, not on every lockfile change.
-FROM rust:1.98-bookworm AS pgrx-version
+FROM rust:1.99-bookworm AS pgrx-version
 COPY Cargo.lock /
 RUN awk '$0 == "name = \"pgrx\"" { getline; gsub(/version = |"/, ""); print }' /Cargo.lock > /pgrx-version \
     && test "$(wc -l < /pgrx-version)" -eq 1
 
 # dsntk 0.3 uses let-chains (stable since Rust 1.88)
-FROM rust:1.98-bookworm
+FROM rust:1.99-bookworm
 
 # Install PostgreSQL 17 and build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
