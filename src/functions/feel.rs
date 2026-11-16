@@ -30,7 +30,7 @@ fn eval_feel_ctx(expression: &str, ctx: FeelContext) -> Value {
 fn feel_null_error(msg: Option<String>) -> ! {
     pgrx::error!(
         "FEEL expression returned null{}",
-        msg.map(|m| format!(": {m}")).unwrap_or_default()
+        msg.map_or_else(String::new, |m| format!(": {m}"))
     )
 }
 
