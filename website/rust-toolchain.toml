@@ -5,5 +5,5 @@
 # The extension is unaffected: its toolchain lives in the Dockerfile, and its
 # builds never run from this directory.
 [toolchain]
-channel = "1.99.1"
+channel = "1.100.0"
 components = ["clippy", "rustfmt"]
