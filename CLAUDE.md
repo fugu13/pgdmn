@@ -7,7 +7,7 @@ PostgreSQL extension that brings DMN (Decision Model and Notation) support to Po
 | Component | Choice |
 |---|---|
 | Language | Rust 2024 edition (extension and website) |
-| Extension framework | pgrx 0.19 |
+| Extension framework | pgrx 0.20 |
 | DMN/FEEL engine | dsntk 0.3 |
 | Target | PostgreSQL 17 |
 | Website | Leptos 0.8, prerendered to static HTML (`website/`) |
