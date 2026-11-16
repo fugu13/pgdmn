@@ -41,7 +41,6 @@ crate-type = ["cdylib"]
 
 [features]
 default = ["pg17"]
-pg14 = ["pgrx/pg14", "pgrx-tests/pg14"]
 pg15 = ["pgrx/pg15", "pgrx-tests/pg15"]
 pg16 = ["pgrx/pg16", "pgrx-tests/pg16"]
 pg17 = ["pgrx/pg17", "pgrx-tests/pg17"]
@@ -65,7 +64,7 @@ needless_pass_by_value = "allow" # #[pg_extern] functions receive owned datums; 
 option_if_let_else = "allow"     # nursery; if-let/else fallback chains read clearer than map_or_else
 
 [dependencies]
-pgrx = "0.19"
+pgrx = "0.20"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dsntk-model = "0.3"
@@ -78,7 +77,7 @@ rapidhash = "4"
 lru = "0.19"
 
 [dev-dependencies]
-pgrx-tests = "0.19"
+pgrx-tests = "0.20"
 proptest = "1"
 
 # dsntk is vendored (see vendor/README.md) so the DMN/FEEL engine can be
